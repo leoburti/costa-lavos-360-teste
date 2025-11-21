@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+@layer base {
+  :root {
+    --background: 240 10% 98%;
+    --foreground: 224 71.4% 4.1%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+ 
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+ 
+    /* Costa Lavos Brand Colors */
+    --primary: 0 50% 35%; /* #832A2A */
+    --primary-foreground: 0 0% 100%; /* white */
+ 
+    --secondary: 0 54% 57%; /* #C85A54 */
+    --secondary-foreground: 355.7 100% 97.3%;
+ 
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+ 
+    --accent: 212 68% 61%; /* #4A90E2 */
+    --accent-foreground: 355.7 100% 97.3%;
+ 
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 355.7 100% 97.3%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 0 50% 35%;
+ 
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 224 71.4% 4.1%;
+    --foreground: 210 20% 98%;
+
+    --card: 224 71.4% 4.1%;
+    --card-foreground: 210 20% 98%;
+ 
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+ 
+    --primary: 0 50% 45%; /* Lighter brown for dark mode */
+    --primary-foreground: 210 20% 98%;
+ 
+    --secondary: 0 54% 67%; /* Lighter red for dark mode */
+    --secondary-foreground: 210 20% 98%;
+ 
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+ 
+    --accent: 212 68% 71%; /* Lighter blue for dark mode */
+    --accent-foreground: 210 20% 98%;
+ 
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+ 
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 0 50% 45%;
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Scrollbar Webkit (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent; /* Makes the track transparent */
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--secondary)); /* Cor do side menu (secondary) */
+    border-radius: 5px;
+    border: 2px solid transparent; /* Prevents border from making thumb thinner */
+    background-clip: padding-box; /* Ensures background color respects padding box */
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--secondary) / 0.8); /* Cor mais escura para hover */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-color: hsl(var(--secondary)) transparent; /* thumb track */
+    scrollbar-width: thin;
+  }
+}
+
+@layer components {
+  .prose {
+    @apply max-w-none;
+  }
+
+  .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+      @apply text-card-foreground;
+  }
+
+  .prose a {
+      @apply text-primary;
+  }
+
+  .prose blockquote {
+      @apply border-l-primary;
+  }
+}

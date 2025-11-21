@@ -1,0 +1,5 @@
+[functions.openai-insights]
+  timeout = 1000
+
+[functions.openai-chat-agent]
+  timeout = 1000

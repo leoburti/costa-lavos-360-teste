@@ -1,0 +1,129 @@
+import React from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Loader2, Trash2, ShieldAlert, ChevronsUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { formatCurrency, formatDate, formatPercentage } from '@/lib/utils';
+import BonificationStatusBadge from './BonificationStatusBadge';
+
+const SortableHeader = ({ children, columnKey, sortConfig, onSort }) => {
+    const isActive = sortConfig && sortConfig.key === columnKey;
+    const Icon = isActive
+        ? sortConfig.direction === 'ascending' ? ArrowUp : ArrowDown
+        : ChevronsUpDown;
+
+    return (
+        <TableHead onClick={() => onSort && onSort(columnKey)} className={onSort ? "cursor-pointer hover:bg-muted/50" : ""}>
+            <div className="flex items-center gap-2">
+                {children}
+                {onSort && <Icon className={`h-4 w-4 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`} />}
+            </div>
+        </TableHead>
+    );
+};
+
+const RequestTable = ({ requests, loading, title, description, onOpenDetail, onDelete, onQuickApprove, onQuickReject, isApproverTab = false, isProtheus = false, sortConfig, onSort }) => {
+    const { userRole } = useAuth();
+    const canDelete = userRole === 'Nivel 1' || userRole === 'Nivel 2';
+
+    const protheusHeaders = [
+        { key: "document_number", label: "Num. Dcto." },
+        { key: "client_name", label: "Cliente" },
+        { key: "loja", label: "Loja" },
+        { key: "total_amount", label: "Valor" },
+        { key: "request_date", label: "Data" },
+        { key: "mes", label: "Mês" },
+        { key: "ano", label: "Ano" },
+        { key: "status", label: "Status" },
+        { key: "percentual", label: "Percentual" },
+        { key: "user_full_name", label: "Solicitante" },
+    ];
+
+    const defaultHeaders = [
+        { key: "client_name", label: "Cliente" },
+        { key: "loja", label: "Loja" },
+        { key: "total_amount", label: "Valor" },
+        { key: "request_date", label: "Data" },
+        { key: "mes", label: "Mês" },
+        { key: "ano", label: "Ano" },
+        { key: "status", label: "Status" },
+        { key: "percentual", label: "Percentual" },
+        { key: "user_full_name", label: "Solicitante" },
+    ];
+    
+    const headers = isProtheus ? protheusHeaders : defaultHeaders;
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>{title}</CardTitle>
+                {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+            <CardContent>
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                {headers.map(h => (
+                                    <SortableHeader key={h.key} columnKey={h.key} sortConfig={sortConfig} onSort={isProtheus ? onSort : undefined}>
+                                        {h.label}
+                                    </SortableHeader>
+                                ))}
+                                <TableHead>Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow><TableCell colSpan={headers.length + 1} className="text-center h-24"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
+                            ) : requests.length === 0 ? (
+                                <TableRow><TableCell colSpan={headers.length + 1} className="text-center h-24">Nenhum registro encontrado.</TableCell></TableRow>
+                            ) : (
+                                requests.map(req => (
+                                    <TableRow key={req.id}>
+                                        {isProtheus && <TableCell>{req.document_number}</TableCell>}
+                                        <TableCell>{req.client_name}</TableCell>
+                                        <TableCell>{req.loja}</TableCell>
+                                        <TableCell>{formatCurrency(req.total_amount)}</TableCell>
+                                        <TableCell>{formatDate(req.request_date, 'dd/MM/yyyy HH:mm')}</TableCell>
+                                        <TableCell>{req.mes}</TableCell>
+                                        <TableCell>{req.ano}</TableCell>
+                                        <TableCell><BonificationStatusBadge status={req.status} /></TableCell>
+                                        <TableCell>{formatPercentage(req.percentual)}</TableCell>
+                                        <TableCell>{req.user_full_name}</TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end items-center gap-2">
+                                                <Button variant="ghost" size="sm" onClick={() => onOpenDetail && onOpenDetail(req)}>Ver Detalhes</Button>
+                                                {isApproverTab && onQuickApprove && onQuickReject && (
+                                                    <>
+                                                        <Button variant="destructive" size="sm" onClick={() => onQuickReject(req)}>Rejeitar</Button>
+                                                        <Button variant="success" size="sm" onClick={() => onQuickApprove(req)}>Aprovar</Button>
+                                                    </>
+                                                )}
+                                                {canDelete && !isProtheus && onDelete && (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader><AlertDialogTitle className="flex items-center gap-2"><ShieldAlert className="text-destructive" />Tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Isso excluirá permanentemente a solicitação.</AlertDialogDescription></AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => onDelete(req.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Sim, excluir</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+};
+
+export default RequestTable;
