@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ChevronsUpDown, ArrowDown, ArrowUp } from 'lucide-react';
@@ -16,7 +17,7 @@ import RequestDetailsDialog from './RequestDetailsDialog';
 const ConsultRequestsView = ({ setView }) => {
     const { userRole } = useAuth();
     const { 
-        loading, kpis, allBonifications, protheusHistory, pendingForApproval, fetchData 
+        loading, kpis, allBonifications, protheusHistory, fetchData 
     } = useConsultData();
 
     const {
@@ -42,6 +43,11 @@ const ConsultRequestsView = ({ setView }) => {
         }
         setSortConfig({ key, direction });
     };
+
+    const pendingForApproval = useMemo(() => {
+        return allBonifications.filter(req => req.status === 'Aguardando Aprovação');
+    }, [allBonifications]);
+
 
     const sortedProtheusHistory = useMemo(() => {
         return [...protheusHistory].sort(sortByProperty(sortConfig.key, sortConfig.direction));
