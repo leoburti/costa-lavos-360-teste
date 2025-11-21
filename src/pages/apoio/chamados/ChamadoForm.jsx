@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -105,7 +106,7 @@ const ChamadoForm = () => {
     }
 
     if (result) {
-      navigate('/apoio/chamados');
+      navigate('/admin/apoio/chamados');
     }
   };
   
@@ -144,7 +145,7 @@ const ChamadoForm = () => {
             <div className="space-y-2"><Label htmlFor="observacoes">Observações / Descrição Detalhada</Label><Textarea id="observacoes" value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Descreva o problema ou a solicitação em detalhes." rows={5} /></div>
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => navigate('/apoio/chamados')}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => navigate('/admin/apoio/chamados')}>Cancelar</Button>
             <Button type="submit" disabled={chamadosLoading}>
               {chamadosLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isEditing ? 'Salvar Alterações' : 'Abrir Chamado'}

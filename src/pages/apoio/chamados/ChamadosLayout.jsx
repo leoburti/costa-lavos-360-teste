@@ -1,17 +1,16 @@
+
 import React from 'react';
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { List, Settings, FileText, PlusCircle } from 'lucide-react';
 
 const ChamadosLayout = () => {
-  const location = useLocation();
-
   return (
     <div className="flex flex-col h-full w-full bg-background">
       <div className="border-b px-6 py-3 bg-card">
         <nav className="flex items-center space-x-2 overflow-x-auto">
-          <NavLink to="/apoio/chamados" end>
+          <NavLink to="/admin/apoio/chamados" end>
             {({ isActive }) => (
               <Button 
                 variant={isActive ? "secondary" : "ghost"} 
@@ -23,7 +22,7 @@ const ChamadosLayout = () => {
               </Button>
             )}
           </NavLink>
-          <NavLink to="/apoio/chamados/novo">
+          <NavLink to="/admin/apoio/chamados/novo">
             {({ isActive }) => (
               <Button 
                 variant={isActive ? "secondary" : "ghost"} 
@@ -36,7 +35,7 @@ const ChamadosLayout = () => {
             )}
           </NavLink>
           <div className="h-4 w-px bg-border mx-2" />
-          <NavLink to="/apoio/chamados/motivos">
+          <NavLink to="/admin/apoio/chamados/motivos">
             {({ isActive }) => (
               <Button 
                 variant={isActive ? "secondary" : "ghost"} 
@@ -48,7 +47,7 @@ const ChamadosLayout = () => {
               </Button>
             )}
           </NavLink>
-          <NavLink to="/apoio/chamados/formularios">
+          <NavLink to="/admin/apoio/chamados/formularios">
             {({ isActive }) => (
               <Button 
                 variant={isActive ? "secondary" : "ghost"} 

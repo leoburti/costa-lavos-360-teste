@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -36,7 +37,7 @@ const FormulariosPage = () => {
 
   const handleAction = (action, id) => {
     if (action === 'Editar') {
-      navigate(`/apoio/chamados/formularios/${id}/editar`);
+      navigate(`/admin/apoio/chamados/formularios/${id}/editar`);
     } else {
       toast({ title: "🚧 Em desenvolvimento", description: "Esta ação será implementada em breve." });
     }
@@ -50,7 +51,7 @@ const FormulariosPage = () => {
             <CardTitle>Formulários de Execução</CardTitle>
             <CardDescription>Gerencie os formulários utilizados nos chamados.</CardDescription>
           </div>
-          <Button onClick={() => navigate('/apoio/chamados/formularios/novo')}>
+          <Button onClick={() => navigate('/admin/apoio/chamados/formularios/novo')}>
             <PlusCircle className="mr-2 h-4 w-4" /> Novo Formulário
           </Button>
         </div>

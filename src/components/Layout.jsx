@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from '@/components/Sidebar';
@@ -12,13 +13,28 @@ const Layout = () => {
   const noFilterBarRoutes = [
     '/configuracoes',
     '/apoio',
+    '/admin/apoio',
     '/crm',
     '/ai-chat',
     '/bonificacoes',
     '/tarefas',
     '/manutencao',
     '/admin/delivery-management',
-    '/settings'
+    '/settings',
+    // Commercial Dashboard & Analytics
+    '/dashboard',
+    '/analitico',
+    '/analise',
+    '/visao-360',
+    '/curva-abc',
+    '/calculo-rfm',
+    '/tendencia-vendas',
+    '/baixo-desempenho',
+    '/produtos-bonificados',
+    '/performance-bonificados',
+    '/movimentacao-equipamentos',
+    '/equipamentos-em-campo',
+    '/raio-x'
   ];
 
   const showFilterBar = !noFilterBarRoutes.some(route => location.pathname.startsWith(route));

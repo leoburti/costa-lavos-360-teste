@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -159,7 +160,7 @@ const ChamadosTodosPage = () => {
           <h1 className="text-3xl font-bold">Painel de Chamados</h1>
           <p className="text-muted-foreground mt-2">Gerencie e acompanhe todos os chamados do sistema.</p>
         </div>
-        <Button onClick={() => navigate('/apoio/chamados/novo')} className="w-full md:w-auto">
+        <Button onClick={() => navigate('/admin/apoio/chamados/novo')} className="w-full md:w-auto">
           <Plus className="w-4 h-4 mr-2" /> Novo Chamado
         </Button>
       </div>
@@ -222,7 +223,7 @@ const ChamadosTodosPage = () => {
                   ) : (
                     chamados.map(chamado => (
                       <TableRow key={chamado.id} className="hover:bg-muted/20">
-                        <TableCell className="font-medium text-primary hover:underline cursor-pointer" onClick={() => navigate(`/apoio/chamados/${chamado.id}`)}>{chamado.id.substring(0, 8)}</TableCell>
+                        <TableCell className="font-medium text-primary hover:underline cursor-pointer" onClick={() => navigate(`/admin/apoio/chamados/${chamado.id}`)}>{chamado.id.substring(0, 8)}</TableCell>
                         <TableCell>{chamado.cliente_nome}</TableCell>
                         <TableCell className="capitalize">{chamado.tipo_chamado}</TableCell>
                         <TableCell><Badge variant={getStatusVariant(chamado.status)} className="capitalize">{chamado.status?.replace('_', ' ')}</Badge></TableCell>
@@ -233,8 +234,8 @@ const ChamadosTodosPage = () => {
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => navigate(`/apoio/chamados/${chamado.id}`)}>Detalhes</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => navigate(`/apoio/chamados/${chamado.id}/editar`)}>Editar</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => navigate(`/admin/apoio/chamados/${chamado.id}`)}>Detalhes</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => navigate(`/admin/apoio/chamados/${chamado.id}/editar`)}>Editar</DropdownMenuItem>
                                     <DropdownMenuItem className="text-destructive" onClick={() => setChamadoToDelete(chamado)}>Excluir</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>

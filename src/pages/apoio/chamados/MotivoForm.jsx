@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -22,7 +23,7 @@ const MotivoForm = () => {
       title: `Motivo ${isEditing ? 'atualizado' : 'criado'} com sucesso!`,
       description: "🚧 Funcionalidade em desenvolvimento.",
     });
-    navigate('/apoio/chamados/motivos');
+    navigate('/admin/apoio/chamados/motivos');
   };
 
   return (
@@ -55,7 +56,7 @@ const MotivoForm = () => {
             </div>
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => navigate('/apoio/chamados/motivos')}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => navigate('/admin/apoio/chamados/motivos')}>Cancelar</Button>
             <Button type="submit">Salvar</Button>
           </CardFooter>
         </Card>

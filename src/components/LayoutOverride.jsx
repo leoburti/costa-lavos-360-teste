@@ -5,7 +5,7 @@ import SidebarOverride from '@/components/SidebarOverride';
 import Header from '@/components/Header';
 import FilterBar from '@/components/FilterBar';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { motion } from 'framer-motion'; // Import motion for page transitions
+import { motion } from 'framer-motion';
 
 const LayoutOverride = ({ children }) => {
   // State for sidebar collapse (desktop)
@@ -31,10 +31,11 @@ const LayoutOverride = ({ children }) => {
     }
   }, [isCollapsed]);
 
-  // Define routes where FilterBar should NOT appear
+  // Define routes where FilterBar should NOT appear (avoid duplication with Header filters)
   const noFilterBarRoutes = [
     '/configuracoes',
     '/apoio',
+    '/admin/apoio',
     '/crm',
     '/ai-chat',
     '/bonificacoes',
@@ -43,7 +44,21 @@ const LayoutOverride = ({ children }) => {
     '/admin/delivery-management',
     '/settings',
     '/login',
-    '/auth'
+    '/auth',
+    // Commercial Dashboard & Analytics (Header already handles filters for these)
+    '/dashboard',
+    '/analitico',
+    '/analise',
+    '/visao-360',
+    '/curva-abc',
+    '/calculo-rfm',
+    '/tendencia-vendas',
+    '/baixo-desempenho',
+    '/produtos-bonificados',
+    '/performance-bonificados',
+    '/movimentacao-equipamentos',
+    '/equipamentos-em-campo',
+    '/raio-x'
   ];
   
   const showFilterBar = !noFilterBarRoutes.some(route => location.pathname.startsWith(route));
@@ -61,15 +76,15 @@ const LayoutOverride = ({ children }) => {
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ease-in-out">
-          {/* Header */}
+          {/* Header - Handles Navigation, User Profile AND Global Filters for Dashboard */}
           <Header setSidebarOpen={setMobileOpen} />
           
-          {/* Filter Bar (Optional) */}
+          {/* Filter Bar - Only shown for pages that need extra/legacy filtering not in Header */}
           {showFilterBar && <FilterBar />}
 
           {/* Page Content */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-4 md:p-6 scroll-smooth">
-            {/* Added Framer Motion for page transitions */}
+            {/* Page Transition Animation */}
             <motion.div
               key={location.pathname}
               initial={{ opacity: 0, y: 20 }}

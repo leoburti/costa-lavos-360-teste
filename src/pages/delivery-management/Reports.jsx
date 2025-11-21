@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -16,7 +16,7 @@ import { Loader2, Calendar as CalendarIcon, Download, FileText, BarChart2, Archi
 import { format, startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useDebounce } from '@/hooks/useDebounce';
-import { usePrint } from '@/hooks/usePrint';
+import { generatePDF } from '@/utils/pdfGenerator'; // New utility import
 import ProtocolDetailReport from '@/components/delivery/ProtocolDetailReport';
 import SyntheticReport from '@/components/delivery/SyntheticReport';
 import BoxBalanceReport from '@/components/delivery/BoxBalanceReport';
@@ -30,8 +30,11 @@ const IndividualProtocolsTab = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
     const { toast } = useToast();
-    const { componentRef, handlePrint, isPrinting } = usePrint();
+    
+    // Ref for the hidden report container
+    const reportRef = useRef(null);
     const [printingProtocol, setPrintingProtocol] = useState(null);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const fetchProtocols = useCallback(async (selectedDate) => {
         if (!selectedDate) return;
@@ -40,7 +43,6 @@ const IndividualProtocolsTab = () => {
             const startDate = startOfDay(selectedDate).toISOString();
             const endDate = endOfDay(selectedDate).toISOString();
 
-            // Include 'motoristas(nome)' to fetch driver name
             let query = supabase
                 .from('entregas')
                 .select('*, motoristas(nome)')
@@ -67,12 +69,30 @@ const IndividualProtocolsTab = () => {
         setDate(selectedDate);
     }
 
-    const handlePrintClick = (protocol) => {
+    const handleDownloadPDF = async (protocol) => {
+        if (isDownloading) return;
+        
+        setIsDownloading(true);
         setPrintingProtocol(protocol);
-        // Small delay to ensure the hidden component renders and images load
-        setTimeout(() => {
-            handlePrint();
-        }, 500);
+
+        // Wait for state update and rendering of hidden component
+        setTimeout(async () => {
+            try {
+                if (reportRef.current) {
+                    const filename = `Protocolo_${protocol.venda_num_docto || 'Entrega'}_${format(new Date(), 'ddMMyyyy')}.pdf`;
+                    await generatePDF(reportRef.current, filename);
+                    toast({ title: "Sucesso", description: "PDF baixado com sucesso!" });
+                } else {
+                    throw new Error("Elemento do relatório não encontrado.");
+                }
+            } catch (error) {
+                console.error(error);
+                toast({ variant: 'destructive', title: "Erro", description: "Falha ao gerar o PDF. Tente novamente." });
+            } finally {
+                setIsDownloading(false);
+                setPrintingProtocol(null);
+            }
+        }, 1000); // Give 1s for images to load in the hidden DOM
     };
 
     const filteredProtocols = useMemo(() => {
@@ -139,8 +159,8 @@ const IndividualProtocolsTab = () => {
                                     </CardTitle>
                                     <CardDescription>{protocol.cliente_nome}</CardDescription>
                                 </div>
-                                 <Button size="sm" variant="outline" onClick={() => handlePrintClick(protocol)} disabled={isPrinting}>
-                                    {isPrinting && printingProtocol?.id === protocol.id ? (
+                                 <Button size="sm" variant="outline" onClick={() => handleDownloadPDF(protocol)} disabled={isDownloading}>
+                                    {isDownloading && printingProtocol?.id === protocol.id ? (
                                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                     ) : (
                                         <Download className="h-4 w-4 mr-2" /> 
@@ -185,9 +205,9 @@ const IndividualProtocolsTab = () => {
                 ))}
             </div>
             
-            {/* Hidden Print Component - Using height 0 overflow hidden instead of display none for better compatibility with images */}
-            <div style={{ position: 'absolute', top: '-9999px', left: '-9999px', width: '210mm' }}>
-                <ProtocolDetailReport ref={componentRef} protocol={printingProtocol} />
+            {/* Hidden Report Component for Generation */}
+            <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', width: '210mm' }}>
+                <ProtocolDetailReport ref={reportRef} protocol={printingProtocol} />
             </div>
         </div>
     );
@@ -199,8 +219,9 @@ const SyntheticReportTab = () => {
     const [dateRange, setDateRange] = useState({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
     const [reportData, setReportData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const reportRef = useRef(null);
     const { toast } = useToast();
-    const { componentRef, handlePrint, isPrinting } = usePrint();
 
     const generateReport = useCallback(async () => {
         if (!dateRange?.from || !dateRange?.to) {
@@ -240,6 +261,19 @@ const SyntheticReportTab = () => {
         }
     }, [dateRange, toast]);
 
+    const handleDownloadPDF = async () => {
+        if (isDownloading || !reportData) return;
+        setIsDownloading(true);
+        try {
+            await generatePDF(reportRef.current, `Relatorio_Sintetico_${format(new Date(), 'ddMMyyyy')}.pdf`);
+            toast({ title: "Sucesso", description: "Relatório baixado com sucesso!" });
+        } catch (error) {
+            toast({ variant: 'destructive', title: "Erro", description: "Falha ao baixar PDF." });
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <div className="flex items-center gap-4">
@@ -248,8 +282,8 @@ const SyntheticReportTab = () => {
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Gerar Relatório"}
                 </Button>
                 {reportData && Object.keys(reportData).length > 0 && (
-                     <Button variant="outline" onClick={handlePrint} disabled={isPrinting}>
-                        {isPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF
+                     <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloading}>
+                        {isDownloading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF
                     </Button>
                 )}
             </div>
@@ -294,8 +328,9 @@ const SyntheticReportTab = () => {
                     <AlertDescription>Não há registros de saldo de caixas para o período selecionado.</AlertDescription>
                 </Alert>
             )}
-             <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-                <SyntheticReport ref={componentRef} data={reportData} dateRange={dateRange} />
+             {/* Hidden container for generation */}
+             <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', width: '210mm' }}>
+                <SyntheticReport ref={reportRef} data={reportData} dateRange={dateRange} />
             </div>
         </div>
     );
@@ -308,7 +343,9 @@ const BoxBalanceTab = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
     const { toast } = useToast();
-    const { componentRef, handlePrint, isPrinting } = usePrint();
+    
+    const reportRef = useRef(null);
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const fetchBalances = useCallback(async () => {
         setLoading(true);
@@ -332,6 +369,19 @@ const BoxBalanceTab = () => {
         fetchBalances();
     }, [fetchBalances]);
 
+    const handleDownloadPDF = async () => {
+        if (isDownloading || filteredBalances.length === 0) return;
+        setIsDownloading(true);
+        try {
+            await generatePDF(reportRef.current, `Saldo_Caixas_${format(new Date(), 'ddMMyyyy')}.pdf`);
+            toast({ title: "Sucesso", description: "Relatório baixado com sucesso!" });
+        } catch (error) {
+            toast({ variant: 'destructive', title: "Erro", description: "Falha ao baixar PDF." });
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
     const filteredBalances = useMemo(() => {
         if (!debouncedSearchTerm) return balances;
         return balances.filter(b => 
@@ -348,8 +398,8 @@ const BoxBalanceTab = () => {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="max-w-sm"
                 />
-                <Button variant="outline" onClick={handlePrint} disabled={loading || filteredBalances.length === 0 || isPrinting}>
-                    {isPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF
+                <Button variant="outline" onClick={handleDownloadPDF} disabled={loading || filteredBalances.length === 0 || isDownloading}>
+                    {isDownloading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF
                 </Button>
             </div>
             
@@ -385,8 +435,9 @@ const BoxBalanceTab = () => {
                 </Alert>
             )}
 
-            <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-                <BoxBalanceReport ref={componentRef} data={filteredBalances} />
+            {/* Hidden container for generation */}
+            <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', width: '210mm' }}>
+                <BoxBalanceReport ref={reportRef} data={filteredBalances} />
             </div>
         </div>
     );

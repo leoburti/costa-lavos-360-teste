@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -150,7 +151,7 @@ const Dashboard = () => {
           <MetricCard title="Vendas Realizadas" value={String(salesCount)} icon={ShoppingCart} />
           <MetricCard title="Ticket Médio" value={formatCurrency(averageTicket)} icon={Award} />
           <MetricCard title="Bonificação Total" value={formatCurrency(totalBonification)} icon={Package} />
-          <MetricCard title="Equipamentos Vendidos" value={formatCurrency(totalEquipment)} icon={Factory} />
+          <MetricCard title="Equipamentos Entregues" value={formatCurrency(totalEquipment)} icon={Factory} /> {/* Changed title here */}
           <MetricCard title="Receita Mês Atual (MTD)" value={formatCurrency(totalRevenueMonthToDate)} icon={CalendarDays} />
           <MetricCard title="Receita Projetada" value={formatCurrency(projectedRevenue)} icon={TrendingUp} />
         </div>

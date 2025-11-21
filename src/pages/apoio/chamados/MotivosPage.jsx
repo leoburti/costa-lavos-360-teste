@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -37,7 +38,7 @@ const MotivosPage = () => {
 
   const handleAction = (action, id) => {
     if (action === 'Editar') {
-      navigate(`/apoio/chamados/motivos/${id}/editar`);
+      navigate(`/admin/apoio/chamados/motivos/${id}/editar`);
     } else {
       toast({ title: "🚧 Em desenvolvimento", description: "Esta ação será implementada em breve." });
     }
@@ -51,7 +52,7 @@ const MotivosPage = () => {
             <CardTitle>Motivos de Chamado</CardTitle>
             <CardDescription>Gerencie os motivos pré-definidos para a abertura de chamados.</CardDescription>
           </div>
-          <Button onClick={() => navigate('/apoio/chamados/motivos/novo')}>
+          <Button onClick={() => navigate('/admin/apoio/chamados/motivos/novo')}>
             <PlusCircle className="mr-2 h-4 w-4" /> Novo Motivo
           </Button>
         </div>

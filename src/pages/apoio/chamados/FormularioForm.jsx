@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -33,7 +34,7 @@ const FormularioForm = () => {
       title: `Formulário ${isEditing ? 'atualizado' : 'criado'} com sucesso!`,
       description: "🚧 Funcionalidade em desenvolvimento.",
     });
-    navigate('/apoio/chamados/formularios');
+    navigate('/admin/apoio/chamados/formularios');
   };
 
   return (
@@ -71,7 +72,7 @@ const FormularioForm = () => {
             </div>
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => navigate('/apoio/chamados/formularios')}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => navigate('/admin/apoio/chamados/formularios')}>Cancelar</Button>
             <Button type="submit">Salvar</Button>
           </CardFooter>
         </Card>

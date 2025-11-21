@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { AnimatePresence } from 'framer-motion';
@@ -43,16 +44,25 @@ const AnaliticoVendasDiarias = () => {
 
       if (error) throw error;
       
-      const netSales = data.dailySales.reduce((acc, day) => {
-        const dayNet = day.total - (day.bonification || 0) - (day.equipment || 0);
-        return acc + dayNet;
-      }, 0);
+      // O RPC retorna 'totalRevenue' como sendo apenas Venda de Produtos (net_revenue)
+      // Recuperamos os valores base do KPI para realizar os cálculos corretos
+      const productSales = data.kpi.totalRevenue || 0;
+      const bonification = data.kpi.totalBonification || 0;
+      const equipment = data.kpi.totalEquipment || 0;
+
+      // Cálculo de Vendas Totais (Brutas) = Produtos + Bonificação + Equipamentos
+      const grossSales = productSales + bonification + equipment;
+      
+      // Cálculo de Vendas Líquidas = Vendas Totais - Bonificação - Equipamentos
+      // (Matematicamente igual a productSales, mas explicitando a lógica)
+      const netSales = grossSales - bonification - equipment;
 
       setOverviewData({
         ...data,
         kpi: {
           ...data.kpi,
-          netSales: netSales,
+          totalRevenue: grossSales, // Atualiza para refletir o valor Bruto/Total no KPI "Vendas Totais"
+          netSales: netSales,       // Define explicitamente o valor Líquido para o KPI "Vendas Líquidas"
         }
       });
     } catch (error) {

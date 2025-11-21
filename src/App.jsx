@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect, memo } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 
@@ -12,6 +12,12 @@ import AuthGuard from '@/components/AuthGuard';
 import LayoutOverride from '@/components/LayoutOverride';
 import { Toaster } from '@/components/ui/toaster';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import PageSkeleton from '@/components/PageSkeleton';
+import { prefetchCriticalRoutes } from '@/utils/performance';
+
+// --- Optimized Lazy Imports ---
+// We group imports or preload on interaction in real scenarios, 
+// but here we stick to basic lazy to keep bundle size small initially.
 
 // Auth Pages
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
@@ -76,7 +82,7 @@ const CrmAutomations = lazy(() => import('@/pages/crm/Automations'));
 const CrmReports = lazy(() => import('@/pages/crm/Reports'));
 const CrmTeam = lazy(() => import('@/pages/crm/Team'));
 
-// Gestão de Equipe (NEW CENTRALIZED)
+// Gestão de Equipe
 const CentralizedTeamManagement = lazy(() => import('@/pages/configuracoes/gestao-equipe/CentralizedTeamManagement'));
 
 // Apoio Pages
@@ -170,22 +176,49 @@ const PreferenciasComodatoPage = lazy(() => import('@/pages/configuracoes/Prefer
 const DadosClientesConfigPage = lazy(() => import('@/pages/configuracoes/DadosClientesPage'));
 const ConfiguracoesAvancadasAPoioPage = lazy(() => import('@/pages/configuracoes/ConfiguracoesAvancadasAPoioPage'));
 
+// Memoized fallback to prevent re-renders of the spinner container
+const FullScreenLoader = memo(() => (
+  <div className="flex h-screen w-full items-center justify-center bg-slate-50">
+    <LoadingSpinner message="Iniciando sistema..." />
+  </div>
+));
 
 function App() {
+  useEffect(() => {
+    // Aggressively prefetch routes after main thread is idle
+    prefetchCriticalRoutes();
+  }, []);
+
   return (
     <HelmetProvider>
       <SupabaseAuthProvider>
         <NotificationProvider>
           <FilterProvider>
             <PageActionProvider>
-              <Suspense fallback={<div className="flex h-screen w-full items-center justify-center"><LoadingSpinner /></div>}>
+              {/* Global Suspense for critical auth/setup phases */}
+              <Suspense fallback={<FullScreenLoader />}>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/auth/confirm" element={<AuthConfirmation />} />
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/update-password" element={<UpdatePassword />} />
                   
-                  <Route path="/" element={<AuthGuard><LayoutOverride><Outlet /></LayoutOverride></AuthGuard>}>
+                  <Route path="/" element={
+                    <AuthGuard>
+                      <LayoutOverride>
+                        {/* 
+                           CRITICAL OPTIMIZATION:
+                           We nest Suspense INSIDE LayoutOverride's content area.
+                           This ensures the Sidebar/Header remain visible while routes load,
+                           eliminating the "white screen flash" effect during navigation.
+                           We also use a rich PageSkeleton instead of a spinner.
+                        */}
+                        <Suspense fallback={<PageSkeleton />}>
+                          <Outlet />
+                        </Suspense>
+                      </LayoutOverride>
+                    </AuthGuard>
+                  }>
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="dashboard" element={<DashboardPage />} />
                     <Route path="ai-chat" element={<AIChat />} />
