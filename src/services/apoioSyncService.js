@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/customSupabaseClient';
 import { EQUIPMENT_STATUS } from '@/constants/equipmentStatus';
 
@@ -233,23 +234,82 @@ export const deleteModeloEquipamento = async (id) => {
   return { success: true, message: "Modelo desativado com sucesso." };
 };
 
-// === Equipamentos (Estoque) ===
+// === Equipamentos (Estoque / Inventário Real) ===
 export const getEquipamentosComodatoByCliente = async (clienteId) => {
-  if (!clienteId) return [];
-
-  const { data, error } = await supabase
-    .from('apoio_equipamentos_comodato')
-    .select('id, numero_serie, status, modelo:apoio_modelos_equipamentos(id, nome_modelo)')
-    .eq('cliente_id', clienteId)
-    .eq('status', EQUIPMENT_STATUS.INSTALADO)
-    .order('numero_serie', { ascending: true });
-
-  if (error) {
-    console.error('Erro ao buscar equipamentos do cliente:', error);
-    throw new Error(`Não foi possível carregar os equipamentos do cliente: ${error.message}`);
-  }
+  console.log("🔍 [DEBUG service] getEquipamentosComodatoByCliente INICIADO. Cliente ID (UUID):", clienteId);
   
-  return data;
+  if (!clienteId) {
+    console.warn("⚠️ [DEBUG service] Cliente ID não fornecido.");
+    return [];
+  }
+
+  try {
+    // 1. Buscar dados do cliente localmente para obter o nome fantasia
+    const { data: clienteLocal, error: clienteError } = await supabase
+      .from('apoio_clientes_comodato')
+      .select('id, nome_fantasia, razao_social')
+      .eq('id', clienteId)
+      .single();
+
+    if (clienteError) {
+      console.error("❌ [DEBUG service] Erro ao buscar cliente local:", clienteError);
+      throw new Error(`Cliente não encontrado: ${clienteError.message}`);
+    }
+
+    if (!clienteLocal) {
+      console.warn("⚠️ [DEBUG service] Cliente local retornado vazio.");
+      return [];
+    }
+
+    const nomeBusca = clienteLocal.nome_fantasia || clienteLocal.razao_social;
+    console.log(`🔍 [DEBUG service] Buscando equipamentos para: "${nomeBusca}" (ID: ${clienteId})`);
+
+    if (!nomeBusca) {
+      console.warn("⚠️ [DEBUG service] Cliente sem nome fantasia ou razão social para busca.");
+      return [];
+    }
+
+    // 2. Buscar diretamente na tabela de inventário (bd_cl_inv) usando o nome
+    const { data: equipamentosInv, error: equipError } = await supabase
+      .from('bd_cl_inv')
+      .select('*')
+      .ilike('Fantasia', `%${nomeBusca}%`);
+
+    console.log("🔍 [DEBUG service] Resultado query bd_cl_inv:", { 
+      registrosEncontrados: equipamentosInv?.length || 0, 
+      erro: equipError 
+    });
+
+    if (equipError) {
+      console.error("❌ [DEBUG service] Erro ao consultar bd_cl_inv:", equipError);
+      throw new Error(`Erro na busca de inventário: ${equipError.message}`);
+    }
+
+    if (!equipamentosInv || equipamentosInv.length === 0) {
+      console.warn(`⚠️ [DEBUG service] Nenhum registro encontrado em bd_cl_inv para "%${nomeBusca}%"`);
+      return [];
+    }
+
+    // 3. Normalizar os dados para o formato esperado pelo front-end
+    const equipamentosNormalizados = equipamentosInv.map((item, idx) => ({
+      id: item.AA3_CHAPA || item.numero_serie || `temp-${idx}-${Date.now()}`,
+      nome_modelo: item.Equipamento || 'Modelo Não Especificado',
+      numero_serie: item.AA3_CHAPA || item.numero_serie || 'S/N',
+      chapa: item.AA3_CHAPA || 'S/C', // Campo Chapa (AA3_CHAPA)
+      data_venda: item.Data_Venda,
+      quantidade: item.QTD || 1,
+      status: 'ativo', // Assumindo ativo se está no inventário
+      localizacao: item.Loja_texto || item.Loja,
+      origem: 'bd_cl_inv' // Debug tag
+    }));
+
+    console.log(`✅ [DEBUG service] ${equipamentosNormalizados.length} equipamentos normalizados e retornados.`);
+    return equipamentosNormalizados;
+
+  } catch (err) {
+    console.error("❌ [DEBUG service] Exceção fatal em getEquipamentosComodatoByCliente:", err);
+    throw err;
+  }
 };
 
 // === Chamados para Select ===

@@ -12,7 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Search, Sparkles, CheckCircle, AlertCircle, FileText, Download } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Loader2, Search, Sparkles, CheckCircle, AlertCircle, FileText, Download, MapPin } from 'lucide-react';
 import InputMask from 'react-input-mask';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { fetchCompanyData, mapApiDataToForm } from '@/services/senhorLavosService';
@@ -59,6 +60,16 @@ const contactSchema = z.object({
     address_state: z.string().min(1, 'Estado é obrigatório'),
     address_zip_code: z.string().min(1, 'CEP é obrigatório'),
 
+    // Endereço de Entrega
+    same_delivery_address: z.boolean().default(true),
+    delivery_address_zip_code: z.string().optional(),
+    delivery_address_street: z.string().optional(),
+    delivery_address_number: z.string().optional(),
+    delivery_address_complement: z.string().optional(),
+    delivery_address_district: z.string().optional(),
+    delivery_address_city: z.string().optional(),
+    delivery_address_state: z.string().optional(),
+
     phone: z.string().optional(),
     email: z.string().email('E-mail inválido').optional().or(z.literal('')),
     website: z.string().optional(),
@@ -75,10 +86,48 @@ const contactSchema = z.object({
     seller_id: z.string().optional(),
     qualification_data: qualificationSchema.optional(),
     raw_integration_data: z.any().optional(),
+}).superRefine((data, ctx) => {
+    if (!data.same_delivery_address) {
+        if (!data.delivery_address_zip_code || data.delivery_address_zip_code.replace(/\D/g, '').length !== 8) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "CEP de entrega obrigatório (8 dígitos)",
+                path: ["delivery_address_zip_code"]
+            });
+        }
+        if (!data.delivery_address_street) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Logradouro de entrega obrigatório",
+                path: ["delivery_address_street"]
+            });
+        }
+        if (!data.delivery_address_city) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Cidade de entrega obrigatória",
+                path: ["delivery_address_city"]
+            });
+        }
+        if (!data.delivery_address_state) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Estado de entrega obrigatório",
+                path: ["delivery_address_state"]
+            });
+        }
+        if (!data.delivery_address_district) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Bairro de entrega obrigatório",
+                path: ["delivery_address_district"]
+            });
+        }
+    }
 });
 
-const FormSection = ({ title, children, gridCols = 2 }) => (
-    <Card className="mb-6 border-l-4 border-l-indigo-500 shadow-sm">
+const FormSection = ({ title, children, gridCols = 2, className = "" }) => (
+    <Card className={`mb-6 border-l-4 border-l-indigo-500 shadow-sm ${className}`}>
         <CardHeader className="pb-2">
             <CardTitle className="text-lg font-semibold text-gray-800">{title}</CardTitle>
         </CardHeader>
@@ -105,6 +154,7 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
     const [sellers, setSellers] = useState([]);
     const [integrationLoading, setIntegrationLoading] = useState(false);
     const [integrationSuccess, setIntegrationSuccess] = useState(false);
+    const [cepLoading, setCepLoading] = useState(false);
     
     // Credit Dossier States
     const [dossierLoading, setDossierLoading] = useState(false);
@@ -120,6 +170,8 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             state_registration: '',
             industry_sector: '',
             foundation_date: '',
+            
+            // Main Address
             address_zip_code: '',
             address_street: '',
             address_number: '',
@@ -127,6 +179,17 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             address_district: '',
             address_city: '',
             address_state: '',
+
+            // Delivery Address
+            same_delivery_address: true,
+            delivery_address_zip_code: '',
+            delivery_address_street: '',
+            delivery_address_number: '',
+            delivery_address_complement: '',
+            delivery_address_district: '',
+            delivery_address_city: '',
+            delivery_address_state: '',
+
             phone: '',
             email: '',
             representative_name: '',
@@ -141,6 +204,8 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             },
         },
     });
+
+    const sameDeliveryAddress = watch('same_delivery_address');
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -204,6 +269,57 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
         }
     };
 
+    const handleDeliveryCEPChange = async (e) => {
+        const rawCep = e.target.value.replace(/\D/g, '');
+        
+        // Only trigger fetch when we have exactly 8 digits
+        if (rawCep.length === 8) {
+            setCepLoading(true);
+            try {
+                const response = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
+                const data = await response.json();
+
+                if (data.erro) {
+                    toast({
+                        variant: "destructive",
+                        title: "CEP não encontrado",
+                        description: "Verifique o CEP digitado e tente novamente."
+                    });
+                    return;
+                }
+
+                // Auto-fill delivery address fields
+                setValue('delivery_address_street', data.logradouro || '');
+                setValue('delivery_address_district', data.bairro || '');
+                setValue('delivery_address_city', data.localidade || '');
+                setValue('delivery_address_state', data.uf || '');
+                
+                // Validate the fields that were filled
+                trigger([
+                    'delivery_address_street', 
+                    'delivery_address_district', 
+                    'delivery_address_city', 
+                    'delivery_address_state'
+                ]);
+
+                toast({
+                    description: "Endereço de entrega carregado com sucesso.",
+                    className: "bg-blue-50 text-blue-900 border-blue-200"
+                });
+
+            } catch (error) {
+                console.error("ViaCEP Error:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Erro na busca de CEP",
+                    description: "Não foi possível buscar o endereço. Tente preencher manualmente."
+                });
+            } finally {
+                setCepLoading(false);
+            }
+        }
+    };
+
     const handleGenerateDossier = async (e) => {
         e.preventDefault(); // Prevent form submission
         const cnpj = getValues('cnpj');
@@ -229,7 +345,7 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                 }
                 setDossierLoading(false);
                 setDossierData(null); // Clear to unmount if desired, or keep for debug
-            }, 1500); // Increased delay slightly to ensure rich visual rendering
+            }, 1500); 
 
         } catch (error) {
             console.error("Dossier Error:", error);
@@ -240,15 +356,29 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
 
     const onSubmit = async (data) => {
         try {
+            // Logic to handle "Same Delivery Address"
+            let finalData = { ...data };
+            
+            if (finalData.same_delivery_address) {
+                // If checked, copy main address to delivery address fields for persistence
+                finalData.delivery_address_zip_code = finalData.address_zip_code;
+                finalData.delivery_address_street = finalData.address_street;
+                finalData.delivery_address_number = finalData.address_number;
+                finalData.delivery_address_complement = finalData.address_complement;
+                finalData.delivery_address_district = finalData.address_district;
+                finalData.delivery_address_city = finalData.address_city;
+                finalData.delivery_address_state = finalData.address_state;
+            }
+
             const payload = {
-                ...data,
+                ...finalData,
                 owner_id: user.id,
-                supervisor_id: data.supervisor_id || null,
-                seller_id: data.seller_id || null,
-                qualification_data: data.qualification_data || {},
+                supervisor_id: finalData.supervisor_id || null,
+                seller_id: finalData.seller_id || null,
+                qualification_data: finalData.qualification_data || {},
                 custom_fields: {
                     ...(contactData?.custom_fields || {}),
-                    senhor_lavos_data: data.raw_integration_data
+                    senhor_lavos_data: finalData.raw_integration_data
                 }
             };
             
@@ -347,7 +477,7 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                 </FormField>
             </FormSection>
 
-            <FormSection title="Endereço">
+            <FormSection title="Endereço Principal">
                 <FormField label="CEP" id="address_zip_code" error={errors.address_zip_code} isRequired>
                     <Controller
                         name="address_zip_code"
@@ -383,6 +513,89 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                     <Input id="address_state" {...register('address_state')} maxLength={2} placeholder="UF" />
                 </FormField>
             </FormSection>
+
+            {/* Toggle for Same Address */}
+            <div className="flex items-center space-x-2 mb-4 px-1">
+                <Controller
+                    name="same_delivery_address"
+                    control={control}
+                    render={({ field }) => (
+                        <Checkbox 
+                            id="same_delivery_address" 
+                            checked={field.value} 
+                            onCheckedChange={field.onChange}
+                        />
+                    )}
+                />
+                <Label htmlFor="same_delivery_address" className="cursor-pointer font-medium text-gray-700">
+                    Mesmo endereço de entrega
+                </Label>
+            </div>
+
+            {/* Delivery Address Section - Conditional */}
+            {!sameDeliveryAddress && (
+                <FormSection title="Endereço de Entrega" className="animate-in fade-in slide-in-from-top-2 duration-300 bg-slate-50 border-l-orange-500">
+                    <div className="col-span-1 md:col-span-2">
+                        <div className="flex items-end gap-4">
+                            <FormField label="CEP de Entrega" id="delivery_address_zip_code" error={errors.delivery_address_zip_code} isRequired className="flex-1">
+                                <div className="relative">
+                                    <Controller
+                                        name="delivery_address_zip_code"
+                                        control={control}
+                                        render={({ field: { onChange, value, ref, onBlur } }) => (
+                                            <InputMask 
+                                                mask="99999-999" 
+                                                value={value || ''} 
+                                                onChange={(e) => {
+                                                    onChange(e);
+                                                    handleDeliveryCEPChange(e);
+                                                }}
+                                                onBlur={onBlur}
+                                            >
+                                                {(inputProps) => (
+                                                    <Input 
+                                                        {...inputProps} 
+                                                        ref={ref} 
+                                                        placeholder="00000-000" 
+                                                        className={cepLoading ? "pr-10" : ""}
+                                                    />
+                                                )}
+                                            </InputMask>
+                                        )}
+                                    />
+                                    {cepLoading && (
+                                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                            <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                                        </div>
+                                    )}
+                                </div>
+                            </FormField>
+                            <div className="mb-2 text-xs text-muted-foreground hidden md:block">
+                                Digite o CEP para busca automática
+                            </div>
+                        </div>
+                    </div>
+
+                    <FormField label="Rua de Entrega" id="delivery_address_street" error={errors.delivery_address_street} isRequired>
+                        <Input id="delivery_address_street" {...register('delivery_address_street')} />
+                    </FormField>
+                    <FormField label="Número" id="delivery_address_number" error={errors.delivery_address_number}>
+                        <Input id="delivery_address_number" {...register('delivery_address_number')} />
+                    </FormField>
+                    <FormField label="Complemento" id="delivery_address_complement" error={errors.delivery_address_complement}>
+                        <Input id="delivery_address_complement" {...register('delivery_address_complement')} />
+                    </FormField>
+                    <FormField label="Bairro de Entrega" id="delivery_address_district" error={errors.delivery_address_district} isRequired>
+                        <Input id="delivery_address_district" {...register('delivery_address_district')} />
+                    </FormField>
+                    <FormField label="Cidade de Entrega" id="delivery_address_city" error={errors.delivery_address_city} isRequired>
+                        <Input id="delivery_address_city" {...register('delivery_address_city')} />
+                    </FormField>
+                    <FormField label="Estado" id="delivery_address_state" error={errors.delivery_address_state} isRequired>
+                        <Input id="delivery_address_state" {...register('delivery_address_state')} maxLength={2} placeholder="UF" />
+                    </FormField>
+                </FormSection>
+            )}
 
             <FormSection title="Informações de Contato">
                 <FormField label="Telefone Geral" id="phone" error={errors.phone}>

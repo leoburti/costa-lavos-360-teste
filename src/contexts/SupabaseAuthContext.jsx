@@ -57,6 +57,27 @@ export const SupabaseAuthProvider = ({ children }) => {
         throw new Error(`Error fetching user role: ${error.message}`);
       }
 
+      // --- Fetch Apoio Internal Profile (CRITICAL FOR FOREIGN KEYS) ---
+      let apoioId = null;
+      let apoioProfile = null;
+      try {
+          const { data: apoioData } = await supabase
+              .from('apoio_usuarios')
+              .select('id, nome, email, equipe_id, supervisor_id')
+              .eq('auth_id', sessionUser.id)
+              .maybeSingle();
+          
+          if (apoioData) {
+              apoioProfile = apoioData;
+              apoioId = apoioData.id;
+              console.log(`[AuthContext] Apoio Profile found: ${apoioId}`);
+          } else {
+              console.warn(`[AuthContext] No Apoio Profile found for Auth ID: ${sessionUser.id}`);
+          }
+      } catch (apoioError) {
+          console.error("[AuthContext] Error fetching apoio profile:", apoioError);
+      }
+
       let contextData;
 
       if (data && data.length > 0) {
@@ -80,31 +101,21 @@ export const SupabaseAuthProvider = ({ children }) => {
         
         // --- Team Scope Fetching for Supervisors ---
         let teamMembers = [];
-        if (isSupervisor) {
+        if (isSupervisor && apoioId) {
             try {
-                // 1. Get the supervisor's internal ID in apoio_usuarios
-                const { data: myApoioProfile } = await supabase
+                // Get all users who have this user as their supervisor
+                const { data: teamData } = await supabase
                     .from('apoio_usuarios')
-                    .select('id')
-                    .eq('auth_id', sessionUser.id)
-                    .maybeSingle();
-
-                if (myApoioProfile) {
-                    // 2. Get all users who have this user as their supervisor
-                    const { data: teamData } = await supabase
-                        .from('apoio_usuarios')
-                        .select('auth_id')
-                        .eq('supervisor_id', myApoioProfile.id);
-                    
-                    if (teamData) {
-                        // Map to array of auth_ids, filtering out any nulls
-                        teamMembers = teamData.map(t => t.auth_id).filter(Boolean);
-                        console.log(`[AuthContext] Team members loaded: ${teamMembers.length}`);
-                    }
+                    .select('auth_id')
+                    .eq('supervisor_id', apoioId);
+                
+                if (teamData) {
+                    // Map to array of auth_ids, filtering out any nulls
+                    teamMembers = teamData.map(t => t.auth_id).filter(Boolean);
+                    console.log(`[AuthContext] Team members loaded: ${teamMembers.length}`);
                 }
             } catch (scopeError) {
                 console.error("[AuthContext] Error fetching team scope:", scopeError);
-                // Non-critical, proceed without team filtering (will likely fallback to own data only via RLS or empty list)
             }
         }
 
@@ -123,6 +134,9 @@ export const SupabaseAuthProvider = ({ children }) => {
           vendorId: profile.vendor_id,
           supervisorId: profile.supervisor_id,
           teamMembers: teamMembers, // List of auth_ids for the team
+          // Internal IDs
+          apoioId, // <--- EXPOSED ID FOR FOREIGN KEYS
+          apoioProfile,
           // Helper flags
           isSeller,
           isSupervisor,
@@ -143,6 +157,8 @@ export const SupabaseAuthProvider = ({ children }) => {
             vendorId: null,
             supervisorId: null,
             teamMembers: [],
+            apoioId, // Still try to provide this if found
+            apoioProfile,
             isSeller: false,
             isSupervisor: false,
             isAdmin: false,
