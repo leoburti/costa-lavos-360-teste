@@ -1,7 +1,9 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { format } from 'date-fns';
+import { useDataScope } from '@/hooks/useDataScope';
 
 const FilterContext = createContext(undefined);
 
@@ -16,6 +18,9 @@ const getInitialDateRange = () => {
 export const FilterProvider = ({ children }) => {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
+    
+    // Defensively destructure useDataScope to prevent crashes if commercialFilter is undefined
+    const { isRestricted, commercialFilter = {} } = useDataScope();
     
     const [dateRange, setDateRangeState] = useState(getInitialDateRange());
     const [previousDateRange, setPreviousDateRange] = useState({ from: undefined, to: undefined });
@@ -58,9 +63,51 @@ export const FilterProvider = ({ children }) => {
         }
     }, [dateRange]);
 
+    // Enforce data scope constraints on filters
+    useEffect(() => {
+        if (isRestricted) {
+            setFiltersState(prev => {
+                let hasChanges = false;
+                const newFilters = { ...prev };
+                
+                if (commercialFilter.supervisor) {
+                    const currentSupervisor = prev.supervisors && prev.supervisors.length > 0 ? prev.supervisors[0] : null;
+                    if (currentSupervisor !== commercialFilter.supervisor) {
+                        newFilters.supervisors = [commercialFilter.supervisor];
+                        hasChanges = true;
+                    }
+                }
+                
+                if (commercialFilter.seller) {
+                    const currentSeller = prev.sellers && prev.sellers.length > 0 ? prev.sellers[0] : null;
+                    if (currentSeller !== commercialFilter.seller) {
+                        newFilters.sellers = [commercialFilter.seller];
+                        hasChanges = true;
+                    }
+                }
+                
+                // Only update state if actual changes occurred to prevent render loops
+                return hasChanges ? newFilters : prev;
+            });
+        }
+    }, [isRestricted, commercialFilter]);
+
     const updateFilters = useCallback((newFilters) => {
-        setFiltersState(prev => ({ ...prev, ...newFilters }));
-    }, []);
+        setFiltersState(prev => {
+            // Prevent restricted users from clearing their mandatory filters
+            if (isRestricted) {
+                if (commercialFilter.supervisor && newFilters.supervisors !== undefined) {
+                    // Ensure the restricted supervisor remains selected
+                    newFilters.supervisors = [commercialFilter.supervisor];
+                }
+                if (commercialFilter.seller && newFilters.sellers !== undefined) {
+                    // Ensure the restricted seller remains selected
+                    newFilters.sellers = [commercialFilter.seller];
+                }
+            }
+            return { ...prev, ...newFilters };
+        });
+    }, [isRestricted, commercialFilter]);
 
     const fetchFilterOptions = useCallback(async () => {
         setLoading(true);
@@ -111,11 +158,14 @@ export const FilterProvider = ({ children }) => {
         filterOptions,
         availablePeriods,
         filters: computedFilters,
-        rawFilters: filters, // Expose raw filters for components that need the object structure
-        rawDateRange: dateRange, // Expose raw date object for DateRangePicker
+        rawFilters: filters, 
+        rawDateRange: dateRange,
         setDateRange,
         updateFilters,
-    }), [loading, filterOptions, availablePeriods, computedFilters, filters, updateFilters, dateRange]);
+        // Expose scope info to UI components if needed
+        isRestricted, 
+        commercialFilter
+    }), [loading, filterOptions, availablePeriods, computedFilters, filters, updateFilters, dateRange, isRestricted, commercialFilter]);
 
     return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;
 };

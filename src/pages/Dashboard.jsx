@@ -9,11 +9,22 @@ import { useToast } from '@/components/ui/use-toast';
 import MetricCard from '@/components/MetricCard';
 import ChartCard from '@/components/ChartCard';
 import RankingTable from '@/components/RankingTable';
-import { format as fnsFormat, parseISO, isValid } from 'date-fns';
+import { format as fnsFormat, parseISO } from 'date-fns';
 
 const formatCurrency = (value) => {
   if (value === undefined || value === null) return 'R$ 0,00';
   return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+// Helper function to format large numbers for Y-axis
+const formatLargeNumber = (num) => {
+  if (num >= 1000000) {
+    return `R$ ${(num / 1000000).toFixed(0)}M`;
+  }
+  if (num >= 1000) {
+    return `R$ ${(num / 1000).toFixed(0)}k`;
+  }
+  return `R$ ${num.toFixed(0)}`;
 };
 
 const Dashboard = () => {
@@ -136,7 +147,7 @@ const Dashboard = () => {
   }
 
   const { kpi } = dashboardData || {};
-  const { netSales = 0, totalBonification = 0, totalEquipment = 0, activeClients = 0, salesCount = 0, averageTicket = 0, projectedRevenue = 0, lastSaleDate, totalRevenueMonthToDate = 0, totalRevenueYearToDate = 0 } = kpi || {};
+  const { netSales = 0, totalBonification = 0, totalEquipment = 0, activeClients = 0, salesCount = 0, averageTicket = 0, projectedRevenue = 0, totalRevenueMonthToDate = 0 } = kpi || {};
 
   return (
     <motion.div
@@ -151,7 +162,7 @@ const Dashboard = () => {
           <MetricCard title="Vendas Realizadas" value={String(salesCount)} icon={ShoppingCart} />
           <MetricCard title="Ticket Médio" value={formatCurrency(averageTicket)} icon={Award} />
           <MetricCard title="Bonificação Total" value={formatCurrency(totalBonification)} icon={Package} />
-          <MetricCard title="Equipamentos Entregues" value={formatCurrency(totalEquipment)} icon={Factory} /> {/* Changed title here */}
+          <MetricCard title="Equipamentos Entregues" value={formatCurrency(totalEquipment)} icon={Factory} />
           <MetricCard title="Receita Mês Atual (MTD)" value={formatCurrency(totalRevenueMonthToDate)} icon={CalendarDays} />
           <MetricCard title="Receita Projetada" value={formatCurrency(projectedRevenue)} icon={TrendingUp} />
         </div>
@@ -160,7 +171,7 @@ const Dashboard = () => {
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart
                 data={chartData}
-                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                margin={{ top: 10, right: 30, left: 20, bottom: 0 }}
               >
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -178,7 +189,12 @@ const Dashboard = () => {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
                 <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" />
-                <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={(value) => formatCurrency(value)} />
+                <YAxis 
+                    stroke="hsl(var(--muted-foreground))" 
+                    tickFormatter={formatLargeNumber}
+                    width={80}
+                    tick={{ fontSize: 12 }}
+                />
                 <Tooltip
                   formatter={(value, name) => [formatCurrency(value), name]}
                   cursor={{ fill: 'hsl(var(--muted))' }}

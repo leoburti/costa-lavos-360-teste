@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/customSupabaseClient';
 
 // Limpa a sessão do Supabase do localStorage
@@ -38,7 +39,10 @@ export const logout = async () => {
     console.log('[AuthService] Realizando logout...');
     const { error } = await supabase.auth.signOut();
     if (error) {
-        console.error('[AuthService] Erro durante o logout:', error.message);
+        // Supress session_not_found error as it effectively means we are already logged out
+        if (error.message && !error.message.includes('session_not_found')) {
+            console.error('[AuthService] Erro durante o logout:', error.message);
+        }
     }
     clearAuthSession();
     window.location.href = '/login';

@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutGrid, MessageSquare, LineChart, BarChartHorizontal, Settings, X, Truck, Users, BarChart3, LogOut, Loader2, KeyRound as UsersRound, GanttChartSquare, Bot, Users2, KeyRound, CalendarCheck, FileSignature, Route, ShieldCheck, Box, History, FilePieChart, Wrench, Briefcase, Gift, ListTodo, HeartHandshake as Handshake, Package, FileText, FilePlus, FileMinus, Repeat, Bell, FileQuestion, ClipboardList, CalendarDays, CalendarClock, CalendarX, AlertTriangle, MapPin, Compass, Database, PlugZap, LifeBuoy, RotateCcw, TrendingUp, Calendar, AlertCircle, Clock, CheckCircle, XCircle, Lock, Archive, Navigation } from 'lucide-react';
+import { LayoutGrid, MessageSquare, LineChart, BarChartHorizontal, Settings, X, Truck, Users, BarChart3, LogOut, KeyRound as UsersRound, GanttChartSquare, Bot, Users2, KeyRound, CalendarCheck, FileSignature, Route, ShieldCheck, Box, History, FilePieChart, Wrench, Briefcase, Gift, ListTodo, HeartHandshake as Handshake, Package, FileText, FilePlus, FileMinus, Repeat, Bell, FileQuestion, ClipboardList, CalendarDays, CalendarClock, CalendarX, AlertTriangle, MapPin, Compass, Database, PlugZap, LifeBuoy, RotateCcw, TrendingUp, Calendar, AlertCircle, Clock, CheckCircle, XCircle, Lock, Archive, Navigation } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -15,7 +15,9 @@ import {
 } from "@/components/ui/tooltip";
 import ChangePasswordDialog from '@/components/ChangePasswordDialog';
 import LoadingSpinner from './LoadingSpinner';
+import { Loader2 } from 'lucide-react'; // Import Loader2 here for logout button
 
+// Centralized menu definition with module IDs matching the DB config
 export const allMenuItems = [
   { path: '/dashboard', id: 'dashboard_comercial', label: 'Dashboard Comercial', icon: LayoutGrid, moduleId: 'dashboard_comercial' },
   { path: '/ai-chat', id: 'senhor_lavos', label: 'Senhor Lavos', icon: MessageSquare, moduleId: 'senhor_lavos' },
@@ -140,7 +142,7 @@ export const allMenuItems = [
   {
     id: 'manutencao_equip', label: 'Manutenção Equip.', icon: Wrench, moduleId: 'manutencao_equip',
     subItems: [
-        { path: '/manutencao', id: 'manutencao', label: 'Painel de Manutenção', moduleId: 'manutencao' },
+        { path: '/manutencao', id: 'manutencao', label: 'Painel de Manutenção', moduleId: 'manutencao_equip' },
     ]
   },
   {
@@ -193,7 +195,7 @@ const NavLink = ({ item, isSubItem = false, closeSidebar }) => {
         "flex items-center gap-3 rounded-md text-sm font-medium transition-colors duration-200",
         isSubItem ? "py-2 pl-11 pr-3" : "px-3 py-2",
         isActive
-            ? "bg-secondary text-white"
+            ? "bg-secondary text-secondary-foreground" // Use secondary for active background
             : "text-primary-foreground/70 hover:bg-white/10 hover:text-primary-foreground"
     );
 
@@ -205,17 +207,21 @@ const NavLink = ({ item, isSubItem = false, closeSidebar }) => {
     );
 };
 
-// Clean permissions filter without heavy logging
+// Strictly filters based on the Module IDs returned by the RPC merge
 const filterMenuByPermissions = (menu, userContext) => {
     if (!userContext) {
         return [];
     }
     
     const { role, canAccessCrm, modulePermissions } = userContext;
+    const permissions = modulePermissions || {};
     
+    // Strict Admin check - Case insensitive
+    const isUniversalAdmin = ['admin', 'nivel 1', 'nível 1'].includes(role?.toLowerCase());
+
     const filter = (items) => items.map(item => {
-        // Special case for 'Nivel 1' (admin) - grant all
-        if (role === 'Nivel 1') {
+        // 1. Universal Admin Override
+        if (isUniversalAdmin) {
             if (item.subItems) {
                 const accessibleSubItems = filter(item.subItems);
                 return { ...item, subItems: accessibleSubItems };
@@ -223,18 +229,31 @@ const filterMenuByPermissions = (menu, userContext) => {
             return item;
         }
 
-        const moduleMatch = !item.moduleId || modulePermissions?.[item.moduleId];
-        const crmAccessMatch = !item.crmRequired || canAccessCrm;
+        // 2. Explicit Module Check
+        let hasModuleAccess = false;
+        
+        if (!item.moduleId) {
+            // If item has no moduleId, it's considered public/shared unless restricted otherwise
+            hasModuleAccess = true;
+        } else {
+            // Check precise permission key. MUST BE STRICT TRUE.
+            if (permissions[item.moduleId] === true) {
+                hasModuleAccess = true;
+            }
+        }
 
-        if (!moduleMatch || !crmAccessMatch) {
+        if (!hasModuleAccess) {
             return null;
         }
 
+        // 3. Process Sub-items recursively
         if (item.subItems) {
             const accessibleSubItems = filter(item.subItems);
+            // Only show parent if it has at least one accessible child
             if (accessibleSubItems.length > 0) {
                 return { ...item, subItems: accessibleSubItems };
             }
+            // If no children are accessible, hide the parent
             return null;
         }
         
@@ -255,7 +274,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         if (loading && !userContext) {
             return [];
         }
-        // Use the potentially cached userContext immediately
         return filterMenuByPermissions(allMenuItems, userContext);
     }, [userContext, loading]);
 
@@ -295,7 +313,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                 <img alt="Costa Lavos Logo" className="h-10 w-auto" src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png" />
                 <div>
                     <p className="font-bold text-lg leading-tight">Costa Lavos</p>
-                    <p className="text-xs text-primary-foreground/60 leading-tight">Dashboard Comercial</p>
+                    <p className="text-xs text-primary-foreground/60">Dashboard Comercial</p>
                 </div>
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
@@ -314,7 +332,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                                     <AccordionItem key={item.id} value={item.id} className="border-none">
                                         <AccordionTrigger className={cn(
                                             "flex items-center justify-between w-full px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-white/10 text-primary-foreground/80 hover:text-primary-foreground hover:no-underline",
-                                            isActive && "bg-white/5 text-primary-foreground"
+                                            isActive && "bg-secondary text-secondary-foreground" // Use secondary for active background
                                         )}>
                                             <div className="flex items-center gap-3">
                                                 {Icon && <Icon size={20} />}
@@ -332,7 +350,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                                                             <AccordionItem key={subItem.id} value={`${item.id}-${subItem.id}`} className="border-none">
                                                                 <AccordionTrigger className={cn(
                                                                     "flex items-center justify-between w-full py-2 pl-4 pr-3 rounded-md text-sm font-medium transition-colors hover:bg-white/10 text-primary-foreground/70 hover:text-primary-foreground hover:no-underline",
-                                                                    isSubActive && "bg-white/5 text-primary-foreground"
+                                                                    isSubActive && "bg-secondary text-secondary-foreground" // Use secondary for active background
                                                                 )}>
                                                                     <div className="flex items-center gap-2">
                                                                         {SubIcon && <SubIcon size={18} />}

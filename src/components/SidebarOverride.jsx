@@ -170,8 +170,11 @@ const filterMenuByPermissions = (menu, userContext) => {
     
     const { role, canAccessCrm, modulePermissions } = userContext;
     
+    // Normalize admin roles for permission check
+    const isAdmin = ['admin', 'nivel 1', 'nível 1', 'nivel 5', 'nível 5'].includes(role?.toLowerCase());
+
     const filter = (items) => items.map(item => {
-        if (role === 'Nivel 1') {
+        if (isAdmin) {
             if (item.subItems) {
                 const accessibleSubItems = filter(item.subItems);
                 return { ...item, subItems: accessibleSubItems };
@@ -211,16 +214,16 @@ const SidebarItem = ({ item, isCollapsed, isActive, depth = 0, openGroups, toggl
                         <Button
                             variant="ghost"
                             className={cn(
-                                "w-full justify-center h-10 px-2 mb-1 hover:bg-white/10 text-slate-300 hover:text-white",
-                                isActive && "bg-primary text-white hover:bg-primary/90"
+                                "w-full justify-center h-10 px-2 mb-1 hover:bg-[#7D3E3E] text-white/80 hover:text-white",
+                                isActive && "bg-[#F5E6D3] text-[#6B2C2C] hover:bg-[#F5E6D3] hover:text-[#6B2C2C]"
                             )}
                         >
                             {Icon && <Icon className="h-5 w-5" />}
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="right" className="w-56 bg-slate-900 border-slate-800 text-slate-300 ml-2">
+                    <DropdownMenuContent side="right" className="w-56 bg-[#6B2C2C] border-[#7D3E3E] text-white ml-2">
                         <DropdownMenuLabel className="text-white">{item.label}</DropdownMenuLabel>
-                        <DropdownMenuSeparator className="bg-slate-800" />
+                        <DropdownMenuSeparator className="bg-[#7D3E3E]" />
                         {item.subItems.map((subItem) => (
                             <SidebarSubItemDropdown key={subItem.id} item={subItem} />
                         ))}
@@ -235,14 +238,14 @@ const SidebarItem = ({ item, isCollapsed, isActive, depth = 0, openGroups, toggl
                     <Link
                         to={item.path}
                         className={cn(
-                            "flex h-10 w-full items-center justify-center rounded-md mb-1 transition-colors hover:bg-white/10 text-slate-300 hover:text-white",
-                            isActive && "bg-primary text-white hover:bg-primary/90"
+                            "flex h-10 w-full items-center justify-center rounded-md mb-1 transition-colors hover:bg-[#7D3E3E] text-white/80 hover:text-white",
+                            isActive && "bg-[#F5E6D3] text-[#6B2C2C] hover:bg-[#F5E6D3] hover:text-[#6B2C2C]"
                         )}
                     >
                         {Icon && <Icon className="h-5 w-5" />}
                     </Link>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="bg-slate-900 text-white border-slate-800 ml-2">
+                <TooltipContent side="right" className="bg-[#6B2C2C] text-white border-[#7D3E3E] ml-2">
                     {item.label}
                 </TooltipContent>
             </Tooltip>
@@ -256,12 +259,12 @@ const SidebarItem = ({ item, isCollapsed, isActive, depth = 0, openGroups, toggl
                     <Button
                         variant="ghost"
                         className={cn(
-                            "w-full justify-between h-10 px-3 mb-1 hover:bg-white/10 text-slate-300 hover:text-white font-normal",
+                            "w-full justify-between h-10 px-3 mb-1 hover:bg-[#7D3E3E] text-white/80 hover:text-white font-normal",
                             isActive && "text-white font-medium"
                         )}
                     >
                         <div className="flex items-center gap-3">
-                            {Icon && <Icon className="h-5 w-5 shrink-0" />}
+                            {Icon && <Icon className="h-5 w-5 shrink-0 text-[#F5E6D3]" />}
                             <span className="truncate">{item.label}</span>
                         </div>
                         <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isOpen && "rotate-180")} />
@@ -288,12 +291,12 @@ const SidebarItem = ({ item, isCollapsed, isActive, depth = 0, openGroups, toggl
         <Link
             to={item.path}
             className={cn(
-                "flex items-center gap-3 h-10 px-3 rounded-md mb-1 transition-colors hover:bg-white/10 text-slate-300 hover:text-white",
-                isActive && "bg-primary text-white hover:bg-primary/90 font-medium",
+                "flex items-center gap-3 h-10 px-3 rounded-md mb-1 transition-colors hover:bg-[#7D3E3E] text-white/80 hover:text-white",
+                isActive && "bg-[#F5E6D3] text-[#6B2C2C] hover:bg-[#F5E6D3] hover:text-[#6B2C2C] font-medium",
                 depth > 0 && "text-sm"
             )}
         >
-            {Icon && <Icon className={cn("h-5 w-5 shrink-0", depth > 0 && "h-4 w-4")} />}
+            {Icon && <Icon className={cn("h-5 w-5 shrink-0", depth > 0 && "h-4 w-4", !isActive && "text-[#F5E6D3]")} />}
             <span className="truncate">{item.label}</span>
         </Link>
     );
@@ -303,11 +306,11 @@ const SidebarSubItemDropdown = ({ item }) => {
     if (item.subItems && item.subItems.length > 0) {
         return (
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="text-slate-300 focus:text-white focus:bg-white/10 cursor-pointer">
+                <DropdownMenuSubTrigger className="text-white/80 focus:text-white focus:bg-[#7D3E3E] cursor-pointer">
                     {item.icon && <item.icon className="mr-2 h-4 w-4" />}
                     <span>{item.label}</span>
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="bg-slate-900 border-slate-800 text-slate-300">
+                <DropdownMenuSubContent className="bg-[#6B2C2C] border-[#7D3E3E] text-white">
                     {item.subItems.map(sub => (
                         <SidebarSubItemDropdown key={sub.id} item={sub} />
                     ))}
@@ -318,7 +321,7 @@ const SidebarSubItemDropdown = ({ item }) => {
 
     return (
         <DropdownMenuItem asChild>
-            <Link to={item.path} className="cursor-pointer text-slate-300 focus:text-white focus:bg-white/10">
+            <Link to={item.path} className="cursor-pointer text-white/80 focus:text-white focus:bg-[#7D3E3E]">
                 {item.icon && <item.icon className="mr-2 h-4 w-4" />}
                 <span>{item.label}</span>
             </Link>
@@ -361,10 +364,13 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
         return false;
     };
 
+    // Force refresh of displayed role to ensure it's not hardcoded
+    const displayRole = userContext?.role || 'Carregando...';
+
     const SidebarContent = () => (
-        <div className="flex flex-col h-full bg-[#0f172a] text-slate-300 border-r border-slate-800">
+        <div className="flex flex-col h-full bg-[#6B2C2C] text-white border-r border-[#7D3E3E]">
             <div className={cn(
-                "flex items-center h-16 px-4 border-b border-slate-800 transition-all duration-300 shrink-0", 
+                "flex items-center h-16 px-4 border-b border-[#7D3E3E] transition-all duration-300 shrink-0", 
                 isCollapsed ? "justify-center" : "justify-between"
             )}>
                 {!isCollapsed ? (
@@ -372,25 +378,25 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
                         <img 
                             src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png" 
                             alt="Logo" 
-                            className="h-8 w-auto object-contain"
+                            className="h-8 w-auto object-contain" 
                         />
                         <div className="flex flex-col">
                             <span className="font-bold text-white text-sm leading-tight whitespace-nowrap">Costa Lavos</span>
-                            <span className="text-[10px] text-slate-400 leading-tight">360°</span>
+                            <span className="text-[10px] text-[#F5E6D3]/80 leading-tight">360°</span>
                         </div>
                     </div>
                 ) : (
                     <img 
                         src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png" 
                         alt="Logo" 
-                        className="h-8 w-auto object-contain"
+                        className="h-8 w-auto object-contain" 
                     />
                 )}
                 
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="hidden md:flex h-8 w-8 text-slate-400 hover:text-white hover:bg-white/10"
+                    className="hidden md:flex h-8 w-8 text-[#F5E6D3] hover:text-white hover:bg-[#7D3E3E]"
                     onClick={() => setIsCollapsed(!isCollapsed)}
                 >
                     {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -412,22 +418,24 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
                 </div>
             </ScrollArea>
 
-            <div className="p-4 border-t border-slate-800 mt-auto bg-[#0f172a]">
+            <div className="p-4 border-t border-[#7D3E3E] mt-auto bg-[#6B2C2C]">
                  {!isCollapsed ? (
                     <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
+                        <div className="h-8 w-8 rounded-full bg-[#F5E6D3]/20 flex items-center justify-center text-[#F5E6D3] border border-[#F5E6D3]/30">
                             <span className="text-xs font-bold">
                                 {userContext?.fullName?.charAt(0) || 'U'}
                             </span>
                         </div>
                         <div className="flex flex-col overflow-hidden">
-                            <span className="text-sm font-medium text-white truncate">{userContext?.fullName || 'Usuário'}</span>
-                            <span className="text-xs text-slate-500 truncate">{userContext?.role || 'Carregando...'}</span>
+                            <span className="text-sm font-medium text-white truncate" title={userContext?.fullName}>{userContext?.fullName || 'Usuário'}</span>
+                            <span className="text-xs text-[#F5E6D3]/80 truncate" title={displayRole}>
+                                {displayRole}
+                            </span>
                         </div>
                     </div>
                  ) : (
                     <div className="flex justify-center">
-                        <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
+                        <div className="h-8 w-8 rounded-full bg-[#F5E6D3]/20 flex items-center justify-center text-[#F5E6D3] border border-[#F5E6D3]/30">
                             <span className="text-xs font-bold">
                                 {userContext?.fullName?.charAt(0) || 'U'}
                             </span>
@@ -442,7 +450,7 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
         <>
             <aside
                 className={cn(
-                    "hidden md:flex flex-col border-r border-slate-800 bg-[#0f172a] transition-all duration-300 ease-in-out z-40 h-screen sticky top-0",
+                    "hidden md:flex flex-col border-r border-[#7D3E3E] bg-[#6B2C2C] transition-all duration-300 ease-in-out z-40 h-screen sticky top-0",
                     isCollapsed ? "w-[70px]" : "w-64"
                 )}
             >
@@ -450,7 +458,7 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
             </aside>
 
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-                <SheetContent side="left" className="p-0 w-72 bg-[#0f172a] border-r-slate-800 text-white">
+                <SheetContent side="left" className="p-0 w-72 bg-[#6B2C2C] border-r-[#7D3E3E] text-white">
                     <SidebarContent />
                 </SheetContent>
             </Sheet>

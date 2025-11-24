@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, DirectionsRenderer, Marker, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -40,7 +41,7 @@ const defaultCenter = {
 const RotasPage = () => {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: "AIzaSyDZ2P7qxLLMJzC-xVs6Q5P6hykQ36XT0JU",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries
   });
 

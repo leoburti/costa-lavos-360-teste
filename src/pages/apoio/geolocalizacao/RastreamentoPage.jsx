@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -25,7 +26,7 @@ const defaultCenter = {
 const RastreamentoPage = () => {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: "AIzaSyDZ2P7qxLLMJzC-xVs6Q5P6hykQ36XT0JU", // IMPORTANT: Add your Google Maps API key here
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries
   });
 

@@ -1,69 +1,76 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
  
 @layer base {
   :root {
-    --background: 240 10% 98%;
-    --foreground: 224 71.4% 4.1%;
+    /* Base Colors - Warm Palette */
+    --background: 40 20% 98%; /* #FAF9F6 Warm White */
+    --foreground: 20 10% 15%; /* #2C2420 Dark Warm Gray */
 
     --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
+    --card-foreground: 20 10% 15%;
  
     --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
+    --popover-foreground: 20 10% 15%;
  
     /* Costa Lavos Brand Colors */
-    --primary: 0 50% 35%; /* #832A2A */
-    --primary-foreground: 0 0% 100%; /* white */
+    /* Primary: #6B2C2C (Reddish Brown) */
+    --primary: 0 42% 30%; 
+    /* Primary Foreground: White */
+    --primary-foreground: 0 0% 100%;
  
-    --secondary: 0 54% 57%; /* #C85A54 */
-    --secondary-foreground: 355.7 100% 97.3%;
+    /* Secondary: #F5E6D3 (Warm Beige) */
+    --secondary: 34 57% 89%; 
+    /* Secondary Foreground: Primary Color */
+    --secondary-foreground: 0 42% 30%;
  
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 8.9% 46.1%;
+    --muted: 34 20% 96%;
+    --muted-foreground: 20 5% 45%;
  
-    --accent: 212 68% 61%; /* #4A90E2 */
-    --accent-foreground: 355.7 100% 97.3%;
+    /* Accent: #D4A373 (Muted Orange/Gold) */
+    --accent: 30 53% 64%; 
+    --accent-foreground: 0 0% 100%;
  
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 355.7 100% 97.3%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 0 50% 35%;
+    --border: 34 20% 90%;
+    --input: 34 20% 90%;
+    --ring: 0 42% 30%;
  
     --radius: 0.5rem;
   }
  
   .dark {
-    --background: 224 71.4% 4.1%;
-    --foreground: 210 20% 98%;
+    --background: 20 10% 10%;
+    --foreground: 40 20% 98%;
 
-    --card: 224 71.4% 4.1%;
-    --card-foreground: 210 20% 98%;
+    --card: 20 10% 12%;
+    --card-foreground: 40 20% 98%;
  
-    --popover: 224 71.4% 4.1%;
-    --popover-foreground: 210 20% 98%;
+    --popover: 20 10% 12%;
+    --popover-foreground: 40 20% 98%;
  
-    --primary: 0 50% 45%; /* Lighter brown for dark mode */
-    --primary-foreground: 210 20% 98%;
+    --primary: 0 42% 40%; /* Lighter brown for dark mode */
+    --primary-foreground: 0 0% 100%;
  
-    --secondary: 0 54% 67%; /* Lighter red for dark mode */
-    --secondary-foreground: 210 20% 98%;
+    --secondary: 34 30% 20%; 
+    --secondary-foreground: 40 20% 98%;
  
-    --muted: 215 27.9% 16.9%;
-    --muted-foreground: 217.9 10.6% 64.9%;
+    --muted: 20 10% 20%;
+    --muted-foreground: 30 5% 60%;
  
-    --accent: 212 68% 71%; /* Lighter blue for dark mode */
-    --accent-foreground: 210 20% 98%;
+    --accent: 30 53% 50%;
+    --accent-foreground: 0 0% 100%;
  
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 20% 98%;
+    --destructive-foreground: 0 0% 98%;
  
-    --border: 215 27.9% 16.9%;
-    --input: 215 27.9% 16.9%;
-    --ring: 0 50% 45%;
+    --border: 20 10% 20%;
+    --input: 20 10% 20%;
+    --ring: 0 42% 40%;
   }
 }
  
@@ -87,14 +94,14 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--secondary)); /* Cor do side menu (secondary) */
+    background: hsl(var(--secondary)); /* Cor do side menu (secondary) - Beige */
     border-radius: 5px;
     border: 2px solid transparent; /* Prevents border from making thumb thinner */
     background-clip: padding-box; /* Ensures background color respects padding box */
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--secondary) / 0.8); /* Cor mais escura para hover */
+    background: hsl(var(--accent)); /* Accent color for hover */
     border: 2px solid transparent;
     background-clip: padding-box;
   }

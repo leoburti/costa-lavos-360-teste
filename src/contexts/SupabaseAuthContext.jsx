@@ -42,12 +42,18 @@ export const SupabaseAuthProvider = ({ children }) => {
     fetchingRef.current = true;
 
     try {
-      // Check if we have a valid cache to use immediately while revalidating
-      // This allows "stale-while-revalidate" behavior
+      console.group('[AuthContext] Loading Permissions & Scope');
+      console.log(`[AuthContext] Fetching for user email: ${sessionUser.email} (ID: ${sessionUser.id})`);
       
+      const rpcStart = performance.now();
+      // Call the updated RPC that returns merged permissions (Persona + User overrides)
       const { data, error } = await supabase.rpc('get_user_role', { p_user_id: sessionUser.id });
+      const rpcEnd = performance.now();
+      
+      console.log(`[AuthContext] RPC 'get_user_role' executed in ${(rpcEnd - rpcStart).toFixed(2)}ms`);
 
       if (error) {
+        console.error('[AuthContext] RPC Error:', error);
         throw new Error(`Error fetching user role: ${error.message}`);
       }
 
@@ -55,28 +61,98 @@ export const SupabaseAuthProvider = ({ children }) => {
 
       if (data && data.length > 0) {
         const profile = data[0];
+        
+        // Normalize role for comparison
+        const rawRole = profile.role || 'Sem Permissão';
+        const roleLower = rawRole.toLowerCase();
+        
+        // Strict Admin Logic: Includes variations of Admin and Level 1/5
+        const isAdmin = ['admin', 'nivel 1', 'nível 1', 'nivel 5', 'nível 5', 'super admin'].includes(roleLower);
+        
+        // Supervisor Logic: 'Supervisor', 'Nivel 2', 'Nivel 3', 'Gerente'
+        const isSupervisor = ['supervisor', 'nivel 3', 'nível 3', 'gerente'].includes(roleLower);
+        
+        // Seller Logic
+        const isSeller = ['vendedor', 'seller', 'nivel 2', 'nível 2'].includes(roleLower);
+
+        console.log(`[AuthContext] Profile Loaded. Role: ${rawRole} (Admin: ${isAdmin}, Supervisor: ${isSupervisor}, Seller: ${isSeller})`);
+        console.log(`[AuthContext] Active Permissions:`, Object.keys(profile.module_permissions || {}).filter(k => profile.module_permissions[k]));
+        
+        // --- Team Scope Fetching for Supervisors ---
+        let teamMembers = [];
+        if (isSupervisor) {
+            try {
+                // 1. Get the supervisor's internal ID in apoio_usuarios
+                const { data: myApoioProfile } = await supabase
+                    .from('apoio_usuarios')
+                    .select('id')
+                    .eq('auth_id', sessionUser.id)
+                    .maybeSingle();
+
+                if (myApoioProfile) {
+                    // 2. Get all users who have this user as their supervisor
+                    const { data: teamData } = await supabase
+                        .from('apoio_usuarios')
+                        .select('auth_id')
+                        .eq('supervisor_id', myApoioProfile.id);
+                    
+                    if (teamData) {
+                        // Map to array of auth_ids, filtering out any nulls
+                        teamMembers = teamData.map(t => t.auth_id).filter(Boolean);
+                        console.log(`[AuthContext] Team members loaded: ${teamMembers.length}`);
+                    }
+                }
+            } catch (scopeError) {
+                console.error("[AuthContext] Error fetching team scope:", scopeError);
+                // Non-critical, proceed without team filtering (will likely fallback to own data only via RLS or empty list)
+            }
+        }
+
         contextData = {
+          id: sessionUser.id,
+          email: sessionUser.email,
           fullName: sessionUser.user_metadata?.full_name || 'Usuário',
-          role: profile.role || 'Sem Permissão',
+          role: rawRole,
           canAccessCrm: profile.can_access_crm || false,
+          // Vital: Use the merged permissions from the RPC
           modulePermissions: profile.module_permissions || {},
           supervisorName: profile.supervisor_name,
           sellerName: profile.seller_name,
           approvalRoles: profile.approval_roles || {},
+          // Scoping IDs
+          vendorId: profile.vendor_id,
+          supervisorId: profile.supervisor_id,
+          teamMembers: teamMembers, // List of auth_ids for the team
+          // Helper flags
+          isSeller,
+          isSupervisor,
+          isAdmin, 
           lastUpdated: new Date().getTime()
         };
       } else {
+        console.warn(`[AuthContext] No profile found for user ${sessionUser.id}, using defaults.`);
         contextData = {
+            id: sessionUser.id,
+            email: sessionUser.email,
             fullName: sessionUser.user_metadata?.full_name || 'Usuário',
             role: 'Sem Permissão',
             canAccessCrm: false,
             modulePermissions: {},
             supervisorName: null,
             sellerName: null,
+            vendorId: null,
+            supervisorId: null,
+            teamMembers: [],
+            isSeller: false,
+            isSupervisor: false,
+            isAdmin: false,
             approvalRoles: {},
             lastUpdated: new Date().getTime()
         };
       }
+
+      console.log('[AuthContext] Final User Context:', contextData);
+      console.groupEnd();
 
       // Update State and Cache
       setUserContext(contextData);
@@ -85,7 +161,7 @@ export const SupabaseAuthProvider = ({ children }) => {
 
     } catch (error) {
       console.error("[AuthContext] Fatal error in fetchUserContext:", error.message);
-      // If API fails but we have cache, keep using cache (graceful degradation)
+      console.groupEnd();
       if (!userContext) {
           handleAuthError(error);
           setUserContext(null);
@@ -95,7 +171,7 @@ export const SupabaseAuthProvider = ({ children }) => {
     } finally {
       fetchingRef.current = false;
     }
-  }, [userContext]); // userContext dependency is safe here as we check logic inside
+  }, [userContext]); 
 
   const forceRoleRefetch = useCallback(async () => {
     if (user) {
@@ -118,13 +194,8 @@ export const SupabaseAuthProvider = ({ children }) => {
           setUser(initialSession?.user ?? null);
 
           if (initialSession?.user) {
-            // If we don't have context or if we want to ensure freshness, fetch it
-            // We fetch in background to not block UI if cache exists
-            if (!userContext) {
-                await fetchUserContext(initialSession.user);
-            } else {
-                fetchUserContext(initialSession.user); // Background revalidate
-            }
+            // Always fetch fresh context on app init to ensure roles are up to date
+            await fetchUserContext(initialSession.user);
           } else {
             setUserContext(null);
             localStorage.removeItem(CACHE_KEY);
@@ -147,7 +218,6 @@ export const SupabaseAuthProvider = ({ children }) => {
           setUser(sessionUser);
           
           if (sessionUser) {
-             // Re-fetch context on auth state change (e.g. token refresh or login)
              await fetchUserContext(sessionUser);
           } else {
             setUserContext(null);
@@ -190,10 +260,8 @@ export const SupabaseAuthProvider = ({ children }) => {
     forceRoleRefetch,
   };
 
-  // Optimized Loading State: Only show full spinner if we have absolutely no data (no session OR (session exists but no context yet))
-  // If we have a userContext from cache, we render children immediately to prevent white screen.
   if (loading && !session && !userContext) {
-    return <div className="flex h-screen w-full items-center justify-center bg-background"><LoadingSpinner message="Inicializando..." /></div>;
+    return <div className="flex h-screen w-full items-center justify-center bg-background"><LoadingSpinner message="Inicializando sistema..." /></div>;
   }
 
   return (
@@ -211,5 +279,4 @@ export const useAuth = () => {
   return context;
 };
 
-// Export alias for compatibility
 export const useSupabaseAuth = useAuth;

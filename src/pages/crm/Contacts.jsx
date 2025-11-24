@@ -1,186 +1,212 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Helmet } from 'react-helmet-async';
+
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, PlusCircle, Search, Building, User, MoreVertical } from 'lucide-react';
+import { useDataScope } from '@/hooks/useDataScope';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Search, Plus, Users, User, Mail, Phone, Building2, Loader2 } from 'lucide-react';
 import ContactForm from '@/components/crm/ContactForm';
+import { Helmet } from 'react-helmet-async';
 
-const ContactDetailsDialog = ({ contact, open, onOpenChange, onContactUpdated }) => {
-    if (!contact) return null;
+const Contacts = () => {
+  const { toast } = useToast();
+  const { applyScope, isRestricted } = useDataScope();
+  const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedContact, setSelectedContact] = useState(null);
 
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl">
-                <DialogHeader>
-                    <DialogTitle>{contact.fantasy_name}</DialogTitle>
-                    <DialogDescription>{contact.corporate_name}</DialogDescription>
-                </DialogHeader>
-                <div className="max-h-[70vh] overflow-y-auto p-1 pr-4">
-                   <ContactForm contactData={contact} onSaveSuccess={() => { onOpenChange(false); onContactUpdated(); }} />
-                </div>
-            </DialogContent>
-        </Dialog>
-    );
-};
+  const fetchContacts = async () => {
+    setLoading(true);
+    try {
+      let query = supabase
+        .from('crm_contacts')
+        .select(`
+            *,
+            supervisor:apoio_usuarios!supervisor_id(nome),
+            seller:apoio_usuarios!seller_id(nome)
+        `)
+        .order('created_at', { ascending: false });
 
-const CRMContacts = () => {
-    const [contacts, setContacts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [isAddContactOpen, setIsAddContactOpen] = useState(false);
-    const [selectedContact, setSelectedContact] = useState(null);
-    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-    const { toast } = useToast();
+      // Apply Data Isolation Scope
+      // Filters by owner_id automatically based on role (Seller -> own, Supervisor -> Team, Admin -> All)
+      query = applyScope(query, 'owner_id');
 
-    const fetchContacts = useCallback(async () => {
-        setLoading(true);
-        let query = supabase.from('crm_contacts').select('*').order('created_at', { ascending: false });
-        if (searchTerm) {
-            query = query.or(`corporate_name.ilike.%${searchTerm}%,fantasy_name.ilike.%${searchTerm}%,cnpj.ilike.%${searchTerm}%,representative_name.ilike.%${searchTerm}%`);
-        }
-        const { data, error } = await query;
+      if (searchTerm) {
+        query = query.or(`corporate_name.ilike.%${searchTerm}%,fantasy_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+      }
 
-        if (error) {
-            toast({ variant: 'destructive', title: 'Erro ao buscar contatos', description: error.message });
-        } else {
-            setContacts(data);
-        }
-        setLoading(false);
-    }, [toast, searchTerm]);
+      const { data, error } = await query;
 
-    useEffect(() => {
-        const handler = setTimeout(() => {
-            fetchContacts();
-        }, 300);
-        return () => clearTimeout(handler);
-    }, [searchTerm, fetchContacts]);
+      if (error) throw error;
+      setContacts(data || []);
+    } catch (error) {
+      console.error("Error fetching contacts:", error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao carregar contatos',
+        description: error.message
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleRowClick = (contact) => {
-        setSelectedContact(contact);
-        setIsDetailsOpen(true);
-    };
-    
-    const handleDeleteContact = async (contactId) => {
-        const { error } = await supabase.from('crm_contacts').delete().eq('id', contactId);
-        if (error) {
-            toast({ variant: 'destructive', title: 'Erro ao deletar contato', description: error.message });
-        } else {
-            toast({ title: 'Sucesso!', description: 'Contato deletado.' });
-            fetchContacts();
-        }
-    };
+  useEffect(() => {
+    fetchContacts();
+  }, [searchTerm]); // Re-fetch on search
 
-    return (
-        <div className="flex flex-col h-full">
-            <Helmet>
-                <title>Contatos - CRM</title>
-                <meta name="description" content="Gerencie seus contatos e clientes." />
-            </Helmet>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Gestão de Contatos</h2>
-                    <p className="text-muted-foreground">Centralize e gerencie as informações dos seus clientes.</p>
-                </div>
-                <Dialog open={isAddContactOpen} onOpenChange={setIsAddContactOpen}>
-                    <DialogTrigger asChild>
-                        <Button>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Novo Contato
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-4xl">
-                        <DialogHeader>
-                            <DialogTitle>Adicionar Novo Contato (PJ)</DialogTitle>
-                            <DialogDescription>Insira as informações da empresa.</DialogDescription>
-                        </DialogHeader>
-                        <div className="max-h-[70vh] overflow-y-auto p-1 pr-4">
-                            <ContactForm onSaveSuccess={() => { setIsAddContactOpen(false); fetchContacts(); }} />
-                        </div>
-                    </DialogContent>
-                </Dialog>
-            </div>
-            <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder="Buscar por nome, razão social, CNPJ ou representante..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 w-full sm:w-96 bg-background"
-                />
-            </div>
+  const handleEdit = (contact) => {
+    setSelectedContact(contact);
+    setIsDialogOpen(true);
+  };
 
-            <div className="flex-1 overflow-auto border rounded-lg">
-                {loading ? (
-                    <div className="flex items-center justify-center h-full">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                ) : (
-                    <Table>
-                        <TableHeader className="bg-muted/50 sticky top-0">
-                            <TableRow>
-                                <TableHead>Nome Fantasia</TableHead>
-                                <TableHead>Razão Social</TableHead>
-                                <TableHead>CNPJ</TableHead>
-                                <TableHead>Contato Principal</TableHead>
-                                <TableHead className="text-right">Ações</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {contacts.length > 0 ? (
-                                contacts.map(contact => (
-                                    <TableRow key={contact.id} onClick={() => handleRowClick(contact)} className="cursor-pointer hover:bg-muted/20">
-                                        <TableCell className="font-medium py-3">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center border">
-                                                    <Building className="h-5 w-5 text-muted-foreground" />
-                                                </div>
-                                                {contact.fantasy_name}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground py-3">{contact.corporate_name || '-'}</TableCell>
-                                        <TableCell className="text-muted-foreground py-3">{contact.cnpj || '-'}</TableCell>
-                                        <TableCell className="text-muted-foreground py-3">
-                                            <div className="flex flex-col">
-                                                <span className="font-medium text-foreground">{contact.representative_name}</span>
-                                                <span className="text-xs">{contact.representative_email}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-right py-3" onClick={(e) => e.stopPropagation()}>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                        <span className="sr-only">Abrir menu</span>
-                                                        <MoreVertical className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => handleRowClick(contact)}>Ver / Editar</DropdownMenuItem>
-                                                    <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteContact(contact.id)}>Deletar</DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={5} className="h-48 text-center text-muted-foreground">
-                                        Nenhum contato encontrado.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                )}
-            </div>
-            <ContactDetailsDialog contact={selectedContact} open={isDetailsOpen} onOpenChange={setIsDetailsOpen} onContactUpdated={fetchContacts} />
+  const handleCreate = () => {
+    setSelectedContact(null);
+    setIsDialogOpen(true);
+  };
+
+  const handleSuccess = () => {
+    setIsDialogOpen(false);
+    fetchContacts();
+  };
+
+  return (
+    <div className="space-y-6 p-6">
+      <Helmet>
+        <title>Contatos CRM | Costa Lavos 360°</title>
+      </Helmet>
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Users className="h-8 w-8 text-primary" /> 
+            Contatos
+          </h1>
+          <p className="text-muted-foreground">
+            {isRestricted 
+              ? "Gerencie sua carteira de clientes e leads."
+              : "Gerencie a base completa de contatos do CRM."
+            }
+          </p>
         </div>
-    );
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={handleCreate} className="gap-2">
+              <Plus className="h-4 w-4" /> Novo Contato
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{selectedContact ? 'Editar Contato' : 'Novo Contato'}</DialogTitle>
+            </DialogHeader>
+            <ContactForm contactData={selectedContact} onSaveSuccess={handleSuccess} />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome, empresa ou email..."
+              className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Empresa</TableHead>
+                  <TableHead>Representante</TableHead>
+                  <TableHead>Contato</TableHead>
+                  <TableHead>Status</TableHead>
+                  {!isRestricted && <TableHead>Responsável</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                        <div className="flex justify-center items-center gap-2 text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                        </div>
+                    </TableCell>
+                  </TableRow>
+                ) : contacts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      Nenhum contato encontrado.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  contacts.map((contact) => (
+                    <TableRow 
+                        key={contact.id} 
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => handleEdit(contact)}
+                    >
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{contact.fantasy_name}</span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Building2 className="h-3 w-3" /> {contact.corporate_name}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-muted-foreground" />
+                            <span>{contact.representative_name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1 text-sm">
+                          {contact.email && (
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                              <Mail className="h-3 w-3" /> {contact.email}
+                            </span>
+                          )}
+                          {contact.phone && (
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                              <Phone className="h-3 w-3" /> {contact.phone}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                          ${contact.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {contact.status === 'active' ? 'Ativo' : contact.status || 'Lead'}
+                        </span>
+                      </TableCell>
+                      {!isRestricted && (
+                          <TableCell>
+                              <span className="text-xs text-muted-foreground">
+                                  {contact.seller?.nome || 'N/D'}
+                              </span>
+                          </TableCell>
+                      )}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 };
 
-export default CRMContacts;
+export default Contacts;
