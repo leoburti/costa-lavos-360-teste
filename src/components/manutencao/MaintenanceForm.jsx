@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -7,27 +8,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, AlertTriangle, PackageSearch, Edit } from 'lucide-react';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command";
+import { Loader2, Save, AlertTriangle, UserCheck as UserSearch, PackageSearch, Check, Edit, X } from 'lucide-react';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useEquipmentInventory } from '@/hooks/useEquipmentInventory';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 
 const MaintenanceForm = ({ equipmentToEdit, onSaveSuccess, onCancel }) => {
     const { user } = useAuth();
     const { toast } = useToast();
-    const { rawInventory, loading: inventoryLoading, refresh: refreshInventory } = useEquipmentInventory();
 
-    const [selectedEquipment, setSelectedEquipment] = useState(null);
-    const [popoverOpen, setPopoverOpen] = useState(false);
+    // State for Client Search
+    const [clients, setClients] = useState([]);
+    const [selectedClient, setSelectedClient] = useState(null);
+    const [isClientPopoverOpen, setIsClientPopoverOpen] = useState(false);
+    const [loadingClients, setLoadingClients] = useState(false);
+
+    // State for Equipment Selection
+    const [availableEquipment, setAvailableEquipment] = useState([]);
+    const [selectedEquipments, setSelectedEquipments] = useState([]); // Array of objects
+    const [loadingEquipment, setLoadingEquipment] = useState(false);
+    const [isEquipmentPopoverOpen, setIsEquipmentPopoverOpen] = useState(false);
+
+    // Chapa Update State
     const [chapaValue, setChapaValue] = useState('');
     const [isChapaUpdating, setIsChapaUpdating] = useState(false);
-    
+    const [editingChapaForId, setEditingChapaForId] = useState(null);
+
     const initialFormState = useMemo(() => ({
         id: null,
-        equipment_id: null,
-        inventory_item_id: null,
         user_id: user?.id,
         tecnico: user?.user_metadata?.full_name || '',
         data_inicio: new Date().toISOString(),
@@ -43,69 +55,192 @@ const MaintenanceForm = ({ equipmentToEdit, onSaveSuccess, onCancel }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formError, setFormError] = useState(null);
 
-     useEffect(() => {
+    // Initialize if editing existing record
+    useEffect(() => {
         if (equipmentToEdit) {
-            handleEquipmentSelect(equipmentToEdit);
+            // Mock client object from equipment data
+            const clientMock = {
+                Codigo: equipmentToEdit.Codigo,
+                Fantasia: equipmentToEdit.Fantasia,
+                Loja: equipmentToEdit.Loja
+            };
+            setSelectedClient(clientMock);
+            setSelectedEquipments([equipmentToEdit]);
+            setAvailableEquipment([equipmentToEdit]); // Ensure it shows up
         }
     }, [equipmentToEdit]);
 
-    useEffect(() => {
-        if (selectedEquipment) {
-            setChapaValue(selectedEquipment.AA3_CHAPA || '');
-        } else {
-            setChapaValue('');
-        }
-    }, [selectedEquipment]);
+    // Fetch Clients on search
+    const handleSearchClients = async (search) => {
+        if (!search || search.length < 2) return;
+        setLoadingClients(true);
+        
+        console.log("🔍 [DEBUG] Iniciando busca de clientes em bd_cl_inv. Termo:", search);
 
-    const handleEquipmentSelect = (equipment) => {
-        setSelectedEquipment(equipment);
-        setForm(prev => ({
-            ...prev,
-            equipment_id: equipment.Codigo,
-            inventory_item_id: equipment.Chave_ID,
-        }));
-        setPopoverOpen(false);
+        try {
+            // Using distinct approximation by fetching and filtering in JS
+            // Ideally an RPC or distinct query on DB side is better for large datasets
+            const { data, error } = await supabase
+                .from('bd_cl_inv')
+                .select('Codigo, Fantasia, Loja, Equipamento')
+                .or(`Fantasia.ilike.%${search}%,Codigo.ilike.%${search}%`)
+                .limit(50);
+
+            if (error) {
+                console.error("❌ [DEBUG] Erro na query bd_cl_inv:", error);
+                throw error;
+            }
+
+            console.log(`✅ [DEBUG] Registros brutos retornados de bd_cl_inv: ${data?.length || 0}`);
+
+            if (data && data.length > 0) {
+                // Client-side distinct by Codigo+Loja
+                // Also counting equipment for debug purposes
+                const clientMap = new Map();
+                
+                data.forEach(item => {
+                    const key = `${item.Codigo}-${item.Loja}`;
+                    if (!clientMap.has(key)) {
+                        clientMap.set(key, {
+                            Codigo: item.Codigo,
+                            Fantasia: item.Fantasia,
+                            Loja: item.Loja,
+                            equipmentCount: 0
+                        });
+                    }
+                    clientMap.get(key).equipmentCount++;
+                });
+
+                const uniqueClients = Array.from(clientMap.values());
+                
+                console.log(`📊 [DEBUG] Clientes únicos encontrados: ${uniqueClients.length}`);
+                uniqueClients.forEach(c => {
+                    console.log(`   - Cliente: ${c.Fantasia} (Cod: ${c.Codigo}, Loja: ${c.Loja}) - Equipamentos no batch: ${c.equipmentCount}`);
+                });
+
+                setClients(uniqueClients);
+            } else {
+                console.warn("⚠️ [DEBUG] Nenhum registro encontrado na busca.");
+                setClients([]);
+            }
+        } catch (error) {
+            console.error("Error searching clients:", error);
+            toast({ variant: 'destructive', title: 'Erro na busca', description: 'Falha ao buscar clientes.' });
+        } finally {
+            setLoadingClients(false);
+        }
+    };
+
+    // Fetch Equipment when client is selected
+    useEffect(() => {
+        const fetchEquipment = async () => {
+            if (!selectedClient) {
+                setAvailableEquipment([]);
+                return;
+            }
+            
+            console.log(`🔍 [DEBUG] Buscando equipamentos para cliente: ${selectedClient.Fantasia} (Cod: ${selectedClient.Codigo}, Loja: ${selectedClient.Loja})`);
+
+            // If we are in "Edit Mode", we don't want to refetch and wipe selection unless intentional
+            if (equipmentToEdit && selectedClient.Codigo === equipmentToEdit.Codigo) {
+                return;
+            }
+
+            setLoadingEquipment(true);
+            try {
+                const { data, error } = await supabase
+                    .from('bd_cl_inv')
+                    .select('*')
+                    .eq('Codigo', selectedClient.Codigo)
+                    .eq('Loja', selectedClient.Loja);
+
+                if (error) {
+                    console.error("❌ [DEBUG] Erro ao buscar equipamentos:", error);
+                    throw error;
+                }
+                
+                console.log(`✅ [DEBUG] Equipamentos encontrados: ${data?.length || 0}`);
+                if (data?.length > 0) {
+                    console.log("   - Exemplo:", data[0]);
+                }
+
+                setAvailableEquipment(data || []);
+            } catch (error) {
+                console.error("Error fetching equipment:", error);
+                toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao carregar equipamentos do cliente.' });
+            } finally {
+                setLoadingEquipment(false);
+            }
+        };
+
+        fetchEquipment();
+    }, [selectedClient, equipmentToEdit]);
+
+    const handleClientSelect = (client) => {
+        console.log("👉 [DEBUG] Cliente selecionado:", client);
+        setSelectedClient(client);
+        setSelectedEquipments([]); // Clear equipment when client changes
+        setIsClientPopoverOpen(false);
+    };
+
+    const toggleEquipmentSelection = (equipment) => {
+        setSelectedEquipments(prev => {
+            const exists = prev.find(item => item.Chave_ID === equipment.Chave_ID);
+            if (exists) {
+                return prev.filter(item => item.Chave_ID !== equipment.Chave_ID);
+            } else {
+                return [...prev, equipment];
+            }
+        });
     };
 
     const handleInputChange = (field, value) => {
         setForm(prev => ({ ...prev, [field]: value }));
     };
 
-    const handleUpdateChapa = async () => {
-        if (!selectedEquipment || !selectedEquipment.Chave_ID) {
-            toast({ variant: 'destructive', title: 'Nenhum equipamento selecionado.' });
-            return;
-        }
+    const handleUpdateChapa = async (equipmentId) => {
+        if (!chapaValue) return;
         setIsChapaUpdating(true);
-        const { error } = await supabase
-            .from('bd_cl_inv')
-            .update({ AA3_CHAPA: chapaValue })
-            .eq('Chave_ID', selectedEquipment.Chave_ID);
+        try {
+            const { error } = await supabase
+                .from('bd_cl_inv')
+                .update({ AA3_CHAPA: chapaValue })
+                .eq('Chave_ID', equipmentId);
 
-        if (error) {
-            toast({ variant: 'destructive', title: 'Erro ao atualizar Chapa', description: error.message });
-        } else {
-            toast({ title: 'Sucesso', description: 'Campo Chapa atualizado no inventário.' });
-            setSelectedEquipment(prev => ({...prev, AA3_CHAPA: chapaValue}));
-            refreshInventory();
+            if (error) throw error;
+
+            toast({ title: 'Sucesso', description: 'Chapa atualizada.' });
+            
+            // Update local state
+            setAvailableEquipment(prev => prev.map(item => 
+                item.Chave_ID === equipmentId ? { ...item, AA3_CHAPA: chapaValue } : item
+            ));
+            setSelectedEquipments(prev => prev.map(item => 
+                item.Chave_ID === equipmentId ? { ...item, AA3_CHAPA: chapaValue } : item
+            ));
+            setEditingChapaForId(null);
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro', description: error.message });
+        } finally {
+            setIsChapaUpdating(false);
         }
-        setIsChapaUpdating(false);
     };
 
-
     const validateForm = () => {
-        const requiredFields = { tipo: "Tipo de Manutenção", observacoes: "Observações/Descrição" };
-        if (!selectedEquipment) {
-            const errorMsg = `Selecione um equipamento.`;
-            setFormError(errorMsg);
-            toast({ variant: 'destructive', title: 'Formulário Incompleto', description: errorMsg });
+        const requiredFields = { tipo: "Tipo de Manutenção", observacoes: "Descrição/Observações" };
+        
+        if (!selectedClient) {
+            setFormError("Selecione um cliente.");
             return false;
         }
+        if (selectedEquipments.length === 0) {
+            setFormError("Selecione pelo menos um equipamento.");
+            return false;
+        }
+
         for (const [field, label] of Object.entries(requiredFields)) {
             if (!form[field]) {
-                const errorMsg = `Campo obrigatório: ${label}`;
-                setFormError(errorMsg);
-                toast({ variant: 'destructive', title: 'Formulário Incompleto', description: errorMsg });
+                setFormError(`Campo obrigatório: ${label}`);
                 return false;
             }
         }
@@ -118,200 +253,328 @@ const MaintenanceForm = ({ equipmentToEdit, onSaveSuccess, onCancel }) => {
 
         setIsSubmitting(true);
         setFormError(null);
-        
-        const maintenancePayload = {
-            ...form,
-            data_fim: new Date().toISOString(),
-            status: 'Concluído',
-            custo: parseFloat(form.custo) || 0,
-        };
 
-        let { data: eq, error: findError } = await supabase
-            .from('equipment')
-            .select('id')
-            .eq('serial', selectedEquipment.AA3_CHAPA) 
-            .single();
+        try {
+            console.log("💾 [DEBUG] Iniciando salvamento de manutenção...");
+            const promises = selectedEquipments.map(async (equipment) => {
+                // 1. Ensure Equipment exists in 'equipment' table (mirroring 'bd_cl_inv')
+                let equipmentId;
+                
+                // Try to find by serial (AA3_CHAPA) or create new
+                let { data: eq, error: findError } = await supabase
+                    .from('equipment')
+                    .select('id')
+                    .eq('serial', equipment.AA3_CHAPA || equipment.Chave_ID) // Fallback to Chave_ID if no serial
+                    .maybeSingle();
 
-        if (findError && findError.code !== 'PGRST116') {
-            toast({ variant: "destructive", title: "Erro ao buscar equipamento correspondente", description: findError.message });
+                if (findError) throw findError;
+
+                if (eq) {
+                    equipmentId = eq.id;
+                } else {
+                    // Create new
+                    console.log("   [DEBUG] Equipamento não encontrado na tabela 'equipment', criando novo...");
+                    const { data: newEq, error: createError } = await supabase
+                        .from('equipment')
+                        .insert({
+                            nome: equipment.Equipamento,
+                            serial: equipment.AA3_CHAPA || equipment.Chave_ID,
+                            ativo_fixo: equipment.Codigo,
+                            status: 'ativo', 
+                            local: equipment.Loja_texto || equipment.Loja,
+                        })
+                        .select('id')
+                        .single();
+                    
+                    if (createError) throw createError;
+                    equipmentId = newEq.id;
+                }
+
+                // 2. Insert Maintenance Record
+                const maintenancePayload = {
+                    ...form,
+                    equipment_id: equipmentId,
+                    inventory_item_id: equipment.Chave_ID,
+                    client_id: selectedClient.Codigo, // Save client code as requested
+                    data_fim: new Date().toISOString(), // Auto-close for now, or leave null if tracking duration
+                    status: 'Concluído', // Or form.status
+                    custo: parseFloat(form.custo) || 0,
+                };
+
+                // Remove id from payload if null to let DB handle auto-increment/uuid
+                const { id, ...payload } = maintenancePayload;
+
+                const { error: maintError } = await supabase
+                    .from('maintenance')
+                    .insert(payload);
+
+                if (maintError) throw maintError;
+            });
+
+            await Promise.all(promises);
+
+            toast({ title: "Sucesso!", description: `${selectedEquipments.length} registro(s) de manutenção salvos.` });
+            
+            setForm(initialFormState);
+            setSelectedEquipments([]);
+            setSelectedClient(null);
+            
+            if (onSaveSuccess) onSaveSuccess();
+
+        } catch (error) {
+            console.error("❌ [DEBUG] Erro ao salvar manutenção:", error);
+            toast({ variant: "destructive", title: "Erro ao salvar", description: error.message });
+        } finally {
             setIsSubmitting(false);
-            return;
         }
-
-        let equipmentId = eq?.id;
-
-        if (!equipmentId) {
-            const { data: newEq, error: createError } = await supabase
-                .from('equipment')
-                .insert({
-                    nome: selectedEquipment.Equipamento,
-                    serial: selectedEquipment.AA3_CHAPA,
-                    ativo_fixo: selectedEquipment.Codigo,
-                    status: 'ativo', 
-                    local: selectedEquipment.Loja_texto,
-                })
-                .select('id')
-                .single();
-
-            if (createError) {
-                toast({ variant: "destructive", title: "Erro ao criar registro de equipamento", description: createError.message });
-                setIsSubmitting(false);
-                return;
-            }
-            equipmentId = newEq.id;
-        }
-
-        const { error: maintError } = await supabase.from('maintenance').insert({
-            ...maintenancePayload,
-            equipment_id: equipmentId
-        });
-
-        if (maintError) {
-            toast({ variant: "destructive", title: "Erro ao salvar manutenção", description: maintError.message });
-            setIsSubmitting(false);
-            return;
-        }
-        
-        toast({ title: "Manutenção registrada com sucesso!" });
-        setSelectedEquipment(null);
-        setForm(initialFormState);
-        if (onSaveSuccess) onSaveSuccess();
-        setIsSubmitting(false);
     };
 
-    const activeEquipmentForSelection = useMemo(() => {
-        return rawInventory.filter(item => item.derivedStatus === 'Ativo');
-    }, [rawInventory]);
-    
-    const chapaIsDirty = selectedEquipment && chapaValue !== (selectedEquipment.AA3_CHAPA || '');
-
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Registrar Manutenção</CardTitle>
-                <CardDescription>Selecione um equipamento do inventário e preencha os detalhes da manutenção.</CardDescription>
+        <Card className="w-full max-w-4xl mx-auto shadow-md">
+            <CardHeader className="bg-gray-50/50 border-b pb-4">
+                <CardTitle className="flex items-center gap-2">
+                    <Save className="h-5 w-5 text-blue-600" />
+                    Registrar Manutenção
+                </CardTitle>
+                <CardDescription>
+                    Preencha os dados abaixo para registrar uma nova manutenção.
+                </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-                {!equipmentToEdit && (
-                    <div className="space-y-2">
-                        <Label>Equipamento do Inventário*</Label>
-                        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={popoverOpen}
-                                    className="w-full justify-between"
-                                >
-                                    {selectedEquipment
-                                        ? `${selectedEquipment.Equipamento} (${selectedEquipment.Fantasia})`
-                                        : "Selecione um equipamento..."}
-                                    <PackageSearch className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[400px] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Buscar equipamento por nome, código, fantasia..." />
-                                    <CommandEmpty>
-                                        {inventoryLoading ? "Carregando..." : "Nenhum equipamento ativo encontrado."}
-                                    </CommandEmpty>
-                                    <ScrollArea className="h-72">
+            <CardContent className="p-6 space-y-8">
+                
+                {/* --- SELEÇÃO DE CLIENTE --- */}
+                <div className="space-y-3">
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                        <UserSearch className="h-4 w-4" /> 1. Selecionar Cliente
+                    </Label>
+                    
+                    <Popover open={isClientPopoverOpen} onOpenChange={setIsClientPopoverOpen}>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={isClientPopoverOpen}
+                                className="w-full justify-between h-12 text-left font-normal"
+                                disabled={!!equipmentToEdit} // Lock if editing
+                            >
+                                {selectedClient ? (
+                                    <span className="flex flex-col items-start">
+                                        <span className="font-medium">{selectedClient.Fantasia}</span>
+                                        <span className="text-xs text-muted-foreground">Loja: {selectedClient.Loja} | Cód: {selectedClient.Codigo}</span>
+                                    </span>
+                                ) : "Buscar cliente por nome ou código..."}
+                                <UserSearch className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                            <Command shouldFilter={false}>
+                                <CommandInput 
+                                    placeholder="Digite o nome ou código do cliente..." 
+                                    onValueChange={(val) => handleSearchClients(val)}
+                                />
+                                <CommandList>
+                                    {loadingClients && <CommandItem disabled>Carregando...</CommandItem>}
+                                    <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
                                     <CommandGroup>
-                                        {activeEquipmentForSelection.map((item) => (
+                                        {clients.map((client) => (
                                             <CommandItem
-                                                key={item.Chave_ID}
-                                                value={`${item.Equipamento} ${item.Fantasia} ${item.Codigo}`}
-                                                onSelect={() => handleEquipmentSelect(item)}
+                                                key={client.Codigo + client.Loja}
+                                                value={client.Fantasia}
+                                                onSelect={() => handleClientSelect(client)}
+                                                className="flex flex-col items-start py-2"
                                             >
-                                                {item.Equipamento} ({item.Fantasia})
+                                                <span className="font-medium">{client.Fantasia}</span>
+                                                <span className="text-xs text-muted-foreground">Loja: {client.Loja} | Cód: {client.Codigo}</span>
                                             </CommandItem>
                                         ))}
                                     </CommandGroup>
-                                    </ScrollArea>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-                )}
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
+                </div>
 
-                {selectedEquipment && (
-                    <Card className="bg-muted/50">
-                        <CardHeader><CardTitle className="text-lg">Informações do Equipamento</CardTitle></CardHeader>
-                        <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
-                            <div><span className="font-semibold">Código:</span> {selectedEquipment.Codigo}</div>
-                            <div><span className="font-semibold">Equipamento:</span> {selectedEquipment.Equipamento}</div>
-                            <div><span className="font-semibold">Fantasia:</span> {selectedEquipment.Fantasia}</div>
-                            <div><span className="font-semibold">Loja:</span> {selectedEquipment.derivedLocation}</div>
-                            <div className="md:col-span-2"><span className="font-semibold">Vendedor:</span> {selectedEquipment.Nome_Vendedor || 'N/A'}</div>
-                            <div><span className="font-semibold">Status:</span> {selectedEquipment.derivedStatus}</div>
-                            <div className="flex flex-col md:flex-row md:items-center md:gap-2 md:col-span-2">
-                                <Label htmlFor="chapa" className="font-semibold whitespace-nowrap">Chapa:</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input 
-                                        id="chapa" 
-                                        value={chapaValue} 
-                                        onChange={(e) => setChapaValue(e.target.value)} 
-                                        placeholder="Inserir chapa"
-                                        className="h-8"
-                                    />
-                                    {chapaIsDirty && (
-                                        <Button size="sm" onClick={handleUpdateChapa} disabled={isChapaUpdating}>
-                                            {isChapaUpdating ? <Loader2 className="h-4 w-4 animate-spin"/> : <Edit className="h-4 w-4"/>}
-                                            <span className="ml-2 hidden sm:inline">Atualizar Chapa</span>
-                                        </Button>
-                                    )}
+                {/* --- SELEÇÃO DE EQUIPAMENTOS --- */}
+                <div className={cn("space-y-3 transition-opacity duration-300", !selectedClient && "opacity-50 pointer-events-none")}>
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                        <PackageSearch className="h-4 w-4" /> 2. Selecionar Equipamentos ({selectedEquipments.length})
+                    </Label>
+
+                    {!selectedClient ? (
+                        <div className="border rounded-md p-8 text-center text-muted-foreground bg-gray-50 border-dashed">
+                            Selecione um cliente primeiro para ver os equipamentos.
+                        </div>
+                    ) : (
+                        <div className="border rounded-md overflow-hidden">
+                            <div className="bg-gray-100 px-4 py-2 border-b flex justify-between items-center">
+                                <span className="text-xs font-medium text-gray-500 uppercase">Equipamentos disponíveis</span>
+                                {loadingEquipment && <Loader2 className="h-3 w-3 animate-spin text-gray-500" />}
+                            </div>
+                            <ScrollArea className="h-60">
+                                {availableEquipment.length === 0 && !loadingEquipment ? (
+                                    <div className="p-8 text-center text-muted-foreground">
+                                        Nenhum equipamento encontrado para este cliente.
+                                    </div>
+                                ) : (
+                                    <div className="divide-y">
+                                        {availableEquipment.map((item) => {
+                                            const isSelected = selectedEquipments.some(s => s.Chave_ID === item.Chave_ID);
+                                            const isEditingChapa = editingChapaForId === item.Chave_ID;
+
+                                            return (
+                                                <div key={item.Chave_ID} className={cn("flex items-center p-3 hover:bg-gray-50 transition-colors", isSelected && "bg-blue-50/50")}>
+                                                    <Checkbox 
+                                                        id={`eq-${item.Chave_ID}`}
+                                                        checked={isSelected}
+                                                        onCheckedChange={() => toggleEquipmentSelection(item)}
+                                                        className="mr-4"
+                                                    />
+                                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                                                        <div className="font-medium text-sm">
+                                                            <label htmlFor={`eq-${item.Chave_ID}`} className="cursor-pointer">{item.Equipamento}</label>
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            Status: <Badge variant="outline" className="text-[10px] h-5">{item.AA3_STATUS || 'N/A'}</Badge>
+                                                        </div>
+                                                        
+                                                        {/* Chapa Editor Inline */}
+                                                        <div className="flex items-center gap-2 text-sm">
+                                                            <span className="text-muted-foreground text-xs w-12">Chapa:</span>
+                                                            {isEditingChapa ? (
+                                                                <div className="flex items-center gap-1 animate-in fade-in zoom-in duration-200">
+                                                                    <Input 
+                                                                        className="h-7 w-24 text-xs" 
+                                                                        value={chapaValue}
+                                                                        onChange={(e) => setChapaValue(e.target.value)}
+                                                                        autoFocus
+                                                                    />
+                                                                    <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600" onClick={() => handleUpdateChapa(item.Chave_ID)} disabled={isChapaUpdating}>
+                                                                        {isChapaUpdating ? <Loader2 className="h-3 w-3 animate-spin"/> : <Check className="h-3 w-3"/>}
+                                                                    </Button>
+                                                                    <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => setEditingChapaForId(null)}>
+                                                                        <X className="h-3 w-3"/>
+                                                                    </Button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-2 group">
+                                                                    <span className="font-mono bg-gray-100 px-1.5 rounded text-xs">{item.AA3_CHAPA || 'S/C'}</span>
+                                                                    <Button 
+                                                                        size="icon" variant="ghost" 
+                                                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation(); // Prevent row click
+                                                                            setEditingChapaForId(item.Chave_ID);
+                                                                            setChapaValue(item.AA3_CHAPA || '');
+                                                                        }}
+                                                                    >
+                                                                        <Edit className="h-3 w-3 text-gray-500"/>
+                                                                    </Button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </ScrollArea>
+                        </div>
+                    )}
+                </div>
+
+                {/* --- DETALHES DA MANUTENÇÃO --- */}
+                <div className={cn("space-y-4 transition-opacity duration-300", selectedEquipments.length === 0 && "opacity-50 pointer-events-none")}>
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                        <Edit className="h-4 w-4" /> 3. Detalhes do Serviço
+                    </Label>
+                    
+                    <Card className="bg-gray-50 border-none shadow-none">
+                        <CardContent className="p-4 space-y-4">
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <Label htmlFor="tipo">Tipo de Manutenção*</Label>
+                                    <Select value={form.tipo} onValueChange={(val) => handleInputChange('tipo', val)}>
+                                        <SelectTrigger id="tipo" className="bg-white"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Corretiva">Corretiva</SelectItem>
+                                            <SelectItem value="Preventiva">Preventiva</SelectItem>
+                                            <SelectItem value="Preditiva">Preditiva</SelectItem>
+                                            <SelectItem value="Inspeção">Inspeção</SelectItem>
+                                            <SelectItem value="Instalação">Instalação</SelectItem>
+                                            <SelectItem value="Recolhimento">Recolhimento</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
+                                <div>
+                                    <Label htmlFor="data_manutencao">Data do Serviço</Label>
+                                    <Input 
+                                        id="data_manutencao" 
+                                        type="date" 
+                                        className="bg-white"
+                                        value={form.data_inicio.split('T')[0]} 
+                                        onChange={(e) => handleInputChange('data_inicio', new Date(e.target.value).toISOString())} 
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <Label htmlFor="observacoes">Descrição/Observações*</Label>
+                                <Textarea 
+                                    id="observacoes" 
+                                    className="bg-white min-h-[100px]"
+                                    value={form.observacoes} 
+                                    onChange={(e) => handleInputChange('observacoes', e.target.value)} 
+                                    placeholder="Descreva o problema encontrado e as ações realizadas..." 
+                                />
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <Label htmlFor="proxima_manutencao">Próxima Manutenção (Opcional)</Label>
+                                    <Input 
+                                        id="proxima_manutencao" 
+                                        type="date" 
+                                        className="bg-white"
+                                        value={form.proxima_manutencao} 
+                                        onChange={(e) => handleInputChange('proxima_manutencao', e.target.value)} 
+                                    />
+                                </div>
+                                <div>
+                                    <Label htmlFor="custo">Custo Total R$ (Opcional)</Label>
+                                    <Input 
+                                        id="custo" 
+                                        type="number" 
+                                        className="bg-white"
+                                        value={form.custo} 
+                                        onChange={(e) => handleInputChange('custo', e.target.value)} 
+                                        placeholder="0,00" 
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <Label htmlFor="responsavel">Técnico Responsável</Label>
+                                <Input id="responsavel" value={form.tecnico} disabled className="bg-gray-100" />
                             </div>
                         </CardContent>
                     </Card>
+                </div>
+
+                {formError && (
+                    <div className="bg-destructive/10 text-destructive p-3 rounded-md flex items-center justify-center gap-2 text-sm font-medium">
+                        <AlertTriangle className="h-4 w-4"/> {formError}
+                    </div>
                 )}
 
-                <fieldset disabled={!selectedEquipment} className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="tipo">Tipo de Manutenção*</Label>
-                            <Select value={form.tipo} onValueChange={(val) => handleInputChange('tipo', val)}>
-                                <SelectTrigger id="tipo"><SelectValue placeholder="Selecione o tipo..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Corretiva">Corretiva</SelectItem>
-                                    <SelectItem value="Preventiva">Preventiva</SelectItem>
-                                    <SelectItem value="Preditiva">Preditiva</SelectItem>
-                                    <SelectItem value="Inspeção">Inspeção</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label htmlFor="data_manutencao">Data da Manutenção</Label>
-                            <Input id="data_manutencao" type="date" value={form.data_inicio.split('T')[0]} onChange={(e) => handleInputChange('data_inicio', new Date(e.target.value).toISOString())} />
-                        </div>
-                    </div>
-                    <div>
-                        <Label htmlFor="observacoes">Descrição/Observações*</Label>
-                        <Textarea id="observacoes" value={form.observacoes} onChange={(e) => handleInputChange('observacoes', e.target.value)} placeholder="Descreva o problema e as ações realizadas." />
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="proxima_manutencao">Próxima Manutenção</Label>
-                            <Input id="proxima_manutencao" type="date" value={form.proxima_manutencao} onChange={(e) => handleInputChange('proxima_manutencao', e.target.value)} />
-                        </div>
-                        <div>
-                            <Label htmlFor="custo">Custo (Opcional)</Label>
-                            <Input id="custo" type="number" value={form.custo} onChange={(e) => handleInputChange('custo', e.target.value)} placeholder="R$ 0,00" />
-                        </div>
-                    </div>
-                     <div>
-                        <Label htmlFor="responsavel">Responsável</Label>
-                        <Input id="responsavel" value={form.tecnico} disabled />
-                    </div>
-                </fieldset>
-
-                {formError && <p className="text-sm text-destructive text-center flex items-center justify-center gap-2"><AlertTriangle className="h-4 w-4"/> {formError}</p>}
-
-                <div className="flex justify-end gap-4 border-t pt-6">
-                    {onCancel && <Button variant="outline" onClick={onCancel}>Cancelar</Button>}
-                    <Button onClick={saveMaintenance} disabled={isSubmitting || !selectedEquipment}>
+                <div className="flex justify-end gap-4 pt-2">
+                    {onCancel && <Button variant="ghost" onClick={onCancel} className="text-muted-foreground">Cancelar</Button>}
+                    <Button 
+                        onClick={saveMaintenance} 
+                        disabled={isSubmitting || !selectedClient || selectedEquipments.length === 0}
+                        className="min-w-[150px]"
+                    >
                         {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Salvar Manutenção
+                        Salvar Registro
                     </Button>
                 </div>
             </CardContent>

@@ -18,8 +18,6 @@ import { prefetchCriticalRoutes } from '@/utils/performance';
 import UnauthorizedPage from '@/pages/UnauthorizedPage';
 
 // --- Optimized Lazy Imports ---
-// We group imports or preload on interaction in real scenarios, 
-// but here we stick to basic lazy to keep bundle size small initially.
 
 // Auth Pages
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
@@ -83,6 +81,7 @@ const ComodatoContracts = lazy(() => import('@/pages/crm/ComodatoContracts'));
 const CrmAutomations = lazy(() => import('@/pages/crm/Automations'));
 const CrmReports = lazy(() => import('@/pages/crm/Reports'));
 const CrmTeam = lazy(() => import('@/pages/crm/Team'));
+const CommercialRelationship = lazy(() => import('@/pages/crm/CommercialRelationship'));
 
 // Gestão de Equipe
 const CentralizedTeamManagement = lazy(() => import('@/pages/configuracoes/gestao-equipe/CentralizedTeamManagement'));
@@ -278,6 +277,7 @@ function App() {
                     <Route path="crm/automations" element={<ModuleGuard moduleId="crm"><CrmAutomations /></ModuleGuard>} />
                     <Route path="crm/reports" element={<ModuleGuard moduleId="crm"><CrmReports /></ModuleGuard>} />
                     <Route path="crm/team" element={<ModuleGuard moduleId="crm"><CrmTeam /></ModuleGuard>} />
+                    <Route path="crm/relationship" element={<ModuleGuard moduleId="crm"><CommercialRelationship /></ModuleGuard>} />
 
                     {/* Gestão de Equipe (REDIRECT OLD ROUTES) */}
                     <Route path="admin/gestao-equipe/usuarios-acesso" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />

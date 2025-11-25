@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,13 +13,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Search, Sparkles, CheckCircle, AlertCircle, FileText, Download, MapPin } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle, AlertCircle, FileText, RefreshCw } from 'lucide-react';
 import InputMask from 'react-input-mask';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { fetchCompanyData, mapApiDataToForm } from '@/services/senhorLavosService';
 import { fetchCreditDossier } from '@/services/creditService';
+import { getCommercialHierarchy } from '@/services/apoioSyncService';
 import CreditDossierTemplate from '@/components/crm/CreditDossierTemplate';
 import { generatePDF } from '@/utils/pdfGenerator';
+
+console.log('Parsing ContactForm file...');
 
 const qualificationSchema = z.object({
   has_facade_photo: z.boolean().default(false),
@@ -82,8 +85,12 @@ const contactSchema = z.object({
     representative_cpf: z.string().optional(),
     representative_linkedin: z.string().optional(),
 
-    supervisor_id: z.string().optional(),
-    seller_id: z.string().optional(),
+    supervisor_id: z.string().optional().nullable(),
+    seller_id: z.string().optional().nullable(),
+    // Virtual fields for UI selection
+    selected_supervisor_name: z.string().optional(),
+    selected_seller_name: z.string().optional(),
+
     qualification_data: qualificationSchema.optional(),
     raw_integration_data: z.any().optional(),
 }).superRefine((data, ctx) => {
@@ -126,16 +133,20 @@ const contactSchema = z.object({
     }
 });
 
-const FormSection = ({ title, children, gridCols = 2, className = "" }) => (
-    <Card className={`mb-6 border-l-4 border-l-indigo-500 shadow-sm ${className}`}>
-        <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold text-gray-800">{title}</CardTitle>
-        </CardHeader>
-        <CardContent className={`grid grid-cols-1 md:grid-cols-${gridCols} gap-4 pt-2`}>
-            {children}
-        </CardContent>
-    </Card>
-);
+const FormSection = ({ title, children, gridCols = 2, className = "" }) => {
+    const gridClass = gridCols === 1 ? 'md:grid-cols-1' : 'md:grid-cols-2';
+    
+    return (
+        <Card className={`mb-6 border-l-4 border-l-indigo-500 shadow-sm ${className}`}>
+            <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-semibold text-gray-800">{title}</CardTitle>
+            </CardHeader>
+            <CardContent className={`grid grid-cols-1 ${gridClass} gap-4 pt-2`}>
+                {children}
+            </CardContent>
+        </Card>
+    );
+};
 
 const FormField = ({ label, id, error, children, isRequired, className }) => (
     <div className={`space-y-1 ${className}`}>
@@ -148,13 +159,19 @@ const FormField = ({ label, id, error, children, isRequired, className }) => (
 );
 
 const ContactForm = ({ contactData, onSaveSuccess }) => {
+    console.log('ContactForm rendering. Contact Data:', contactData ? 'Present' : 'Null');
     const { toast } = useToast();
     const { user } = useAuth();
-    const [supervisors, setSupervisors] = useState([]);
-    const [sellers, setSellers] = useState([]);
+    
+    // --- Data States ---
+    const [hierarchy, setHierarchy] = useState([]); // From BD-CL
+    const [internalUsers, setInternalUsers] = useState([]); // From System (Apoio)
+    
+    // --- UI States ---
     const [integrationLoading, setIntegrationLoading] = useState(false);
     const [integrationSuccess, setIntegrationSuccess] = useState(false);
     const [cepLoading, setCepLoading] = useState(false);
+    const [hierarchyLoading, setHierarchyLoading] = useState(false);
     
     // Credit Dossier States
     const [dossierLoading, setDossierLoading] = useState(false);
@@ -196,30 +213,95 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             representative_email: '',
             representative_phone: '',
             representative_role: '',
-            qualification_data: {},
-            ...contactData,
+            
+            // Use custom fields or existing data to populate init
+            selected_supervisor_name: contactData?.custom_fields?.supervisor_name || contactData?.supervisor?.nome || '',
+            selected_seller_name: contactData?.custom_fields?.seller_name || contactData?.seller?.nome || '',
+            
+            supervisor_id: contactData?.supervisor_id || null,
+            seller_id: contactData?.seller_id || null,
+
             qualification_data: {
                 introduction_requested: false,
                 ...(contactData?.qualification_data || {})
             },
+            ...contactData,
         },
     });
 
     const sameDeliveryAddress = watch('same_delivery_address');
+    const currentSupervisor = watch('selected_supervisor_name');
 
+    // --- Effect: Load Hierarchy and Users ---
     useEffect(() => {
-        const fetchUsers = async () => {
-            const { data, error } = await supabase.rpc('get_all_users_with_roles');
-            if (!error) {
-                setSupervisors(data.filter(u => u.role === 'Supervisor'));
-                setSellers(data.filter(u => u.role === 'Vendedor'));
+        const loadCommercialData = async () => {
+            setHierarchyLoading(true);
+            console.log('Iniciando carregamento de dados comerciais...');
+            
+            try {
+                // 1. Fetch System Users (for UUID matching)
+                const { data: sysUsers, error: userError } = await supabase.rpc('get_all_users_with_roles');
+                if (userError) throw userError;
+                setInternalUsers(sysUsers || []);
+                console.log('Usuários internos carregados:', sysUsers?.length);
+
+                // 2. Fetch Commercial Hierarchy from BD-CL
+                const hierarchyData = await getCommercialHierarchy();
+                console.log('Hierarquia comercial (BD-CL) carregada:', hierarchyData?.length);
+                setHierarchy(hierarchyData || []);
+
+            } catch (error) {
+                console.error('Erro ao carregar dados comerciais:', error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Erro de Carregamento',
+                    description: 'Não foi possível carregar a lista de responsáveis.'
+                });
+            } finally {
+                setHierarchyLoading(false);
             }
         };
-        fetchUsers();
+
+        loadCommercialData();
     }, []);
+
+    // --- Computed Lists ---
+    
+    // Unique Supervisors List (filtering out 'Não Definido' if desirable, but keeping for now)
+    const supervisorOptions = useMemo(() => {
+        if (!hierarchy.length) return [];
+        return hierarchy
+            .map(h => h.supervisor_nome)
+            .filter(Boolean)
+            .sort();
+    }, [hierarchy]);
+
+    // Sellers List based on selected supervisor
+    const sellerOptions = useMemo(() => {
+        if (!hierarchy.length) return [];
+        
+        if (currentSupervisor) {
+            const supervisorData = hierarchy.find(h => h.supervisor_nome === currentSupervisor);
+            return supervisorData?.vendedores ? supervisorData.vendedores.sort() : [];
+        } else {
+            // If no supervisor selected, show ALL distinct sellers
+            const allSellers = new Set();
+            hierarchy.forEach(h => {
+                if (h.vendedores) {
+                    h.vendedores.forEach(v => allSellers.add(v));
+                }
+            });
+            return Array.from(allSellers).sort();
+        }
+    }, [hierarchy, currentSupervisor]);
+
+
+    // --- Handlers ---
 
     const handleIntegration = async () => {
         const cnpj = getValues('cnpj');
+        console.log('Starting integration for CNPJ:', cnpj);
+        
         if (!cnpj || cnpj.replace(/\D/g, '').length !== 14) {
             toast({
                 variant: "destructive",
@@ -271,8 +353,6 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
 
     const handleDeliveryCEPChange = async (e) => {
         const rawCep = e.target.value.replace(/\D/g, '');
-        
-        // Only trigger fetch when we have exactly 8 digits
         if (rawCep.length === 8) {
             setCepLoading(true);
             try {
@@ -280,40 +360,19 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                 const data = await response.json();
 
                 if (data.erro) {
-                    toast({
-                        variant: "destructive",
-                        title: "CEP não encontrado",
-                        description: "Verifique o CEP digitado e tente novamente."
-                    });
+                    toast({ variant: "destructive", title: "CEP não encontrado" });
                     return;
                 }
 
-                // Auto-fill delivery address fields
                 setValue('delivery_address_street', data.logradouro || '');
                 setValue('delivery_address_district', data.bairro || '');
                 setValue('delivery_address_city', data.localidade || '');
                 setValue('delivery_address_state', data.uf || '');
-                
-                // Validate the fields that were filled
-                trigger([
-                    'delivery_address_street', 
-                    'delivery_address_district', 
-                    'delivery_address_city', 
-                    'delivery_address_state'
-                ]);
+                trigger(['delivery_address_street', 'delivery_address_district', 'delivery_address_city', 'delivery_address_state']);
 
-                toast({
-                    description: "Endereço de entrega carregado com sucesso.",
-                    className: "bg-blue-50 text-blue-900 border-blue-200"
-                });
-
+                toast({ description: "Endereço de entrega carregado.", className: "bg-blue-50 text-blue-900 border-blue-200" });
             } catch (error) {
-                console.error("ViaCEP Error:", error);
-                toast({
-                    variant: "destructive",
-                    title: "Erro na busca de CEP",
-                    description: "Não foi possível buscar o endereço. Tente preencher manualmente."
-                });
+                toast({ variant: "destructive", title: "Erro na busca de CEP" });
             } finally {
                 setCepLoading(false);
             }
@@ -321,7 +380,7 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
     };
 
     const handleGenerateDossier = async (e) => {
-        e.preventDefault(); // Prevent form submission
+        e.preventDefault();
         const cnpj = getValues('cnpj');
         if (!cnpj || cnpj.replace(/\D/g, '').length !== 14) {
             toast({ variant: "destructive", title: "CNPJ Inválido", description: "CNPJ obrigatório para gerar dossiê." });
@@ -332,35 +391,63 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
         try {
             const data = await fetchCreditDossier({ cnpj });
             setDossierData(data);
-            
-            // Allow state update and render before generating PDF
             setTimeout(async () => {
                 if (dossierRef.current) {
                     const corporateName = getValues('corporate_name') || 'Dossie';
                     const filename = `Dossie_Credito_${corporateName.replace(/[^a-z0-9]/gi, '_')}.pdf`;
                     await generatePDF(dossierRef.current, filename);
                     toast({ title: "Sucesso", description: "Dossiê de Crédito gerado e baixado." });
-                } else {
-                    toast({ variant: "destructive", title: "Erro", description: "Erro ao renderizar modelo do dossiê." });
                 }
                 setDossierLoading(false);
-                setDossierData(null); // Clear to unmount if desired, or keep for debug
+                setDossierData(null);
             }, 1500); 
-
         } catch (error) {
             console.error("Dossier Error:", error);
-            toast({ variant: "destructive", title: "Erro ao Gerar Dossié", description: error.message });
+            toast({ variant: "destructive", title: "Erro", description: error.message });
             setDossierLoading(false);
         }
     };
 
+    // Helper to fuzzy match or exact match names to UUIDs
+    const findUserIdByName = (name) => {
+        if (!name) return null;
+        const normalizedSearch = name.toLowerCase().trim();
+        // Try exact match full name
+        const exact = internalUsers.find(u => u.full_name?.toLowerCase().trim() === normalizedSearch);
+        if (exact) return exact.user_id;
+        
+        // Try contains
+        const partial = internalUsers.find(u => u.full_name?.toLowerCase().includes(normalizedSearch));
+        return partial ? partial.user_id : null;
+    };
+
     const onSubmit = async (data) => {
+        console.log('Form submitting...', data);
+        
+        // Validation: Check if Responsibles are selected
+        if (!data.selected_supervisor_name || !data.selected_seller_name) {
+            toast({
+                variant: 'destructive',
+                title: 'Campos Obrigatórios',
+                description: 'Por favor, selecione o Supervisor e o Vendedor (Responsáveis Internos).'
+            });
+            return;
+        }
+
         try {
-            // Logic to handle "Same Delivery Address"
+            // Match selected names to UUIDs if possible
+            const matchedSupervisorId = findUserIdByName(data.selected_supervisor_name);
+            const matchedSellerId = findUserIdByName(data.selected_seller_name);
+
+            console.log('Matching Results:', {
+                supervisor: { name: data.selected_supervisor_name, id: matchedSupervisorId },
+                seller: { name: data.selected_seller_name, id: matchedSellerId }
+            });
+
+            // Prepare Payload
             let finalData = { ...data };
             
             if (finalData.same_delivery_address) {
-                // If checked, copy main address to delivery address fields for persistence
                 finalData.delivery_address_zip_code = finalData.address_zip_code;
                 finalData.delivery_address_street = finalData.address_street;
                 finalData.delivery_address_number = finalData.address_number;
@@ -373,16 +460,28 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             const payload = {
                 ...finalData,
                 owner_id: user.id,
-                supervisor_id: finalData.supervisor_id || null,
-                seller_id: finalData.seller_id || null,
+                
+                // Use IDs if found, otherwise null (but store name in custom_fields)
+                supervisor_id: matchedSupervisorId, 
+                seller_id: matchedSellerId,
+                
                 qualification_data: finalData.qualification_data || {},
                 custom_fields: {
                     ...(contactData?.custom_fields || {}),
-                    senhor_lavos_data: finalData.raw_integration_data
+                    senhor_lavos_data: finalData.raw_integration_data,
+                    // Store the names explicitly to preserve selection from BD-CL even if no system user matches
+                    supervisor_name: data.selected_supervisor_name,
+                    seller_name: data.selected_seller_name
                 }
             };
             
+            // Remove virtual/helper fields from payload
             delete payload.raw_integration_data;
+            delete payload.selected_supervisor_name;
+            delete payload.selected_seller_name;
+            // Remove _ prefixed fields if any
+            delete payload._supervisor_name;
+            delete payload._seller_name;
 
             let result;
             if (contactData?.id) {
@@ -393,6 +492,7 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
 
             if (result.error) throw result.error;
 
+            console.log('Save successful:', result.data);
             toast({ title: 'Sucesso!', description: `Contato ${contactData?.id ? 'atualizado' : 'criado'} com sucesso.` });
             onSaveSuccess(result.data);
         } catch (error) {
@@ -514,7 +614,6 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                 </FormField>
             </FormSection>
 
-            {/* Toggle for Same Address */}
             <div className="flex items-center space-x-2 mb-4 px-1">
                 <Controller
                     name="same_delivery_address"
@@ -532,7 +631,6 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                 </Label>
             </div>
 
-            {/* Delivery Address Section - Conditional */}
             {!sameDeliveryAddress && (
                 <FormSection title="Endereço de Entrega" className="animate-in fade-in slide-in-from-top-2 duration-300 bg-slate-50 border-l-orange-500">
                     <div className="col-span-1 md:col-span-2">
@@ -647,6 +745,61 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                 </FormField>
             </FormSection>
 
+            <FormSection title="Responsáveis Internos (Estrutura Comercial)">
+                <FormField label="Supervisor" id="selected_supervisor_name" error={errors.selected_supervisor_name} isRequired>
+                    <Controller
+                        name="selected_supervisor_name"
+                        control={control}
+                        render={({ field }) => (
+                            <Select 
+                                onValueChange={(val) => {
+                                    field.onChange(val);
+                                    // Reset seller when supervisor changes to avoid inconsistency
+                                    setValue('selected_seller_name', '');
+                                }} 
+                                value={field.value}
+                                disabled={hierarchyLoading}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder={hierarchyLoading ? "Carregando..." : "Selecione um supervisor"} />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[200px]">
+                                    {supervisorOptions.map((name) => (
+                                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                </FormField>
+                <FormField label="Vendedor" id="selected_seller_name" error={errors.selected_seller_name} isRequired>
+                     <Controller
+                        name="selected_seller_name"
+                        control={control}
+                        render={({ field }) => (
+                            <Select 
+                                onValueChange={field.onChange} 
+                                value={field.value}
+                                disabled={hierarchyLoading}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder={hierarchyLoading ? "Carregando..." : "Selecione um vendedor"} />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[200px]">
+                                    {sellerOptions.map((name) => (
+                                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                </FormField>
+                <div className="col-span-1 md:col-span-2 text-xs text-muted-foreground flex items-center gap-1">
+                    <RefreshCw className={`h-3 w-3 ${hierarchyLoading ? 'animate-spin' : ''}`} />
+                    Dados sincronizados do banco comercial (BD-CL).
+                </div>
+            </FormSection>
+
             <FormSection title="Qualificação" gridCols={1}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField label="Volume de Pão/dia (atual)" id="current_bread_volume" error={errors.qualification_data?.current_bread_volume}>
@@ -703,41 +856,6 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                         <Textarea id="negotiated_mix" {...register('qualification_data.negotiated_mix')} rows={3} />
                     </FormField>
                 </div>
-            </FormSection>
-
-            <FormSection title="Responsáveis Internos">
-                <FormField label="Supervisor" id="supervisor_id" error={errors.supervisor_id}>
-                    <Controller
-                        name="supervisor_id"
-                        control={control}
-                        render={({ field }) => (
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione um supervisor" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {supervisors.map(s => <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    />
-                </FormField>
-                <FormField label="Vendedor" id="seller_id" error={errors.seller_id}>
-                     <Controller
-                        name="seller_id"
-                        control={control}
-                        render={({ field }) => (
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione um vendedor" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {sellers.map(s => <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    />
-                </FormField>
             </FormSection>
 
             <DialogFooter className="sticky bottom-0 bg-background pt-4 pb-0 flex flex-col sm:flex-row justify-end gap-2">

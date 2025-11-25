@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutGrid, MessageSquare, LineChart, BarChartHorizontal, Settings, X, Truck, Users, BarChart3, LogOut, KeyRound as UsersRound, GanttChartSquare, Bot, Users2, KeyRound, CalendarCheck, FileSignature, Route, ShieldCheck, Box, History, FilePieChart, Wrench, Briefcase, Gift, ListTodo, HeartHandshake as Handshake, Package, FileText, FilePlus, FileMinus, Repeat, Bell, FileQuestion, ClipboardList, CalendarDays, CalendarClock, CalendarX, AlertTriangle, MapPin, Compass, Database, PlugZap, LifeBuoy, RotateCcw, TrendingUp, Calendar, AlertCircle, Clock, CheckCircle, XCircle, Lock, Archive, Navigation } from 'lucide-react';
+import { LayoutGrid, MessageSquare, LineChart, BarChartHorizontal, Settings, X, Truck, Users, BarChart3, LogOut, KeyRound as UsersRound, GanttChartSquare, Bot, Users2, KeyRound, CalendarCheck, FileSignature, Route, ShieldCheck, Box, History, FilePieChart, Wrench, Briefcase, Gift, ListTodo, HeartHandshake as Handshake, Package, FileText, FilePlus, FileMinus, Repeat, Bell, FileQuestion, ClipboardList, CalendarDays, CalendarClock, CalendarX, AlertTriangle, MapPin, Compass, Database, PlugZap, LifeBuoy, RotateCcw, TrendingUp, Calendar, AlertCircle, Clock, CheckCircle, XCircle, Lock, Archive, Navigation, Loader2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/tooltip";
 import ChangePasswordDialog from '@/components/ChangePasswordDialog';
 import LoadingSpinner from './LoadingSpinner';
-import { Loader2 } from 'lucide-react'; // Import Loader2 here for logout button
 
 // Centralized menu definition with module IDs matching the DB config
 export const allMenuItems = [
@@ -119,11 +118,11 @@ export const allMenuItems = [
       {
         id: 'apoio_geo_checkin', label: 'Geolocalização', icon: MapPin, moduleId: 'apoio',
         subItems: [
-          { path: '/apoio/geolocalizacao/checkin-checkout', label: 'Check-in/Check-out', icon: MapPin, moduleId: 'apoio' },
-          { path: '/apoio/geolocalizacao/rastreamento', label: 'Rastreamento', icon: Navigation, moduleId: 'apoio' },
-          { path: '/apoio/geolocalizacao/rotas', label: 'Rotas', icon: Route, moduleId: 'apoio' },
-          { path: '/apoio/geolocalizacao/historico', label: 'Histórico', icon: History, moduleId: 'apoio' },
-          { path: '/apoio/geolocalizacao/relatorios', label: 'Relatórios', icon: BarChart3, moduleId: 'apoio' }
+          { path: '/apoio/geolocalizacao/checkin-checkout', id: 'apoio_geo_checkin_checkout', label: 'Check-in/Check-out', icon: MapPin, moduleId: 'apoio' },
+          { path: '/apoio/geolocalizacao/rastreamento', id: 'apoio_geo_rastreamento', label: 'Rastreamento', icon: Navigation, moduleId: 'apoio' },
+          { path: '/apoio/geolocalizacao/rotas', id: 'apoio_geo_rotas', label: 'Rotas', icon: Route, moduleId: 'apoio' },
+          { path: '/apoio/geolocalizacao/historico', id: 'apoio_geo_historico', label: 'Histórico', icon: History, moduleId: 'apoio' },
+          { path: '/apoio/geolocalizacao/relatorios', id: 'apoio_geo_relatorios', label: 'Relatórios', icon: BarChart3, moduleId: 'apoio' }
         ]
       },
       {

@@ -14,7 +14,10 @@ import { Helmet } from 'react-helmet-async';
 
 const Contacts = () => {
   const { toast } = useToast();
-  const { applyScope, isRestricted } = useDataScope();
+  const dataScope = useDataScope();
+  // Ensure safe destructuring in case dataScope is undefined or null
+  const { applyScope, isRestricted } = dataScope || { applyScope: (q) => q, isRestricted: false };
+  
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,6 +25,7 @@ const Contacts = () => {
   const [selectedContact, setSelectedContact] = useState(null);
 
   const fetchContacts = async () => {
+    console.log('Fetching contacts started...');
     setLoading(true);
     try {
       let query = supabase
@@ -34,8 +38,9 @@ const Contacts = () => {
         .order('created_at', { ascending: false });
 
       // Apply Data Isolation Scope
-      // Filters by owner_id automatically based on role (Seller -> own, Supervisor -> Team, Admin -> All)
-      query = applyScope(query, 'owner_id');
+      if (applyScope) {
+          query = applyScope(query, 'owner_id');
+      }
 
       if (searchTerm) {
         query = query.or(`corporate_name.ilike.%${searchTerm}%,fantasy_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
@@ -45,6 +50,7 @@ const Contacts = () => {
 
       if (error) throw error;
       setContacts(data || []);
+      console.log(`Fetched ${data?.length || 0} contacts.`);
     } catch (error) {
       console.error("Error fetching contacts:", error);
       toast({
@@ -62,16 +68,19 @@ const Contacts = () => {
   }, [searchTerm]); // Re-fetch on search
 
   const handleEdit = (contact) => {
+    console.log('Editing contact:', contact.id);
     setSelectedContact(contact);
     setIsDialogOpen(true);
   };
 
   const handleCreate = () => {
+    console.log('Creating new contact');
     setSelectedContact(null);
     setIsDialogOpen(true);
   };
 
-  const handleSuccess = () => {
+  const handleSuccess = (savedData) => {
+    console.log('Contact saved successfully:', savedData);
     setIsDialogOpen(false);
     fetchContacts();
   };

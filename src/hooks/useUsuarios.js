@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -11,7 +12,7 @@ export const useUsuarios = () => {
     try {
       const { data, error } = await supabase
         .from('apoio_usuarios')
-        .select('*, perfil:apoio_perfis(nome)')
+        .select('*, perfil:apoio_perfis(nome), persona:apoio_personas(nome)')
         .order('nome', { ascending: true });
       if (error) throw error;
       return data;
@@ -28,7 +29,7 @@ export const useUsuarios = () => {
     try {
       const { data, error } = await supabase
         .from('apoio_usuarios')
-        .select('*, perfil:apoio_perfis(nome)')
+        .select('*, perfil:apoio_perfis(nome), persona:apoio_personas(nome)')
         .eq('id', id)
         .single();
       if (error) throw error;
@@ -50,15 +51,15 @@ export const useUsuarios = () => {
         .select('id')
         .eq('email', dados.email)
         .single();
+      
+      // Ignore errors if user not found (PGRST116)
       if (existingUser) {
         throw new Error('Este email já está em uso.');
       }
-      if (existingUserError && existingUserError.code !== 'PGRST116') { // PGRST116 = no rows found
-        throw existingUserError;
-      }
-
+      
       const { data, error } = await supabase.from('apoio_usuarios').insert([dados]).select();
       if (error) throw error;
+      
       toast({ title: 'Sucesso', description: 'Usuário criado com sucesso.' });
       return data[0];
     } catch (error) {

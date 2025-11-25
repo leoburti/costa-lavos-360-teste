@@ -26,7 +26,8 @@ import {
   Calendar,
   Settings,
   Shield,
-  Link as LinkIcon
+  Link as LinkIcon,
+  HeartHandshake
 } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import {
@@ -126,6 +127,7 @@ const allMenuItems = [
     crmRequired: true,
     subItems: [
       { id: 'crm-pipeline', label: 'Pipeline', path: '/crm/pipeline', icon: TrendingUp },
+      { id: 'crm-relationship', label: 'Relacionamento', path: '/crm/relationship', icon: HeartHandshake },
       { id: 'crm-contacts', label: 'Contatos', path: '/crm/contacts', icon: Users },
       { id: 'crm-contracts', label: 'Contratos', path: '/crm/comodato-contracts', icon: FileText },
       { id: 'crm-automations', label: 'Automações', path: '/crm/automations', icon: Settings },

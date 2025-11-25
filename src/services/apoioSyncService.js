@@ -389,3 +389,67 @@ export const createRetiradaComodato = async (clienteId, equipamentosIds, motivo,
     if (error) return { success: false, message: error.message };
     return { success: true, data };
 };
+
+// === Gestão de Equipe Comercial ===
+export const getCommercialHierarchy = async () => {
+    console.log('Buscando hierarquia comercial do BD...');
+    const { data, error } = await supabase.rpc('get_commercial_hierarchy');
+    if (error) {
+        console.error('Erro ao buscar hierarquia comercial:', error);
+        throw new Error(`Erro: ${error.message}`);
+    }
+    return data || [];
+};
+
+// === Search for Commercial Entities (bd-cl) ===
+export const searchCommercialEntities = async (type, searchTerm) => {
+    if (!searchTerm || searchTerm.length < 2) return [];
+    
+    try {
+        let column = '';
+        if (type === 'Vendedor') column = 'Nome Vendedor';
+        else if (type === 'Supervisor') column = 'Nome Supervisor';
+        else return []; // Unknown type
+
+        const { data, error } = await supabase
+            .from('bd-cl') // Accessing public view/table directly
+            .select(column)
+            .ilike(column, `%${searchTerm}%`)
+            .limit(20);
+
+        if (error) throw error;
+
+        // Distinct client-side due to lack of .distinct() modifier in simple JS select sometimes,
+        // but ideally we use .select(col).distinct() if enabled or RPC.
+        // For robust distinct search on large table 'bd-cl', RPC is better, 
+        // but let's try simple distinct processing here first.
+        const uniqueNames = [...new Set(data.map(item => item[column]))].filter(Boolean).filter(n => n !== 'Não Definido');
+        return uniqueNames;
+    } catch (error) {
+        console.error(`Error searching commercial entities for ${type}:`, error);
+        return [];
+    }
+};
+
+// === Validate Commercial Entity Exists ===
+export const validateCommercialEntity = async (type, name) => {
+    if (!name) return false;
+    try {
+        let column = '';
+        if (type === 'Vendedor') column = 'Nome Vendedor';
+        else if (type === 'Supervisor') column = 'Nome Supervisor';
+        else return false;
+
+        const { data, error } = await supabase
+            .from('bd-cl')
+            .select(column)
+            .eq(column, name)
+            .limit(1);
+        
+        if (error) throw error;
+        return data && data.length > 0;
+    } catch (error) {
+        console.error("Validation error:", error);
+        return false;
+    }
+};

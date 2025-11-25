@@ -16,13 +16,14 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import ContactQualificationDialog from '@/components/crm/ContactQualificationDialog';
+import DealDetailsModal from '@/components/crm/DealDetailsModal';
 import MissingFieldsDialog from '@/components/crm/MissingFieldsDialog';
 import { qualificationFieldsConfig } from '@/components/crm/QualificationChecklist';
 import { Progress } from '@/components/ui/progress';
 import ComodatoContract from '@/components/crm/ComodatoContract';
 import SupplyContract from '@/components/crm/SupplyContract';
 import { useReactToPrint } from 'react-to-print';
+import { getContactBreadVolume } from '@/services/crmService';
 
 // dnd-kit imports
 import {
@@ -41,13 +42,10 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   useSortable,
-  arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
-
-// --- Components ---
 
 const AddDealDialog = ({ onDealAdded, stages, contacts }) => {
     const { user } = useAuth();
@@ -64,6 +62,25 @@ const AddDealDialog = ({ onDealAdded, stages, contacts }) => {
             setStageId(stages[0].id);
         }
     }, [stages, stageId]);
+
+    const handleContactChange = async (id) => {
+        setContactId(id);
+        // Auto-fetch bread volume
+        const selectedContact = contacts.find(c => c.id === id);
+        if (selectedContact) {
+            const searchName = selectedContact.fantasy_name || selectedContact.corporate_name;
+            if (searchName) {
+                const volume = await getContactBreadVolume(searchName);
+                if (volume) {
+                    toast({ 
+                        title: "Dados encontrados", 
+                        description: `Volume de Pão/Dia (BD-CL): ${volume}`, 
+                        className: "bg-blue-50 border-blue-200" 
+                    });
+                }
+            }
+        }
+    };
 
     const handleAddDeal = async () => {
         if (!title || !stageId || !contactId) {
@@ -104,7 +121,7 @@ const AddDealDialog = ({ onDealAdded, stages, contacts }) => {
                 <div className="grid gap-4 py-4">
                     <div className="space-y-2">
                         <Label>Contato</Label>
-                        <Select onValueChange={setContactId} value={contactId}>
+                        <Select onValueChange={handleContactChange} value={contactId}>
                             <SelectTrigger><SelectValue placeholder="Selecione um contato" /></SelectTrigger>
                             <SelectContent>
                                 {contacts.map(c => <SelectItem key={c.id} value={c.id}>{c.fantasy_name}</SelectItem>)}
@@ -138,7 +155,7 @@ const AddDealDialog = ({ onDealAdded, stages, contacts }) => {
     );
 };
 
-const DealCard = ({ deal, onQualificationClick, isQualificationStage, onCardClick, dragOverlay }) => {
+const DealCard = ({ deal, onDetailsClick, isQualificationStage, dragOverlay }) => {
     const valueColor = useMemo(() => {
         if (!deal.value) return 'text-muted-foreground';
         if (deal.value > 50000) return 'text-emerald-500';
@@ -155,10 +172,11 @@ const DealCard = ({ deal, onQualificationClick, isQualificationStage, onCardClic
     const qData = deal.crm_contacts?.qualification_data || {};
     const completedFields = requiredFields.filter(field => {
         const value = qData[field.id];
-        return typeof value === 'boolean' ? value === true : !!value;
+        return field.type === 'photo' ? (!!value && typeof value === 'string') : (typeof value === 'boolean' ? value === true : !!value);
     }).length;
     const completionPercentage = requiredFields.length > 0 ? (completedFields / requiredFields.length) * 100 : 100;
     const isComplete = completionPercentage === 100;
+    const isApproved = qData.approved;
 
     return (
         <Card 
@@ -166,7 +184,7 @@ const DealCard = ({ deal, onQualificationClick, isQualificationStage, onCardClic
                 "p-4 bg-card/80 backdrop-blur-sm border rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 group cursor-pointer relative select-none",
                 dragOverlay && "rotate-2 scale-105 shadow-xl cursor-grabbing ring-2 ring-primary"
             )}
-            onClick={() => onCardClick && onCardClick(deal)}
+            onClick={() => onDetailsClick && onDetailsClick(deal)}
         >
             <CardContent className="p-0 space-y-3">
                 <p className="font-bold text-sm text-card-foreground pr-2 flex-1">{deal.title}</p>
@@ -180,19 +198,27 @@ const DealCard = ({ deal, onQualificationClick, isQualificationStage, onCardClic
 
                 {isQualificationStage && (
                     <div className="space-y-2 pt-2">
-                        <Progress value={completionPercentage} />
+                        <Progress value={completionPercentage} className={cn("h-1.5", isApproved ? "bg-green-100" : "")} indicatorClassName={isApproved ? "bg-green-500" : ""} />
                         <div className="flex justify-between items-center">
-                            <Button 
-                                variant="link" 
-                                size="sm" 
-                                className="p-0 h-auto text-xs" 
-                                onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on click
-                                onClick={(e) => { e.stopPropagation(); onQualificationClick(deal); }}
-                            >
-                                <Edit className="mr-1 h-3 w-3" />
-                                Completar
-                            </Button>
-                            {isComplete && <Badge variant="success" className="text-xs bg-green-100 text-green-800 border-green-200">Completo</Badge>}
+                            <div className="text-[10px] text-muted-foreground">
+                                {completedFields}/{requiredFields.length} campos
+                            </div>
+                            {isApproved ? (
+                                <Badge variant="success" className="text-[10px] h-5 px-1.5">Aprovado</Badge>
+                            ) : isComplete ? (
+                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 bg-yellow-100 text-yellow-800 hover:bg-yellow-200">Aguardando</Badge>
+                            ) : (
+                                <Button 
+                                    variant="link" 
+                                    size="sm" 
+                                    className="p-0 h-auto text-xs text-primary" 
+                                    onPointerDown={(e) => e.stopPropagation()} 
+                                    onClick={(e) => { e.stopPropagation(); onDetailsClick(deal); }}
+                                >
+                                    <Edit className="mr-1 h-3 w-3" />
+                                    Completar
+                                </Button>
+                            )}
                         </div>
                     </div>
                 )}
@@ -233,14 +259,14 @@ const SortableDealCard = ({ deal, ...props }) => {
     );
 };
 
-const PipelineColumn = ({ stage, deals, onQualificationClick, onCardClick }) => {
+const PipelineColumn = ({ stage, deals, onDetailsClick }) => {
     const { setNodeRef } = useDroppable({
         id: stage.id,
         data: { type: 'Stage', stage }
     });
 
     const totalValue = useMemo(() => deals.reduce((sum, deal) => sum + (deal.value || 0), 0), [deals]);
-    const isQualificationStage = stage.name.toLowerCase() === 'qualificação';
+    const isQualificationStage = stage.name.toLowerCase().includes('qualificação');
     
     return (
         <div className="w-[320px] shrink-0 h-full flex flex-col">
@@ -261,9 +287,8 @@ const PipelineColumn = ({ stage, deals, onQualificationClick, onCardClick }) => 
                             <SortableDealCard 
                                 key={deal.id} 
                                 deal={deal} 
-                                onQualificationClick={onQualificationClick} 
+                                onDetailsClick={onDetailsClick} 
                                 isQualificationStage={isQualificationStage} 
-                                onCardClick={onCardClick}
                             />
                         ))}
                     </SortableContext>
@@ -290,7 +315,7 @@ const Pipeline = () => {
     const { applyScope } = useDataScope();
     
     // Modal States
-    const [qualificationModalOpen, setQualificationModalOpen] = useState(false);
+    const [detailsModalOpen, setDetailsModalOpen] = useState(false);
     const [missingFieldsModalOpen, setMissingFieldsModalOpen] = useState(false);
     const [contractModalOpen, setContractModalOpen] = useState(false);
     const [contractType, setContractType] = useState(null);
@@ -301,15 +326,11 @@ const Pipeline = () => {
     const [selectedDealId, setSelectedDealId] = useState('');
     const [justWonDeal, setJustWonDeal] = useState(null);
 
-    // Drag and Drop State
     const [activeDragDeal, setActiveDragDeal] = useState(null);
 
     const contractRef = useRef();
-    const handlePrint = useReactToPrint({
-        content: () => contractRef.current,
-    });
+    const handlePrint = useReactToPrint({ content: () => contractRef.current });
 
-    // Sensors
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -319,7 +340,7 @@ const Pipeline = () => {
         if (showLoading) setLoading(true);
         
         let dealsQuery = supabase.from('crm_deals').select('*, crm_contacts!inner(*)');
-        let contactsQuery = supabase.from('crm_contacts').select('id, fantasy_name').order('fantasy_name', { ascending: true });
+        let contactsQuery = supabase.from('crm_contacts').select('id, fantasy_name, corporate_name').order('fantasy_name', { ascending: true });
 
         dealsQuery = applyScope(dealsQuery, 'owner_id');
         contactsQuery = applyScope(contactsQuery, 'owner_id');
@@ -356,7 +377,6 @@ const Pipeline = () => {
         fetchData();
     }, [fetchData]);
 
-    // Group Deals by Stage derived from state
     const dealsByStage = useMemo(() => {
         const grouped = stages.reduce((acc, stage) => {
             acc[stage.id] = [];
@@ -364,14 +384,11 @@ const Pipeline = () => {
         }, {});
 
         deals.forEach(deal => {
-            if (grouped[deal.stage_id]) {
-                grouped[deal.stage_id].push(deal);
-            }
+            if (grouped[deal.stage_id]) grouped[deal.stage_id].push(deal);
         });
         return grouped;
     }, [deals, stages]);
 
-    // Dnd Handlers
     const handleDragStart = (event) => {
         const { active } = event;
         const deal = deals.find(d => d.id === active.id);
@@ -384,35 +401,22 @@ const Pipeline = () => {
 
         const activeId = active.id;
         const overId = over.id;
-
         const activeDeal = deals.find(d => d.id === activeId);
         if (!activeDeal) return;
 
-        const isActiveInDeals = activeDeal;
         const overDeal = deals.find(d => d.id === overId);
         const overStage = stages.find(s => s.id === overId);
 
-        const activeStageId = activeDeal.stage_id;
         let overStageId;
+        if (overStage) overStageId = overStage.id;
+        else if (overDeal) overStageId = overDeal.stage_id;
+        else return;
 
-        if (overStage) {
-            overStageId = overStage.id;
-        } else if (overDeal) {
-            overStageId = overDeal.stage_id;
-        } else {
-            return;
-        }
-
-        // Only trigger state update if changing columns to keep UI responsive
-        if (activeStageId !== overStageId) {
+        if (activeDeal.stage_id !== overStageId) {
             setDeals((items) => {
                 const oldIndex = items.findIndex(i => i.id === activeId);
                 const newItems = [...items];
-                // Optimistically update stage
                 newItems[oldIndex] = { ...newItems[oldIndex], stage_id: overStageId };
-                
-                // Reordering logic would go here if we had an 'order' field
-                // For now, we rely on the default array order produced by filtering
                 return newItems;
             });
         }
@@ -426,76 +430,98 @@ const Pipeline = () => {
 
         const activeId = active.id;
         const overId = over.id;
+        const activeDeal = deals.find(d => d.id === activeId); // From original state before drag
+        const overStage = stages.find(s => s.id === overId);
+        const overDeal = deals.find(d => d.id === overId);
 
-        const activeDeal = deals.find(d => d.id === activeId);
-        const overStage = stages.find(s => s.id === overId); // If dropped directly on a column
-        const overDeal = deals.find(d => d.id === overId); // If dropped on a card
+        let newStageId = activeDeal.stage_id; // Default to current if something goes wrong
+        if (overStage) newStageId = overStage.id;
+        else if (overDeal) newStageId = overDeal.stage_id;
 
-        let newStageId = activeDeal.stage_id;
+        // --- VALIDATION LOGIC ---
+        // Find current stage object
+        // Note: activeDeal from `deals` state might have the optimistically updated stage_id if dragOver fired
+        // But we need to know the *previous* stage to know if we are moving forward from Qualification
+        // Actually, `activeDeal` variable from `const activeDeal = deals.find...` captures the *latest* state.
+        // To do this correctly, we should rely on the optimistic update being 'true' but check constraints.
+        
+        // Re-find stages to compare order
+        const currentStageObj = stages.find(s => s.id === activeDeal.stage_id); // This is the NEW stage if optimistic update happened
+        // Wait, dnd-kit's dragOver updates state. So `activeDeal.stage_id` IS `newStageId`.
+        // We need to know if we came FROM qualification.
+        // For simplicity: If the target stage order > Qualification Stage Order, check.
+        
+        const qualStage = stages.find(s => s.name.toLowerCase().includes('qualificação'));
+        const targetStageObj = stages.find(s => s.id === newStageId);
 
-        if (overStage) {
-            newStageId = overStage.id;
-        } else if (overDeal) {
-            newStageId = overDeal.stage_id;
+        if (qualStage && targetStageObj && targetStageObj.order > qualStage.order) {
+            // Moving forward from (or past) qualification.
+            // Check if qualification data is complete and approved.
+            // We check the deal's contact data.
+            const qData = activeDeal.crm_contacts?.qualification_data || {};
+            
+            const requiredFields = qualificationFieldsConfig.filter(f => f.isRequired);
+            const missing = requiredFields.filter(f => {
+                const val = qData[f.id];
+                return f.type === 'photo' ? !(!!val && typeof val === 'string') : (typeof val === 'boolean' ? val !== true : !val);
+            }).map(f => f.label);
+
+            if (missing.length > 0) {
+                setMissingFields(missing);
+                setMissingFieldsModalOpen(true);
+                // Revert Move
+                fetchData(false);
+                return;
+            }
+
+            if (!qData.approved) {
+                toast({ 
+                    variant: 'destructive', 
+                    title: 'Aprovação Necessária', 
+                    description: 'A qualificação precisa ser aprovada por um supervisor antes de avançar.' 
+                });
+                fetchData(false);
+                return;
+            }
         }
 
-        // Persist change if stage is different
-        // Note: activeDeal.stage_id might already be updated optimistically in handleDragOver
-        // But we need to ensure it's persisted to Supabase.
-        // Since handleDragOver updates local state, 'activeDeal' retrieved from state here has the NEW stage_id
-        // wait, handleDragEnd uses state closure? No, setDeals updates it.
-        // Let's assume we need to persist whatever the current stage_id is for this deal in state, 
-        // or check if it needs update.
-        
-        // More reliable: Use the calculated newStageId from 'over' target
-        // If we dragged over a stage or a deal in a stage, that's the target.
-        
-        if (newStageId) {
-             // Optimistic UI is already handled in DragOver for stage changes. 
-             // We just need to ensure backend sync.
-             try {
-                 const { error } = await supabase
-                    .from('crm_deals')
-                    .update({ stage_id: newStageId })
-                    .eq('id', activeId);
-                 
-                 if (error) throw error;
-                 // toast({ title: "Atualizado", duration: 1000 });
-             } catch (error) {
-                 toast({ variant: 'destructive', title: 'Erro ao mover', description: error.message });
-                 fetchData(false); // Revert on error
-             }
+        // Persist
+        try {
+             const { error } = await supabase.from('crm_deals').update({ stage_id: newStageId }).eq('id', activeId);
+             if (error) throw error;
+        } catch (error) {
+             toast({ variant: 'destructive', title: 'Erro ao mover', description: error.message });
+             fetchData(false);
         }
     };
 
-    // Helper actions
     const handleMarkAsWon = async () => {
         if (!selectedDealId) {
             toast({ variant: 'destructive', title: 'Nenhum negócio selecionado' });
             return;
         }
-        const posVendaStage = stages.find(s => s.name.toLowerCase() === 'pós-venda');
+        const posVendaStage = stages.find(s => s.name.toLowerCase().includes('ganho') || s.name.toLowerCase().includes('fechado') || s.name.toLowerCase().includes('pós'));
         if (!posVendaStage) {
-             toast({ variant: 'destructive', title: 'Erro', description: 'Etapa "Pós-venda" não encontrada.' });
+             toast({ variant: 'destructive', title: 'Erro', description: 'Etapa "Ganho/Pós-venda" não encontrada.' });
              return;
         }
 
-        const { error } = await supabase.from('crm_deals').update({ stage_id: posVendaStage.id }).eq('id', selectedDealId);
+        const { error } = await supabase.from('crm_deals').update({ stage_id: posVendaStage.id, status: 'won' }).eq('id', selectedDealId);
         if (error) {
             toast({ variant: 'destructive', title: 'Erro', description: error.message });
         } else {
             toast({ title: 'Sucesso!', description: 'Negócio marcado como Ganho!' });
-            setDeals(d => d.map(deal => deal.id === selectedDealId ? { ...deal, stage_id: posVendaStage.id } : deal));
+            setDeals(d => d.map(deal => deal.id === selectedDealId ? { ...deal, stage_id: posVendaStage.id, status: 'won' } : deal));
             setJustWonDeal(deals.find(d => d.id === selectedDealId));
         }
     };
     
-    const handleOpenQualification = (deal) => {
+    const handleOpenDetails = (deal) => {
         setCurrentDeal(deal);
-        setQualificationModalOpen(true);
+        setDetailsModalOpen(true);
     };
 
-    const handleQualificationSave = (updatedDeal) => {
+    const handleDealUpdate = (updatedDeal) => {
         setDeals(prevDeals => prevDeals.map(d => d.id === updatedDeal.id ? updatedDeal : d));
     };
 
@@ -588,8 +614,7 @@ const Pipeline = () => {
                                 <PipelineColumn 
                                     stage={stage} 
                                     deals={dealsByStage[stage.id] || []}
-                                    onQualificationClick={handleOpenQualification}
-                                    onCardClick={(deal) => handleOpenQualification(deal)}
+                                    onDetailsClick={handleOpenDetails}
                                 />
                             </div>
                         ))}
@@ -608,11 +633,11 @@ const Pipeline = () => {
         </div>
 
         {currentDeal && (
-             <ContactQualificationDialog
+             <DealDetailsModal
                 deal={currentDeal}
-                open={qualificationModalOpen}
-                setOpen={setQualificationModalOpen}
-                onSaveSuccess={handleQualificationSave}
+                open={detailsModalOpen}
+                setOpen={setDetailsModalOpen}
+                onUpdate={handleDealUpdate}
             />
         )}
 

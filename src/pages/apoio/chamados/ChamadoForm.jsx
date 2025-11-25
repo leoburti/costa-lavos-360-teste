@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
@@ -23,19 +23,23 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Loader2, ArrowLeft, Save, Wrench, Check, ChevronsUpDown, Settings, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// Constants for maintenance types that require equipment selection
+const MAINTENANCE_TYPES = ['manutencao', 'preventiva'];
+
 // Schema de validação
 const chamadoSchema = z.object({
   cliente_id: z.string().min(1, 'Selecione um cliente'),
   tipo_chamado: z.string().min(1, 'Selecione o tipo'),
   motivo: z.string().min(5, 'Descreva o motivo com mais detalhes'),
   prioridade: z.string().min(1, 'Selecione a prioridade'),
-  data_limite: z.string().optional().or(z.literal('')),
+  data_limite: z.string().optional().nullable(),
   profissional_sugerido_id: z.string().optional().or(z.literal('')),
   observacoes: z.string().optional(),
   status: z.string().default('aberto'),
   equipamentos_selecionados: z.array(z.string()).optional(),
 }).refine((data) => {
-  if (data.tipo_chamado === 'manutencao') {
+  // Require equipment for both corrective and preventive maintenance
+  if (MAINTENANCE_TYPES.includes(data.tipo_chamado)) {
     return data.equipamentos_selecionados && data.equipamentos_selecionados.length > 0;
   }
   return true;
@@ -49,7 +53,7 @@ const ChamadoForm = () => {
   const isEditMode = !!id;
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { userContext, loading: authLoading } = useAuth();
+  const { userContext, loading: authLoading, forceRoleRefetch } = useAuth();
   
   const [clientes, setClientes] = useState([]);
   const [profissionais, setProfissionais] = useState([]);
@@ -81,7 +85,7 @@ const ChamadoForm = () => {
   const selectedTipoChamado = form.watch('tipo_chamado');
 
   // Função dedicada para selecionar cliente e limpar estados
-  const handleSelectClient = (clienteId) => {
+  const handleSelectClient = useCallback((clienteId) => {
     console.log("🔍 [DEBUG] Selecionando cliente (handleSelectClient):", clienteId);
     
     // Atualiza o valor do formulário
@@ -95,14 +99,14 @@ const ChamadoForm = () => {
     
     // Limpa a busca para que a lista volte ao normal na próxima vez
     setSearchCliente("");
-  };
+  }, [form]);
 
   // Função para limpar seleção
-  const clearSelection = (e) => {
+  const clearSelection = useCallback((e) => {
     e.stopPropagation();
     form.setValue("cliente_id", "", { shouldValidate: true });
     setEquipamentosCliente([]);
-  };
+  }, [form]);
 
   // Filtragem de clientes em tempo real
   const filteredClientes = useMemo(() => {
@@ -130,29 +134,17 @@ const ChamadoForm = () => {
   // Carregar equipamentos quando o cliente muda ou tipo é manutenção
   useEffect(() => {
     const fetchEquipamentos = async () => {
-      console.log("🔄 [DEBUG] fetchEquipamentos disparado. Cliente:", selectedClienteId, "Tipo:", selectedTipoChamado);
-      
       if (!selectedClienteId) {
         setEquipamentosCliente([]);
         return;
       }
 
-      // Se o tipo for manutenção, carrega equipamentos
-      if (selectedTipoChamado === 'manutencao') {
+      // Se o tipo for manutenção (corretiva ou preventiva), carrega equipamentos
+      if (MAINTENANCE_TYPES.includes(selectedTipoChamado)) {
         try {
           setLoadingEquipamentos(true);
-          console.log("📡 [DEBUG] Chamando service getEquipamentosComodatoByCliente...");
-          
-          // Busca da bd_cl_inv via RPC (Service)
           const data = await getEquipamentosComodatoByCliente(selectedClienteId);
-          
-          console.log("✅ [DEBUG] Equipamentos retornados do service:", data);
-          
           setEquipamentosCliente(data || []);
-          
-          if (!data || data.length === 0) {
-             console.warn("⚠️ [DEBUG] Nenhum equipamento encontrado para este cliente.");
-          }
         } catch (error) {
           console.error("❌ [DEBUG] Erro ao buscar equipamentos:", error);
           toast({
@@ -182,11 +174,6 @@ const ChamadoForm = () => {
           getProfissionaisParaSelect()
         ]);
         
-        // Debug: Log para verificar se clientes com equipamentos estão vindo
-        console.log("📋 [DEBUG] Total Clientes carregados:", clientesData?.length);
-        const clientesComEquip = clientesData.filter(c => c.apto_comodato);
-        console.log("🔧 [DEBUG] Clientes aptos para comodato:", clientesComEquip.length);
-
         setClientes(clientesData || []);
         setProfissionais(profissionaisData || []);
 
@@ -228,7 +215,7 @@ const ChamadoForm = () => {
             });
             
             // Forçar carregamento dos equipamentos se for manutenção na edição
-            if (chamado.tipo_chamado === 'manutencao') {
+            if (MAINTENANCE_TYPES.includes(chamado.tipo_chamado)) {
                const equipData = await getEquipamentosComodatoByCliente(chamado.cliente_id);
                setEquipamentosCliente(equipData || []);
             }
@@ -250,11 +237,76 @@ const ChamadoForm = () => {
   }, [isEditMode, id, form, toast]);
 
   const onSubmit = async (data) => {
-    if (!userContext?.apoioId) {
+    // === Validação e Fallback de Perfil (Erro 1) ===
+    let criadorId = userContext?.apoioId;
+
+    if (!criadorId) {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                console.log("🔍 [Recovery] Perfil não encontrado no contexto. Tentando buscar no banco...");
+                
+                // 1. Tenta buscar por auth_id
+                const { data: p1 } = await supabase
+                    .from('apoio_usuarios')
+                    .select('id')
+                    .eq('auth_id', user.id)
+                    .maybeSingle();
+                
+                if (p1) {
+                    criadorId = p1.id;
+                    console.log("✅ [Recovery] Perfil encontrado por Auth ID:", criadorId);
+                }
+                
+                // 2. Tenta buscar por email (Fallback)
+                if (!criadorId && user.email) {
+                    console.log("⚠️ [Recovery] Perfil não encontrado por Auth ID. Tentando por E-mail...");
+                    const { data: p2 } = await supabase
+                        .from('apoio_usuarios')
+                        .select('id')
+                        .eq('email', user.email)
+                        .maybeSingle();
+                    
+                    if (p2) {
+                        criadorId = p2.id;
+                        console.log("✅ [Recovery] Perfil encontrado por E-mail. Vinculando Auth ID...");
+                        // Auto-fix: Vincula o auth_id para o futuro
+                        await supabase.from('apoio_usuarios').update({ auth_id: user.id }).eq('id', p2.id);
+                    }
+                }
+
+                // 3. Auto-provisionamento (Último recurso)
+                if (!criadorId) {
+                    console.log("⚠️ [Recovery] Nenhum perfil encontrado. Criando perfil básico...");
+                    const { data: newProfile, error: createError } = await supabase.from('apoio_usuarios').insert({
+                        nome: user.user_metadata?.full_name || user.email.split('@')[0],
+                        email: user.email,
+                        auth_id: user.id,
+                        status: 'ativo',
+                        nivel_acesso: 1,
+                        perfil_id: '77777777-7777-7777-7777-777777777777' // ID genérico ou null se não houver
+                    }).select().single();
+                    
+                    if (newProfile) {
+                        criadorId = newProfile.id;
+                        console.log("✅ [Recovery] Novo perfil criado:", criadorId);
+                        // Atualiza o contexto para evitar re-checks
+                        if (forceRoleRefetch) forceRoleRefetch();
+                    } else {
+                        console.error("❌ [Recovery] Falha ao criar perfil:", createError);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("❌ [Recovery] Erro crítico na recuperação de perfil:", err);
+        }
+    }
+
+    if (!criadorId && !isEditMode) {
         toast({
             variant: "destructive",
             title: "Perfil não encontrado",
-            description: "Seu usuário não possui um perfil vinculado no módulo de Apoio. Contate o administrador."
+            description: "Não foi possível identificar ou criar seu perfil de usuário no módulo de Apoio. Contate o administrador."
         });
         return;
     }
@@ -270,11 +322,11 @@ const ChamadoForm = () => {
         observacoes: data.observacoes,
         data_limite: data.data_limite || null,
         profissional_sugerido_id: data.profissional_sugerido_id || null,
-        ...(isEditMode ? {} : { criado_por: userContext.apoioId }),
+        ...(isEditMode ? {} : { criado_por: criadorId }),
       };
 
-      // Se for manutenção, salvar os objetos completos dos equipamentos em dados_solicitacao
-      if (data.tipo_chamado === 'manutencao' && data.equipamentos_selecionados?.length > 0) {
+      // Se for manutenção (preventiva ou corretiva), salvar os objetos completos dos equipamentos em dados_solicitacao
+      if (MAINTENANCE_TYPES.includes(data.tipo_chamado) && data.equipamentos_selecionados?.length > 0) {
           const selectedObjects = equipamentosCliente.filter(e => 
               data.equipamentos_selecionados.includes(e.id)
           );
@@ -418,7 +470,6 @@ const ChamadoForm = () => {
                                       onClick={() => handleSelectClient(cliente.id)} // Click direto e simples
                                       className="cursor-pointer"
                                       asChild={false}
-                                      // onMouseDown={(e) => e.preventDefault()} // REMOVIDO: Bloqueava clique em alguns navegadores
                                     >
                                       <Check
                                         className={cn(
@@ -513,7 +564,7 @@ const ChamadoForm = () => {
                   </div>
 
                   {/* Seleção de Equipamentos (Condicional: Manutenção) */}
-                  {selectedTipoChamado === 'manutencao' && (
+                  {MAINTENANCE_TYPES.includes(selectedTipoChamado) && (
                     <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
                       <div className="flex items-center justify-between">
                         <Label className="text-[#6B2C2C]">Selecione os Equipamentos <span className="text-red-500">*</span></Label>
@@ -621,14 +672,22 @@ const ChamadoForm = () => {
                 </CardHeader>
                 <CardContent className="grid gap-6">
                   
-                  {/* Data Limite */}
+                  {/* Data Limite (Correção de Looping: Uso de Controller) */}
                   <div className="space-y-2">
                     <Label htmlFor="data_limite">Data Limite (SLA)</Label>
-                    <Input 
-                      id="data_limite" 
-                      type="date" 
-                      className="h-11"
-                      {...form.register('data_limite')} 
+                    <Controller
+                      name="data_limite"
+                      control={form.control}
+                      render={({ field: { value, onChange, ...fieldProps } }) => (
+                        <Input 
+                          id="data_limite" 
+                          type="date" 
+                          className="h-11"
+                          value={value || ''} 
+                          onChange={(e) => onChange(e.target.value)}
+                          {...fieldProps} 
+                        />
+                      )}
                     />
                     <p className="text-xs text-muted-foreground">Data esperada para conclusão.</p>
                   </div>
@@ -662,7 +721,7 @@ const ChamadoForm = () => {
               </Card>
 
               {/* Resumo da Seleção */}
-              {selectedTipoChamado === 'manutencao' && (form.watch('equipamentos_selecionados') || []).length > 0 && (
+              {MAINTENANCE_TYPES.includes(selectedTipoChamado) && (form.watch('equipamentos_selecionados') || []).length > 0 && (
                 <Card className="bg-slate-50 border-dashed">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm text-muted-foreground">Resumo da Manutenção</CardTitle>
