@@ -4,6 +4,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { handleAuthError, logout, signIn as authSignInService } from '@/services/authService';
 import { useToast } from '@/components/ui/use-toast';
+import { queryClient } from '@/lib/queryClient'; // Import to clear cache on logout
 
 export const SupabaseAuthContext = createContext();
 
@@ -13,23 +14,27 @@ export const SupabaseAuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   
-  // Cache Key for LocalStorage
   const CACHE_KEY = 'costa_lavos_user_context';
 
-  // Initialize userContext from LocalStorage to prevent white screen/flicker on refresh
+  // Initialize userContext from LocalStorage to prevent flickering/loss on refresh
   const [userContext, setUserContext] = useState(() => {
     try {
       const cached = localStorage.getItem(CACHE_KEY);
-      return cached ? JSON.parse(cached) : null;
+      if (!cached) return null;
+      const parsed = JSON.parse(cached);
+      // Optional: check if cache is expired (e.g. > 24h)
+      // const now = new Date().getTime();
+      // if (now - parsed.lastUpdated > 1000 * 60 * 60 * 24) return null;
+      return parsed;
     } catch (error) {
       console.error("Failed to parse user context from cache", error);
       return null;
     }
   });
 
-  // Ref to avoid multiple simultaneous fetches
   const fetchingRef = useRef(false);
 
+  // Optimized fetchUserContext
   const fetchUserContext = useCallback(async (sessionUser) => {
     if (!sessionUser) {
       setUserContext(null);
@@ -37,27 +42,31 @@ export const SupabaseAuthProvider = ({ children }) => {
       return null;
     }
 
-    // Prevent duplicate fetches if one is already in progress for the same user
+    // If we already have context for this user and it's recent (< 5 min), skip fetch
+    // This prevents redundant fetches on "minimizing/restoring" tabs
+    if (userContext && userContext.id === sessionUser.id) {
+        const now = new Date().getTime();
+        const age = now - (userContext.lastUpdated || 0);
+        if (age < 1000 * 60 * 5) {
+            console.log('[AuthContext] Using cached context (fresh)');
+            return userContext;
+        }
+    }
+
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
     try {
-      console.group('[AuthContext] Loading Permissions & Scope');
-      console.log(`[AuthContext] Fetching for user email: ${sessionUser.email} (ID: ${sessionUser.id})`);
+      // console.log(`[AuthContext] Fetching for user email: ${sessionUser.email}`);
       
-      const rpcStart = performance.now();
-      // Call the updated RPC that returns merged permissions (Persona + User overrides)
       const { data, error } = await supabase.rpc('get_user_role', { p_user_id: sessionUser.id });
-      const rpcEnd = performance.now();
-      
-      console.log(`[AuthContext] RPC 'get_user_role' executed in ${(rpcEnd - rpcStart).toFixed(2)}ms`);
 
       if (error) {
         console.error('[AuthContext] RPC Error:', error);
         throw new Error(`Error fetching user role: ${error.message}`);
       }
 
-      // --- Fetch Apoio Internal Profile (CRITICAL FOR FOREIGN KEYS) ---
+      // --- Fetch Apoio Internal Profile ---
       let apoioId = null;
       let apoioProfile = null;
       try {
@@ -70,9 +79,6 @@ export const SupabaseAuthProvider = ({ children }) => {
           if (apoioData) {
               apoioProfile = apoioData;
               apoioId = apoioData.id;
-              console.log(`[AuthContext] Apoio Profile found: ${apoioId}`);
-          } else {
-              console.warn(`[AuthContext] No Apoio Profile found for Auth ID: ${sessionUser.id}`);
           }
       } catch (apoioError) {
           console.error("[AuthContext] Error fetching apoio profile:", apoioError);
@@ -82,37 +88,22 @@ export const SupabaseAuthProvider = ({ children }) => {
 
       if (data && data.length > 0) {
         const profile = data[0];
-        
-        // Normalize role for comparison
         const rawRole = profile.role || 'Sem Permissão';
         const roleLower = rawRole.toLowerCase();
-        
-        // Strict Admin Logic: Includes variations of Admin and Level 1/5
         const isAdmin = ['admin', 'nivel 1', 'nível 1', 'nivel 5', 'nível 5', 'super admin'].includes(roleLower);
-        
-        // Supervisor Logic: 'Supervisor', 'Nivel 2', 'Nivel 3', 'Gerente'
         const isSupervisor = ['supervisor', 'nivel 3', 'nível 3', 'gerente'].includes(roleLower);
-        
-        // Seller Logic
         const isSeller = ['vendedor', 'seller', 'nivel 2', 'nível 2'].includes(roleLower);
 
-        console.log(`[AuthContext] Profile Loaded. Role: ${rawRole} (Admin: ${isAdmin}, Supervisor: ${isSupervisor}, Seller: ${isSeller})`);
-        console.log(`[AuthContext] Active Permissions:`, Object.keys(profile.module_permissions || {}).filter(k => profile.module_permissions[k]));
-        
-        // --- Team Scope Fetching for Supervisors ---
         let teamMembers = [];
         if (isSupervisor && apoioId) {
             try {
-                // Get all users who have this user as their supervisor
                 const { data: teamData } = await supabase
                     .from('apoio_usuarios')
                     .select('auth_id')
                     .eq('supervisor_id', apoioId);
                 
                 if (teamData) {
-                    // Map to array of auth_ids, filtering out any nulls
                     teamMembers = teamData.map(t => t.auth_id).filter(Boolean);
-                    console.log(`[AuthContext] Team members loaded: ${teamMembers.length}`);
                 }
             } catch (scopeError) {
                 console.error("[AuthContext] Error fetching team scope:", scopeError);
@@ -125,26 +116,22 @@ export const SupabaseAuthProvider = ({ children }) => {
           fullName: sessionUser.user_metadata?.full_name || 'Usuário',
           role: rawRole,
           canAccessCrm: profile.can_access_crm || false,
-          // Vital: Use the merged permissions from the RPC
           modulePermissions: profile.module_permissions || {},
           supervisorName: profile.supervisor_name,
           sellerName: profile.seller_name,
           approvalRoles: profile.approval_roles || {},
-          // Scoping IDs
           vendorId: profile.vendor_id,
           supervisorId: profile.supervisor_id,
-          teamMembers: teamMembers, // List of auth_ids for the team
-          // Internal IDs
-          apoioId, // <--- EXPOSED ID FOR FOREIGN KEYS
+          teamMembers: teamMembers,
+          apoioId,
           apoioProfile,
-          // Helper flags
           isSeller,
           isSupervisor,
           isAdmin, 
           lastUpdated: new Date().getTime()
         };
       } else {
-        console.warn(`[AuthContext] No profile found for user ${sessionUser.id}, using defaults.`);
+        // Default Fallback
         contextData = {
             id: sessionUser.id,
             email: sessionUser.email,
@@ -157,7 +144,7 @@ export const SupabaseAuthProvider = ({ children }) => {
             vendorId: null,
             supervisorId: null,
             teamMembers: [],
-            apoioId, // Still try to provide this if found
+            apoioId,
             apoioProfile,
             isSeller: false,
             isSupervisor: false,
@@ -167,17 +154,12 @@ export const SupabaseAuthProvider = ({ children }) => {
         };
       }
 
-      console.log('[AuthContext] Final User Context:', contextData);
-      console.groupEnd();
-
-      // Update State and Cache
       setUserContext(contextData);
       localStorage.setItem(CACHE_KEY, JSON.stringify(contextData));
       return contextData;
 
     } catch (error) {
       console.error("[AuthContext] Fatal error in fetchUserContext:", error.message);
-      console.groupEnd();
       if (!userContext) {
           handleAuthError(error);
           setUserContext(null);
@@ -192,12 +174,13 @@ export const SupabaseAuthProvider = ({ children }) => {
   const forceRoleRefetch = useCallback(async () => {
     if (user) {
       setLoading(true);
+      // Force fetch by clearing ref check conceptually
+      fetchingRef.current = false;
       await fetchUserContext(user);
       setLoading(false);
     }
   }, [user, fetchUserContext]);
 
-  // Initial Session Check
   useEffect(() => {
     let mounted = true;
 
@@ -210,7 +193,6 @@ export const SupabaseAuthProvider = ({ children }) => {
           setUser(initialSession?.user ?? null);
 
           if (initialSession?.user) {
-            // Always fetch fresh context on app init to ensure roles are up to date
             await fetchUserContext(initialSession.user);
           } else {
             setUserContext(null);
@@ -227,20 +209,30 @@ export const SupabaseAuthProvider = ({ children }) => {
     initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
-        if (mounted) {
-          setSession(newSession);
-          const sessionUser = newSession?.user ?? null;
-          setUser(sessionUser);
-          
-          if (sessionUser) {
-             await fetchUserContext(sessionUser);
-          } else {
+      async (event, newSession) => {
+        if (!mounted) return;
+
+        // Ignore TOKEN_REFRESHED to prevent unnecessary state updates/refetches
+        if (event === 'TOKEN_REFRESHED') {
+            // console.log('Token refreshed silently');
+            setSession(newSession); // Update session tokens only
+            return;
+        }
+
+        setSession(newSession);
+        const sessionUser = newSession?.user ?? null;
+        setUser(sessionUser);
+        
+        if (sessionUser) {
+             if (event === 'SIGNED_IN' || !userContext) {
+                 await fetchUserContext(sessionUser);
+             }
+        } else if (event === 'SIGNED_OUT') {
             setUserContext(null);
             localStorage.removeItem(CACHE_KEY);
-          }
-          setLoading(false);
+            queryClient.clear(); // Clear all React Query cache on logout
         }
+        setLoading(false);
       }
     );
 
@@ -260,6 +252,7 @@ export const SupabaseAuthProvider = ({ children }) => {
     signOut: async () => {
         localStorage.removeItem(CACHE_KEY);
         setUserContext(null);
+        queryClient.clear();
         await logout();
     },
     signIn: async (email, password) => {
@@ -276,6 +269,8 @@ export const SupabaseAuthProvider = ({ children }) => {
     forceRoleRefetch,
   };
 
+  // Prevent white screen during initial loading if we have no session OR no context
+  // But if we have persisted context, show app immediately while checking session in bg
   if (loading && !session && !userContext) {
     return <div className="flex h-screen w-full items-center justify-center bg-background"><LoadingSpinner message="Inicializando sistema..." /></div>;
   }

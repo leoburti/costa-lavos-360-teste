@@ -1,8 +1,19 @@
 
 import { clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { format, startOfToday, endOfToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, subYears } from "date-fns"
-import { ptBR } from "date-fns/locale"
+import { 
+  startOfDay, 
+  endOfDay, 
+  startOfWeek, 
+  endOfWeek, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfYear, 
+  endOfYear, 
+  subDays, 
+  subMonths, 
+  subYears 
+} from "date-fns"
 
 export function cn(...inputs) {
   return twMerge(clsx(inputs))
@@ -18,70 +29,68 @@ export const formatCurrency = (value) => {
   }).format(amount);
 };
 
-export const formatDate = (date, formatStr = 'dd/MM/yyyy') => {
-  if (!date) return '-';
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return '-';
-    return format(d, formatStr, { locale: ptBR });
-  } catch (error) {
-    console.error('Error formatting date:', error);
-    return '-';
-  }
-};
-
-export const formatPercentage = (value) => {
-  const amount = Number(value);
-  if (isNaN(amount)) return '0%';
-  
-  // Assuming value is percent (e.g. 10 for 10%)
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'percent',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount / 100);
-};
-
 export const getDateRange = (preset) => {
   const today = new Date();
+  
   switch (preset) {
     case 'today':
-      return { from: startOfToday(), to: endOfToday() };
+      return {
+        from: startOfDay(today),
+        to: endOfDay(today)
+      };
+    case 'yesterday':
+      const yesterday = subDays(today, 1);
+      return {
+        from: startOfDay(yesterday),
+        to: endOfDay(yesterday)
+      };
     case 'this_week':
-      return { from: startOfWeek(today, { locale: ptBR }), to: endOfWeek(today, { locale: ptBR }) };
+      return {
+        from: startOfWeek(today, { weekStartsOn: 0 }),
+        to: endOfWeek(today, { weekStartsOn: 0 })
+      };
+    case 'last_week':
+      const lastWeek = subDays(today, 7);
+      return {
+        from: startOfWeek(lastWeek, { weekStartsOn: 0 }),
+        to: endOfWeek(lastWeek, { weekStartsOn: 0 })
+      };
     case 'this_month':
-      return { from: startOfMonth(today), to: endOfMonth(today) };
-    case 'last_month': {
+      return {
+        from: startOfMonth(today),
+        to: endOfMonth(today)
+      };
+    case 'last_month':
       const lastMonth = subMonths(today, 1);
-      return { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) };
-    }
+      return {
+        from: startOfMonth(lastMonth),
+        to: endOfMonth(lastMonth)
+      };
     case 'this_year':
-      return { from: startOfYear(today), to: endOfYear(today) };
-    case 'last_year': {
+      return {
+        from: startOfYear(today),
+        to: endOfYear(today)
+      };
+    case 'last_year':
       const lastYear = subYears(today, 1);
-      return { from: startOfYear(lastYear), to: endOfYear(lastYear) };
-    }
+      return {
+        from: startOfYear(lastYear),
+        to: endOfYear(lastYear)
+      };
+    case 'last_30_days':
+      return {
+        from: subDays(today, 30),
+        to: endOfDay(today)
+      };
+    case 'last_90_days':
+      return {
+        from: subDays(today, 90),
+        to: endOfDay(today)
+      };
     default:
-      return { from: startOfMonth(today), to: endOfMonth(today) };
+      return {
+        from: startOfMonth(today),
+        to: endOfMonth(today)
+      };
   }
-};
-
-export const sortByProperty = (key, direction) => {
-  return (a, b) => {
-    if (!a.hasOwnProperty(key) || !b.hasOwnProperty(key)) {
-      // property not found on either object
-      return 0;
-    }
-
-    const varA = typeof a[key] === 'string' ? a[key].toUpperCase() : a[key];
-    const varB = typeof b[key] === 'string' ? b[key].toUpperCase() : b[key];
-
-    let comparison = 0;
-    if (varA > varB) {
-      comparison = 1;
-    } else if (varA < varB) {
-      comparison = -1;
-    }
-    return direction === 'descending' ? comparison * -1 : comparison;
-  };
 };

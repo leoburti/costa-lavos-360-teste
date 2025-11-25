@@ -22,6 +22,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, ArrowLeft, Save, Wrench, Check, ChevronsUpDown, Settings, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useFormStatePersistence } from '@/hooks/useFormStatePersistence';
+import { PersistenceStatus } from '@/components/PersistenceStatus';
 
 // Constants for maintenance types that require equipment selection
 const MAINTENANCE_TYPES = ['manutencao', 'preventiva'];
@@ -38,7 +40,6 @@ const chamadoSchema = z.object({
   status: z.string().default('aberto'),
   equipamentos_selecionados: z.array(z.string()).optional(),
 }).refine((data) => {
-  // Require equipment for both corrective and preventive maintenance
   if (MAINTENANCE_TYPES.includes(data.tipo_chamado)) {
     return data.equipamentos_selecionados && data.equipamentos_selecionados.length > 0;
   }
@@ -62,13 +63,10 @@ const ChamadoForm = () => {
   const [loadingEquipamentos, setLoadingEquipamentos] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Estados para o Combobox de Cliente
   const [openCliente, setOpenCliente] = useState(false);
   const [searchCliente, setSearchCliente] = useState("");
 
-  const form = useForm({
-    resolver: zodResolver(chamadoSchema),
-    defaultValues: {
+  const defaultValues = {
       cliente_id: '',
       tipo_chamado: '',
       motivo: '',
@@ -78,47 +76,56 @@ const ChamadoForm = () => {
       profissional_sugerido_id: '',
       observacoes: '',
       equipamentos_selecionados: [],
-    }
+  };
+
+  const form = useForm({
+    resolver: zodResolver(chamadoSchema),
+    defaultValues
   });
+
+  const { handleBulkChange, status, lastSaved, clearDraft } = useFormStatePersistence(
+      `chamado_form_${id || 'new'}`,
+      defaultValues,
+      (restored) => {
+          if (restored) form.reset(restored);
+      }
+  );
+
+  // Watch form changes for persistence
+  useEffect(() => {
+      const subscription = form.watch((value) => {
+          handleBulkChange(value);
+      });
+      return () => subscription.unsubscribe();
+  }, [form.watch, handleBulkChange]);
 
   const selectedClienteId = form.watch('cliente_id');
   const selectedTipoChamado = form.watch('tipo_chamado');
 
-  // Função dedicada para selecionar cliente e limpar estados
   const handleSelectClient = useCallback((clienteId) => {
-    console.log("🔍 [DEBUG] Selecionando cliente (handleSelectClient):", clienteId);
-    
-    // Atualiza o valor do formulário
     form.setValue("cliente_id", clienteId, { 
       shouldValidate: true,
       shouldDirty: true 
     });
-    
-    // Fecha o dropdown
     setOpenCliente(false);
-    
-    // Limpa a busca para que a lista volte ao normal na próxima vez
     setSearchCliente("");
   }, [form]);
 
-  // Função para limpar seleção
   const clearSelection = useCallback((e) => {
     e.stopPropagation();
     form.setValue("cliente_id", "", { shouldValidate: true });
     setEquipamentosCliente([]);
   }, [form]);
 
-  // Filtragem de clientes em tempo real
   const filteredClientes = useMemo(() => {
-    if (!searchCliente) return clientes.slice(0, 50); // Limita exibição inicial para performance
-    
+    if (!searchCliente) return clientes.slice(0, 50); 
     const lowerSearch = searchCliente.toLowerCase().trim();
     return clientes.filter((cliente) => 
       (cliente.nome_fantasia?.toLowerCase() || '').includes(lowerSearch) ||
       (cliente.razao_social?.toLowerCase() || '').includes(lowerSearch) ||
       (cliente.cnpj || '').includes(lowerSearch) ||
       (cliente.id || '').toLowerCase().includes(lowerSearch)
-    ).slice(0, 50); // Mantém limite para renderização rápida
+    ).slice(0, 50); 
   }, [clientes, searchCliente]);
 
   const selectedClienteLabel = useMemo(() => {
@@ -126,12 +133,8 @@ const ChamadoForm = () => {
     return cliente ? (cliente.nome_fantasia || cliente.razao_social) : "Selecione o cliente...";
   }, [clientes, selectedClienteId]);
 
-  // Verifica se o cliente tem equipamento (para mostrar ícone)
-  const hasEquipment = (cliente) => {
-    return !!cliente.apto_comodato;
-  };
+  const hasEquipment = (cliente) => !!cliente.apto_comodato;
 
-  // Carregar equipamentos quando o cliente muda ou tipo é manutenção
   useEffect(() => {
     const fetchEquipamentos = async () => {
       if (!selectedClienteId) {
@@ -139,7 +142,6 @@ const ChamadoForm = () => {
         return;
       }
 
-      // Se o tipo for manutenção (corretiva ou preventiva), carrega equipamentos
       if (MAINTENANCE_TYPES.includes(selectedTipoChamado)) {
         try {
           setLoadingEquipamentos(true);
@@ -168,7 +170,6 @@ const ChamadoForm = () => {
       try {
         setLoadingData(true);
         
-        // 1. Carregar Clientes e Profissionais em paralelo
         const [clientesData, profissionaisData] = await Promise.all([
           getClientesComodato('Todos'),
           getProfissionaisParaSelect()
@@ -177,7 +178,6 @@ const ChamadoForm = () => {
         setClientes(clientesData || []);
         setProfissionais(profissionaisData || []);
 
-        // 2. Se for edição, carregar dados do chamado
         if (isEditMode) {
           const { data: chamado, error } = await supabase
             .from('apoio_chamados')
@@ -193,11 +193,9 @@ const ChamadoForm = () => {
           if (chamado) {
             let equipamentosIds = [];
 
-            // Prioridade: Ler de dados_solicitacao (JSONB) para chamados baseados em bd_cl_inv
             if (chamado.dados_solicitacao?.equipamentos) {
                 equipamentosIds = chamado.dados_solicitacao.equipamentos.map(e => e.numero_serie || e.id);
             } 
-            // Fallback: Ler da tabela relacional (legado ou equipamentos locais)
             else if (chamado.equipamentos && chamado.equipamentos.length > 0) {
                 equipamentosIds = chamado.equipamentos.map(e => e.equipamento_id);
             }
@@ -214,7 +212,6 @@ const ChamadoForm = () => {
               equipamentos_selecionados: equipamentosIds,
             });
             
-            // Forçar carregamento dos equipamentos se for manutenção na edição
             if (MAINTENANCE_TYPES.includes(chamado.tipo_chamado)) {
                const equipData = await getEquipamentosComodatoByCliente(chamado.cliente_id);
                setEquipamentosCliente(equipData || []);
@@ -237,68 +234,36 @@ const ChamadoForm = () => {
   }, [isEditMode, id, form, toast]);
 
   const onSubmit = async (data) => {
-    // === Validação e Fallback de Perfil (Erro 1) ===
     let criadorId = userContext?.apoioId;
 
     if (!criadorId) {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                console.log("🔍 [Recovery] Perfil não encontrado no contexto. Tentando buscar no banco...");
+                const { data: p1 } = await supabase.from('apoio_usuarios').select('id').eq('auth_id', user.id).maybeSingle();
+                if (p1) criadorId = p1.id;
                 
-                // 1. Tenta buscar por auth_id
-                const { data: p1 } = await supabase
-                    .from('apoio_usuarios')
-                    .select('id')
-                    .eq('auth_id', user.id)
-                    .maybeSingle();
-                
-                if (p1) {
-                    criadorId = p1.id;
-                    console.log("✅ [Recovery] Perfil encontrado por Auth ID:", criadorId);
-                }
-                
-                // 2. Tenta buscar por email (Fallback)
                 if (!criadorId && user.email) {
-                    console.log("⚠️ [Recovery] Perfil não encontrado por Auth ID. Tentando por E-mail...");
-                    const { data: p2 } = await supabase
-                        .from('apoio_usuarios')
-                        .select('id')
-                        .eq('email', user.email)
-                        .maybeSingle();
-                    
+                    const { data: p2 } = await supabase.from('apoio_usuarios').select('id').eq('email', user.email).maybeSingle();
                     if (p2) {
                         criadorId = p2.id;
-                        console.log("✅ [Recovery] Perfil encontrado por E-mail. Vinculando Auth ID...");
-                        // Auto-fix: Vincula o auth_id para o futuro
                         await supabase.from('apoio_usuarios').update({ auth_id: user.id }).eq('id', p2.id);
                     }
                 }
 
-                // 3. Auto-provisionamento (Último recurso)
                 if (!criadorId) {
-                    console.log("⚠️ [Recovery] Nenhum perfil encontrado. Criando perfil básico...");
-                    const { data: newProfile, error: createError } = await supabase.from('apoio_usuarios').insert({
+                    const { data: newProfile } = await supabase.from('apoio_usuarios').insert({
                         nome: user.user_metadata?.full_name || user.email.split('@')[0],
                         email: user.email,
                         auth_id: user.id,
                         status: 'ativo',
                         nivel_acesso: 1,
-                        perfil_id: '77777777-7777-7777-7777-777777777777' // ID genérico ou null se não houver
                     }).select().single();
-                    
-                    if (newProfile) {
-                        criadorId = newProfile.id;
-                        console.log("✅ [Recovery] Novo perfil criado:", criadorId);
-                        // Atualiza o contexto para evitar re-checks
-                        if (forceRoleRefetch) forceRoleRefetch();
-                    } else {
-                        console.error("❌ [Recovery] Falha ao criar perfil:", createError);
-                    }
+                    if (newProfile) criadorId = newProfile.id;
                 }
             }
         } catch (err) {
-            console.error("❌ [Recovery] Erro crítico na recuperação de perfil:", err);
+            console.error("Erro crítico na recuperação de perfil:", err);
         }
     }
 
@@ -325,13 +290,11 @@ const ChamadoForm = () => {
         ...(isEditMode ? {} : { criado_por: criadorId }),
       };
 
-      // Se for manutenção (preventiva ou corretiva), salvar os objetos completos dos equipamentos em dados_solicitacao
       if (MAINTENANCE_TYPES.includes(data.tipo_chamado) && data.equipamentos_selecionados?.length > 0) {
           const selectedObjects = equipamentosCliente.filter(e => 
               data.equipamentos_selecionados.includes(e.id)
           );
           
-          // Preservar outros dados_solicitacao se for update
           if (isEditMode) {
               const { data: currentData } = await supabase.from('apoio_chamados').select('dados_solicitacao').eq('id', id).single();
               payload.dados_solicitacao = { ...(currentData?.dados_solicitacao || {}), equipamentos: selectedObjects };
@@ -340,9 +303,7 @@ const ChamadoForm = () => {
           }
       }
 
-      let chamadoId = id;
       let error;
-      
       if (isEditMode) {
         const { error: updateError } = await supabase
           .from('apoio_chamados')
@@ -350,13 +311,11 @@ const ChamadoForm = () => {
           .eq('id', id);
         error = updateError;
       } else {
-        const { data: newChamado, error: insertError } = await supabase
+        const { error: insertError } = await supabase
           .from('apoio_chamados')
           .insert([payload])
           .select()
           .single();
-        
-        if (newChamado) chamadoId = newChamado.id;
         error = insertError;
       }
 
@@ -368,6 +327,7 @@ const ChamadoForm = () => {
         className: "bg-green-50 border-green-200 text-green-800",
       });
 
+      clearDraft();
       navigate('/admin/apoio/chamados/todos');
 
     } catch (error) {
@@ -393,7 +353,11 @@ const ChamadoForm = () => {
 
   return (
     <TooltipProvider>
-      <div className="max-w-4xl mx-auto p-6 pb-24">
+      <div className="max-w-4xl mx-auto p-6 pb-24 relative">
+        <div className="absolute top-6 right-6">
+            <PersistenceStatus status={status} lastSaved={lastSaved} />
+        </div>
+
         <div className="flex items-center gap-4 mb-6">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-5 w-5" />
@@ -465,9 +429,9 @@ const ChamadoForm = () => {
                                   {filteredClientes.map((cliente) => (
                                     <CommandItem
                                       key={cliente.id}
-                                      value={String(cliente.id)} // Garante unicidade para o cmdk
+                                      value={String(cliente.id)} 
                                       onSelect={() => handleSelectClient(cliente.id)}
-                                      onClick={() => handleSelectClient(cliente.id)} // Click direto e simples
+                                      onClick={() => handleSelectClient(cliente.id)} 
                                       className="cursor-pointer"
                                       asChild={false}
                                     >
@@ -513,7 +477,6 @@ const ChamadoForm = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Tipo */}
                     <div className="space-y-2">
                       <Label htmlFor="tipo_chamado">Tipo de Serviço <span className="text-red-500">*</span></Label>
                       <Controller
@@ -540,7 +503,6 @@ const ChamadoForm = () => {
                       )}
                     </div>
 
-                    {/* Prioridade */}
                     <div className="space-y-2">
                       <Label htmlFor="prioridade">Prioridade <span className="text-red-500">*</span></Label>
                       <Controller
@@ -563,7 +525,6 @@ const ChamadoForm = () => {
                     </div>
                   </div>
 
-                  {/* Seleção de Equipamentos (Condicional: Manutenção) */}
                   {MAINTENANCE_TYPES.includes(selectedTipoChamado) && (
                     <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
                       <div className="flex items-center justify-between">
@@ -635,7 +596,6 @@ const ChamadoForm = () => {
                     </div>
                   )}
 
-                  {/* Motivo */}
                   <div className="space-y-2">
                     <Label htmlFor="motivo">Motivo / Assunto <span className="text-red-500">*</span></Label>
                     <Input 
@@ -649,7 +609,6 @@ const ChamadoForm = () => {
                     )}
                   </div>
 
-                  {/* Observações */}
                   <div className="space-y-2">
                     <Label htmlFor="observacoes">Observações Detalhadas</Label>
                     <Textarea 
@@ -664,15 +623,12 @@ const ChamadoForm = () => {
               </Card>
             </div>
 
-            {/* Coluna Direita - Configurações Adicionais */}
             <div className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Agendamento e Atribuição</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-6">
-                  
-                  {/* Data Limite (Correção de Looping: Uso de Controller) */}
                   <div className="space-y-2">
                     <Label htmlFor="data_limite">Data Limite (SLA)</Label>
                     <Controller
@@ -692,7 +648,6 @@ const ChamadoForm = () => {
                     <p className="text-xs text-muted-foreground">Data esperada para conclusão.</p>
                   </div>
 
-                  {/* Profissional Sugerido */}
                   <div className="space-y-2">
                     <Label htmlFor="profissional_sugerido_id">Técnico Responsável</Label>
                     <Controller
@@ -720,7 +675,6 @@ const ChamadoForm = () => {
                 </CardContent>
               </Card>
 
-              {/* Resumo da Seleção */}
               {MAINTENANCE_TYPES.includes(selectedTipoChamado) && (form.watch('equipamentos_selecionados') || []).length > 0 && (
                 <Card className="bg-slate-50 border-dashed">
                   <CardHeader className="pb-2">
@@ -737,7 +691,6 @@ const ChamadoForm = () => {
                 </Card>
               )}
 
-              {/* Actions */}
               <div className="flex flex-col gap-3 pt-4">
                 <Button type="submit" className="w-full h-12 bg-[#6B2C2C] hover:bg-[#6B2C2C]/90 text-white font-semibold text-base shadow-md transition-all hover:translate-y-[-1px]" disabled={submitting}>
                   {submitting ? (

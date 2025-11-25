@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
@@ -8,6 +9,7 @@ import TreeMapChart from '@/components/TreeMapChart';
 import { useFilters } from '@/contexts/FilterContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
+import { useEdgeFunctionQuery } from '@/hooks/useEdgeFunctionQuery';
 import {
   Accordion,
   AccordionContent,
@@ -28,7 +30,7 @@ const ProductBasketCard = ({ data, loading }) => {
       <div className="flex flex-col items-center justify-center h-full text-center p-8 min-h-[400px]">
         <Hourglass size={48} className="text-primary animate-spin mb-4" />
         <p className="text-lg font-semibold text-foreground">Análise em Andamento</p>
-        <p className="text-muted-foreground mt-2">Calculando as correlações de produtos. Isso pode levar alguns minutos.</p>
+        <p className="text-muted-foreground mt-2">Calculando as correlações de produtos via Edge Function.</p>
       </div>
     );
   }
@@ -98,31 +100,11 @@ const ProductBasketCard = ({ data, loading }) => {
 
 const AnaliticoProduto = () => {
   const { filters } = useFilters();
-  const [loading, setLoading] = useState(true);
   const [treemapData, setTreemapData] = useState([]);
-  const [basketData, setBasketData] = useState([]);
   const { toast } = useToast();
 
-  const aiContextData = useMemo(() => {
-    if (!treemapData || !basketData) return null;
-    return {
-      topProducts: treemapData.slice(0, 10).map(p => ({ name: p.name, size: p.size })),
-      productCorrelations: basketData.slice(0, 5).map(p => ({
-        product: p.main_product,
-        correlations: p.correlations?.slice(0, 2)
-      }))
-    };
-  }, [treemapData, basketData]);
-
-  const { insight, loading: loadingAI, retry: retryAI } = useAIInsight('product_mix_analysis', aiContextData, filters);
-
-  const fetchAllData = useCallback(async () => {
-    // Use formatted strings from FilterContext
-    if (!filters.startDate || !filters.endDate) return;
-    setLoading(true);
-    
-    const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-    const commonPayload = {
+  const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
+  const commonPayload = {
         p_start_date: filters.startDate,
         p_end_date: filters.endDate,
         p_exclude_employees: filters.excludeEmployees,
@@ -132,37 +114,61 @@ const AnaliticoProduto = () => {
         p_regions: filters.regions,
         p_clients: selectedClients,
         p_search_term: filters.searchTerm,
+  };
+
+  const { data: basketData, isLoading: basketLoading, isError: basketError } = useEdgeFunctionQuery(
+    'product-basket-analysis',
+    commonPayload,
+    {
+        enabled: !!filters.startDate && !!filters.endDate,
+        staleTime: 1000 * 60 * 10, // 10 minutes cache for heavy analysis
+        retry: 1
+    }
+  );
+
+  useEffect(() => {
+      if (basketError) {
+          console.error("Basket Analysis Error:", basketError);
+          toast({
+            variant: "destructive",
+            title: "Erro na Análise de Cesta",
+            description: "A análise demorou muito para responder. Tente reduzir o período de datas ou aplicar mais filtros para diminuir o volume de dados."
+          });
+      }
+  }, [basketError, toast]);
+
+  const aiContextData = useMemo(() => {
+    if (!treemapData || !basketData) return null;
+    return {
+      topProducts: treemapData.slice(0, 10).map(p => ({ name: p.name, size: p.size })),
+      productCorrelations: Array.isArray(basketData) ? basketData.slice(0, 5).map(p => ({
+        product: p.main_product,
+        correlations: p.correlations?.slice(0, 2)
+      })) : []
     };
+  }, [treemapData, basketData]);
 
-    try {
-      const [treemapResult, basketResult] = await Promise.all([
-        supabase.rpc('get_treemap_data', { ...commonPayload, p_analysis_mode: 'product', p_show_defined_groups_only: false }),
-        supabase.rpc('get_product_basket_analysis_v2', { ...commonPayload })
-      ]);
-      
-      if (treemapResult.error) throw new Error(`Treemap Error: ${treemapResult.error.message}`);
-      setTreemapData(treemapResult.data);
+  const { insight, loading: loadingAI, retry: retryAI } = useAIInsight('product_mix_analysis', aiContextData, filters);
 
-      if (basketResult.error) throw new Error(`Basket Analysis Error: ${basketResult.error.message}`);
-      setBasketData(basketResult.data);
-
-    } catch (error) {
-      console.error("Error fetching product data:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro na Análise de Produtos",
-        description: error.message,
-      });
-      setTreemapData([]);
-      setBasketData([]);
-    } finally {
-      setLoading(false);
+  const fetchTreemap = useCallback(async () => {
+    if (!filters.startDate || !filters.endDate) return;
+    
+    const { data, error } = await supabase.rpc('get_treemap_data', { ...commonPayload, p_analysis_mode: 'product', p_show_defined_groups_only: false });
+    if (error) {
+        console.error("Treemap Error:", error);
+        toast({
+            variant: "destructive",
+            title: "Erro",
+            description: "Falha ao carregar mapa de produtos."
+        });
+    } else {
+        setTreemapData(data || []);
     }
   }, [filters, toast]);
     
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    fetchTreemap();
+  }, [fetchTreemap]);
 
   return (
     <>
@@ -177,31 +183,24 @@ const AnaliticoProduto = () => {
           <p className="text-muted-foreground mt-1">Performance por produto e análise de cesta de compras.</p>
         </div>
         
-        {loading ? (
-            <div className="flex items-center justify-center p-8 bg-card rounded-lg border">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="ml-4 text-muted-foreground">Carregando análises...</p>
-            </div>
-        ) : (
-            <div className="flex flex-col gap-8">
-                <AIInsight insight={insight} loading={loadingAI} onRegenerate={retryAI} />
-                
-                <ChartCard title="Mix de Produtos por Vendas">
-                    {treemapData && treemapData.length > 0 ? (
-                        <TreeMapChart data={treemapData} />
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-                            <Package size={48} className="text-muted-foreground mb-4" />
-                            <p className="text-muted-foreground">Nenhum dado de produto para exibir.</p>
-                        </div>
-                    )}
-                </ChartCard>
+        <div className="flex flex-col gap-8">
+            <AIInsight insight={insight} loading={loadingAI} onRegenerate={retryAI} />
+            
+            <ChartCard title="Mix de Produtos por Vendas">
+                {treemapData && treemapData.length > 0 ? (
+                    <TreeMapChart data={treemapData} />
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+                        <Package size={48} className="text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground">Nenhum dado de produto para exibir.</p>
+                    </div>
+                )}
+            </ChartCard>
 
-                <ChartCard title="Cesta de Produtos" childClassName="p-2 max-h-[600px] overflow-y-auto">
-                    <ProductBasketCard data={basketData} loading={loading} />
-                </ChartCard>
-            </div>
-        )}
+            <ChartCard title="Cesta de Produtos (Edge Analysis)" childClassName="p-2 max-h-[600px] overflow-y-auto">
+                <ProductBasketCard data={basketData} loading={basketLoading} />
+            </ChartCard>
+        </div>
       </div>
     </>
   );

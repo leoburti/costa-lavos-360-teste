@@ -16,6 +16,8 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import PageSkeleton from '@/components/PageSkeleton';
 import { prefetchCriticalRoutes } from '@/utils/performance';
 import UnauthorizedPage from '@/pages/UnauthorizedPage';
+import OfflineIndicator from '@/components/OfflineIndicator'; // Added
+import { useScrollRestoration } from '@/hooks/useScrollRestoration'; // Added
 
 // --- Optimized Lazy Imports ---
 
@@ -184,6 +186,254 @@ const FullScreenLoader = memo(() => (
   </div>
 ));
 
+// Main App Content Wrapper to access hooks that require Contexts
+const AppContent = () => {
+  useScrollRestoration();
+
+  return (
+    <>
+      <OfflineIndicator />
+      <Suspense fallback={<FullScreenLoader />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/confirm" element={<AuthConfirmation />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
+          
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+          <Route path="/" element={
+            <AuthGuard>
+              <LayoutOverride>
+                <Suspense fallback={<PageSkeleton />}>
+                  <Outlet />
+                </Suspense>
+              </LayoutOverride>
+            </AuthGuard>
+          }>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<ModuleGuard moduleId="dashboard_comercial"><DashboardPage /></ModuleGuard>} />
+            <Route path="ai-chat" element={<ModuleGuard moduleId="senhor_lavos"><AIChat /></ModuleGuard>} />
+            
+            {/* Analytics */}
+            <Route path="analitico-supervisor" element={<ModuleGuard moduleId="analytics"><AnaliticoSupervisor /></ModuleGuard>} />
+            <Route path="analitico-vendedor" element={<ModuleGuard moduleId="analytics"><AnaliticoVendedor /></ModuleGuard>} />
+            <Route path="analitico-regiao" element={<ModuleGuard moduleId="analytics"><AnaliticoRegiao /></ModuleGuard>} />
+            <Route path="analitico-grupo-clientes" element={<ModuleGuard moduleId="analytics"><AnaliticoGrupoClientes /></ModuleGuard>} />
+            <Route path="analitico-produto" element={<ModuleGuard moduleId="analytics"><AnaliticoProduto /></ModuleGuard>} />
+            <Route path="visao-360-cliente" element={<ModuleGuard moduleId="analytics"><Visao360Cliente /></ModuleGuard>} />
+            
+            {/* Commercial Analysis */}
+            <Route path="analitico-vendas-diarias" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoVendasDiarias /></ModuleGuard>} />
+            <Route path="analise-churn" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseChurn /></ModuleGuard>} />
+            <Route path="curva-abc" element={<ModuleGuard moduleId="commercial-analysis"><CurvaABC /></ModuleGuard>} />
+            <Route path="calculo-rfm" element={<ModuleGuard moduleId="commercial-analysis"><CalculoRFM /></ModuleGuard>} />
+            <Route path="tendencia-vendas" element={<ModuleGuard moduleId="commercial-analysis"><TendenciaVendas /></ModuleGuard>} />
+            <Route path="analise-valor-unitario" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseValorUnitario /></ModuleGuard>} />
+            <Route path="baixo-desempenho" element={<ModuleGuard moduleId="commercial-analysis"><BaixoDesempenho /></ModuleGuard>} />
+            <Route path="analise-fidelidade" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseFidelidade /></ModuleGuard>} />
+            <Route path="produtos-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><ProdutosBonificados /></ModuleGuard>} />
+            <Route path="performance-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><PerformanceBonificados /></ModuleGuard>} />
+            <Route path="analitico-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoBonificados /></ModuleGuard>} />
+            
+            {/* Equipment Analysis */}
+            <Route path="movimentacao-equipamentos" element={<ModuleGuard moduleId="commercial-analysis"><MovimentacaoEquipamentos /></ModuleGuard>} />
+            <Route path="analitico-equipamentos-cliente" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoEquipamentosCliente /></ModuleGuard>} />
+            <Route path="analitico-equipamento" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoEquipamento /></ModuleGuard>} />
+            <Route path="equipamentos-em-campo" element={<ModuleGuard moduleId="commercial-analysis"><EquipamentosEmCampo /></ModuleGuard>} />
+
+            {/* Managerial Analysis */}
+            <Route path="raio-x-supervisor" element={<ModuleGuard moduleId="managerial-analysis"><RaioXSupervisor /></ModuleGuard>} />
+            <Route path="raio-x-vendedor" element={<ModuleGuard moduleId="managerial-analysis"><RaioXVendedor /></ModuleGuard>} />
+
+            {/* Bonificações */}
+            <Route path="bonificacoes" element={<ModuleGuard moduleId="bonificacoes_module"><BonificacoesPage /></ModuleGuard>} />
+            
+            {/* Tarefas */}
+            <Route path="tarefas" element={<ModuleGuard moduleId="tarefas"><Tarefas /></ModuleGuard>} />
+            
+            {/* Manutenção - Redirect to new location */}
+            <Route path="manutencao" element={<Navigate to="/admin/apoio/manutencao-equipamentos" replace />} />
+
+            {/* Delivery Management */}
+            <Route path="admin/delivery-management" element={<ModuleGuard moduleId="delivery"><DeliveryDashboard /></ModuleGuard>} />
+            <Route path="admin/delivery-management/deliveries" element={<ModuleGuard moduleId="delivery"><Deliveries /></ModuleGuard>} />
+            <Route path="admin/delivery-management/drivers" element={<ModuleGuard moduleId="delivery"><Drivers /></ModuleGuard>} />
+            <Route path="admin/delivery-management/route-optimization" element={<ModuleGuard moduleId="delivery"><RouteOptimization /></ModuleGuard>} />
+            <Route path="admin/delivery-management/customers" element={<ModuleGuard moduleId="delivery"><Customers /></ModuleGuard>} />
+            <Route path="admin/delivery-management/disputes" element={<ModuleGuard moduleId="delivery"><Disputes /></ModuleGuard>} />
+            <Route path="admin/delivery-management/reports" element={<ModuleGuard moduleId="delivery"><DeliveryReports /></ModuleGuard>} />
+            <Route path="admin/delivery-management/delivery-receipts" element={<ModuleGuard moduleId="delivery"><DeliveryReceipts /></ModuleGuard>} />
+            <Route path="admin/delivery-management/settings" element={<ModuleGuard moduleId="delivery"><DeliverySettings /></ModuleGuard>} />
+
+            {/* CRM */}
+            <Route path="crm/pipeline" element={<ModuleGuard moduleId="crm"><Pipeline /></ModuleGuard>} />
+            <Route path="crm/contacts" element={<ModuleGuard moduleId="crm"><CrmContacts /></ModuleGuard>} />
+            <Route path="crm/comodato-contracts" element={<ModuleGuard moduleId="crm"><ComodatoContracts /></ModuleGuard>} />
+            <Route path="crm/automations" element={<ModuleGuard moduleId="crm"><CrmAutomations /></ModuleGuard>} />
+            <Route path="crm/reports" element={<ModuleGuard moduleId="crm"><CrmReports /></ModuleGuard>} />
+            <Route path="crm/team" element={<ModuleGuard moduleId="crm"><CrmTeam /></ModuleGuard>} />
+            <Route path="crm/relationship" element={<ModuleGuard moduleId="crm"><CommercialRelationship /></ModuleGuard>} />
+
+            {/* Gestão de Equipe (REDIRECT OLD ROUTES) */}
+            <Route path="admin/gestao-equipe/usuarios-acesso" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
+
+            {/* Apoio */}
+            <Route path="admin/apoio" element={<ModuleGuard moduleId="apoio"><ApoioLayout /></ModuleGuard>}>
+              <Route index element={<Navigate to="comodato/clientes" replace />} />
+              
+              <Route path="comodato" element={<ComodatoLayout />}>
+                <Route index element={<Navigate to="clientes" replace />} />
+                <Route path="clientes" element={<ClientesComodatoPage />} />
+                <Route path="clientes/novo" element={<ClienteComodatoForm />} />
+                <Route path="clientes/:id/editar" element={<ClienteComodatoForm />} />
+                <Route path="clientes/:id/estoque" element={<EstoqueClientePage />} />
+                <Route path="modelos" element={<ModelosEquipamentosPage />} />
+                <Route path="modelos/novo" element={<ModeloEquipamentoForm />} />
+                <Route path="modelos/:id/editar" element={<ModeloEquipamentoForm />} />
+                <Route path="equipamentos/novo" element={<EquipamentoComodatoForm />} />
+                <Route path="equipamentos/:id/editar" element={<EquipamentoComodatoForm />} />
+                <Route path="entrega" element={<EntregaForm />} />
+                <Route path="troca" element={<TrocaForm />} />
+                <Route path="retirada" element={<RetiradaForm />} />
+                {/* Fallback routes for list/details to avoid 404 */}
+                <Route path="lista" element={<Navigate to="clientes" replace />} />
+                <Route path="detalhes" element={<Navigate to="clientes" replace />} />
+              </Route>
+              
+              <Route path="chamados" element={<ChamadosLayout />}>
+                  <Route index element={<Navigate to="todos" replace />} />
+                  <Route path="todos" element={<ChamadosTodosPage />} />
+                  {/* Sub-routes for status filters */}
+                  <Route path="abertos" element={<Navigate to="todos?status=aberto" replace />} />
+                  <Route path="em-andamento" element={<Navigate to="todos?status=em_andamento" replace />} />
+                  <Route path="em-progresso" element={<Navigate to="todos?status=em_andamento" replace />} />
+                  <Route path="resolvidos" element={<Navigate to="todos?status=resolvido" replace />} />
+                  <Route path="fechados" element={<Navigate to="todos?status=fechado" replace />} />
+                  
+                  <Route path="novo" element={<ChamadoForm />} />
+                  <Route path="motivos" element={<MotivosPage />} />
+                  <Route path="motivos/novo" element={<MotivoForm />} />
+                  <Route path="motivos/:id/editar" element={<MotivoForm />} />
+                  <Route path="formularios" element={<FormulariosPage />} />
+                  <Route path="formularios/novo" element={<FormularioForm />} />
+                  <Route path="formularios/:id/editar" element={<FormularioForm />} />
+                  <Route path=":id" element={<ChamadoDetalhesPage />} />
+                  <Route path=":id/editar" element={<ChamadoForm />} />
+              </Route>
+
+              <Route path="agenda" element={<AgendaLayout />}>
+                <Route index element={<Navigate to="minha-agenda" replace />} />
+                <Route path="minha-agenda" element={<MinhaAgendaPage />} />
+                <Route path="calendario" element={<Navigate to="minha-agenda" replace />} />
+                <Route path="eventos" element={<EventosPage />} />
+                <Route path="agendamentos" element={<AgendamentosPage />} />
+                <Route path="equipe" element={<AgendaEquipePage />} />
+                <Route path="disponibilidade" element={<DisponibilidadePage />} />
+                <Route path="disponibilidade/novo" element={<DisponibilidadeForm />} />
+                <Route path="disponibilidade/:id/editar" element={<DisponibilidadeForm />} />
+                <Route path="bloqueios" element={<BloqueiosPage />} />
+                <Route path="bloqueios/novo" element={<BloqueioForm />} />
+                <Route path="bloqueios/:id/editar" element={<BloqueioForm />} />
+                <Route path="conflitos" element={<ConflitosPage />} />
+              </Route>
+              
+              <Route path="notificacoes" element={<NotificacoesLayout />}>
+                <Route index element={<Navigate to="minhas" replace />} />
+                <Route path="minhas" element={<MinhasNotificacoesPage />} />
+                <Route path="nao-lidas" element={<NaoLidasPage />} />
+                <Route path="arquivadas" element={<ArquivadasPage />} />
+                <Route path="preferencias" element={<PreferenciasPage />} />
+              </Route>
+
+              <Route path="geolocalizacao" element={<GeolocalizacaoLayout />}>
+                <Route index element={<Navigate to="rastreamento" replace />} />
+                <Route path="checkin-checkout" element={<CheckinCheckoutPage />} />
+                <Route path="rastreamento" element={<RastreamentoPage />} />
+                <Route path="mapa" element={<Navigate to="rastreamento" replace />} />
+                <Route path="rotas" element={<RotasPage />} />
+                <Route path="historico" element={<HistoricoPage />} />
+                <Route path="relatorios" element={<RelatoriosGeoPage />} />
+                <Route path="integracoes" element={<IntegracoesPage />} />
+                <Route path="integracoes/novo" element={<IntegracaoForm />} />
+                <Route path="integracoes/:id/editar" element={<IntegracaoForm />} />
+                <Route path="dados-clientes" element={<DadosClientesApoioPage />} />
+              </Route>
+              {/* Routes with accents */}
+              <Route path="geolocalização" element={<Navigate to="geolocalizacao" replace />} />
+
+              <Route path="relatorios" element={<RelatoriosLayout />}>
+                <Route index element={<Navigate to="dashboard-apoio" replace />} />
+                <Route path="dashboard" element={<RelatoriosDashboardPage />} />
+                <Route path="dashboard-apoio" element={<ApoioDashboardPage />} />
+                <Route path="geral" element={<Navigate to="dashboard-apoio" replace />} />
+                <Route path="comodato" element={<RelatorioComodatoPage />} />
+                <Route path="operacional" element={<RelatorioOperacionalPage />} />
+                <Route path="alertas" element={<AlertasPage />} />
+                <Route path="dashboard-personalizado" element={<DashboardPersonalizadoPage />} />
+                <Route path="personalizado" element={<PersonalizadoPage />} />
+              </Route>
+
+              {/* Personas (REDIRECT OLD ROUTES) */}
+              <Route path="personas" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
+
+              {/* Manutenção Equipamentos (Submodule) */}
+              <Route path="manutencao-equipamentos" element={<ModuleGuard moduleId="manutencao_equip"><ManutencaoEquipamentosPage /></ModuleGuard>} />
+              {/* Aliases/Redirects */}
+              <Route path="manutencao" element={<Navigate to="manutencao-equipamentos" replace />} />
+              <Route path="manutenção" element={<Navigate to="manutencao-equipamentos" replace />} />
+              <Route path="manutencao-equipamentos/preventiva" element={<ManutencaoEquipamentosPage />} />
+              <Route path="manutencao-equipamentos/corretiva" element={<ManutencaoEquipamentosPage />} />
+
+              {/* Configurações Redirect */}
+              <Route path="configuracoes" element={<Navigate to="/configuracoes" replace />} />
+
+            </Route>
+
+            {/* UNIFIED SETTINGS */}
+            <Route path="configuracoes" element={<ModuleGuard moduleId="configuracoes"><ConfiguracoesLayout /></ModuleGuard>}>
+              <Route index element={<Navigate to="perfil" replace />} />
+              {/* General */}
+              <Route path="perfil" element={<PerfilUsuarioPage />} />
+              <Route path="seguranca" element={<SegurancaPage />} />
+              <Route path="notificacoes" element={<NotificacoesGeraisPage />} />
+              <Route path="privacidade" element={<PrivacidadePage />} />
+              <Route path="aparencia" element={<AparenciaPage />} />
+              <Route path="integracoes" element={<IntegracoesGlobaisPage />} />
+              <Route path="faturamento" element={<FaturamentoPage />} />
+              <Route path="backup" element={<BackupExportacaoPage />} />
+              <Route path="logs" element={<LogsPage />} />
+              <Route path="sobre" element={<SobreAjudaPage />} />
+              
+              {/* Redirect old user management routes to new location */}
+              <Route path="usuarios/*" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
+              <Route path="gestao-acesso-unificada" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
+              
+              {/* NEW CENTRALIZED MODULE */}
+              <Route path="gestao-equipe" element={<ModuleGuard moduleId="settings_users"><CentralizedTeamManagement /></ModuleGuard>} />
+              
+              {/* System Diagnosis */}
+              <Route path="diagnostico" element={<SystemDiagnosisPage />} />
+
+              <Route path="apoio/relatorios" element={<PreferenciasRelatoriosPage />} />
+              <Route path="apoio/dashboard" element={<PreferenciasDashboardPage />} />
+              <Route path="apoio/geolocalizacao" element={<PreferenciasGeolocalizacaoPage />} />
+              <Route path="apoio/agenda" element={<PreferenciasAgendaPage />} />
+              <Route path="apoio/chamados" element={<PreferenciasChamadosPage />} />
+              <Route path="apoio/comodato" element={<PreferenciasComodatoPage />} />
+              <Route path="apoio/dados-clientes" element={<DadosClientesConfigPage />} />
+              <Route path="apoio/avancadas" element={<ConfiguracoesAvancadasAPoioPage />} />
+            </Route>
+
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </Suspense>
+      <Toaster />
+    </>
+  );
+};
+
 function App() {
   useEffect(() => {
     // Aggressively prefetch routes after main thread is idle
@@ -196,244 +446,7 @@ function App() {
         <NotificationProvider>
           <FilterProvider>
             <PageActionProvider>
-              {/* Global Suspense for critical auth/setup phases */}
-              <Suspense fallback={<FullScreenLoader />}>
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/auth/confirm" element={<AuthConfirmation />} />
-                  <Route path="/forgot-password" element={<ForgotPassword />} />
-                  <Route path="/update-password" element={<UpdatePassword />} />
-                  
-                  <Route path="/unauthorized" element={<UnauthorizedPage />} />
-
-                  <Route path="/" element={
-                    <AuthGuard>
-                      <LayoutOverride>
-                        <Suspense fallback={<PageSkeleton />}>
-                          <Outlet />
-                        </Suspense>
-                      </LayoutOverride>
-                    </AuthGuard>
-                  }>
-                    <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="dashboard" element={<ModuleGuard moduleId="dashboard_comercial"><DashboardPage /></ModuleGuard>} />
-                    <Route path="ai-chat" element={<ModuleGuard moduleId="senhor_lavos"><AIChat /></ModuleGuard>} />
-                    
-                    {/* Analytics */}
-                    <Route path="analitico-supervisor" element={<ModuleGuard moduleId="analytics"><AnaliticoSupervisor /></ModuleGuard>} />
-                    <Route path="analitico-vendedor" element={<ModuleGuard moduleId="analytics"><AnaliticoVendedor /></ModuleGuard>} />
-                    <Route path="analitico-regiao" element={<ModuleGuard moduleId="analytics"><AnaliticoRegiao /></ModuleGuard>} />
-                    <Route path="analitico-grupo-clientes" element={<ModuleGuard moduleId="analytics"><AnaliticoGrupoClientes /></ModuleGuard>} />
-                    <Route path="analitico-produto" element={<ModuleGuard moduleId="analytics"><AnaliticoProduto /></ModuleGuard>} />
-                    <Route path="visao-360-cliente" element={<ModuleGuard moduleId="analytics"><Visao360Cliente /></ModuleGuard>} />
-                    
-                    {/* Commercial Analysis */}
-                    <Route path="analitico-vendas-diarias" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoVendasDiarias /></ModuleGuard>} />
-                    <Route path="analise-churn" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseChurn /></ModuleGuard>} />
-                    <Route path="curva-abc" element={<ModuleGuard moduleId="commercial-analysis"><CurvaABC /></ModuleGuard>} />
-                    <Route path="calculo-rfm" element={<ModuleGuard moduleId="commercial-analysis"><CalculoRFM /></ModuleGuard>} />
-                    <Route path="tendencia-vendas" element={<ModuleGuard moduleId="commercial-analysis"><TendenciaVendas /></ModuleGuard>} />
-                    <Route path="analise-valor-unitario" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseValorUnitario /></ModuleGuard>} />
-                    <Route path="baixo-desempenho" element={<ModuleGuard moduleId="commercial-analysis"><BaixoDesempenho /></ModuleGuard>} />
-                    <Route path="analise-fidelidade" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseFidelidade /></ModuleGuard>} />
-                    <Route path="produtos-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><ProdutosBonificados /></ModuleGuard>} />
-                    <Route path="performance-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><PerformanceBonificados /></ModuleGuard>} />
-                    <Route path="analitico-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoBonificados /></ModuleGuard>} />
-                    
-                    {/* Equipment Analysis */}
-                    <Route path="movimentacao-equipamentos" element={<ModuleGuard moduleId="commercial-analysis"><MovimentacaoEquipamentos /></ModuleGuard>} />
-                    <Route path="analitico-equipamentos-cliente" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoEquipamentosCliente /></ModuleGuard>} />
-                    <Route path="analitico-equipamento" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoEquipamento /></ModuleGuard>} />
-                    <Route path="equipamentos-em-campo" element={<ModuleGuard moduleId="commercial-analysis"><EquipamentosEmCampo /></ModuleGuard>} />
-
-                    {/* Managerial Analysis */}
-                    <Route path="raio-x-supervisor" element={<ModuleGuard moduleId="managerial-analysis"><RaioXSupervisor /></ModuleGuard>} />
-                    <Route path="raio-x-vendedor" element={<ModuleGuard moduleId="managerial-analysis"><RaioXVendedor /></ModuleGuard>} />
-
-                    {/* Bonificações */}
-                    <Route path="bonificacoes" element={<ModuleGuard moduleId="bonificacoes_module"><BonificacoesPage /></ModuleGuard>} />
-                    
-                    {/* Tarefas */}
-                    <Route path="tarefas" element={<ModuleGuard moduleId="tarefas"><Tarefas /></ModuleGuard>} />
-                    
-                    {/* Manutenção - Redirect to new location */}
-                    <Route path="manutencao" element={<Navigate to="/admin/apoio/manutencao-equipamentos" replace />} />
-
-                    {/* Delivery Management */}
-                    <Route path="admin/delivery-management" element={<ModuleGuard moduleId="delivery"><DeliveryDashboard /></ModuleGuard>} />
-                    <Route path="admin/delivery-management/deliveries" element={<ModuleGuard moduleId="delivery"><Deliveries /></ModuleGuard>} />
-                    <Route path="admin/delivery-management/drivers" element={<ModuleGuard moduleId="delivery"><Drivers /></ModuleGuard>} />
-                    <Route path="admin/delivery-management/route-optimization" element={<ModuleGuard moduleId="delivery"><RouteOptimization /></ModuleGuard>} />
-                    <Route path="admin/delivery-management/customers" element={<ModuleGuard moduleId="delivery"><Customers /></ModuleGuard>} />
-                    <Route path="admin/delivery-management/disputes" element={<ModuleGuard moduleId="delivery"><Disputes /></ModuleGuard>} />
-                    <Route path="admin/delivery-management/reports" element={<ModuleGuard moduleId="delivery"><DeliveryReports /></ModuleGuard>} />
-                    <Route path="admin/delivery-management/delivery-receipts" element={<ModuleGuard moduleId="delivery"><DeliveryReceipts /></ModuleGuard>} />
-                    <Route path="admin/delivery-management/settings" element={<ModuleGuard moduleId="delivery"><DeliverySettings /></ModuleGuard>} />
-
-                    {/* CRM */}
-                    <Route path="crm/pipeline" element={<ModuleGuard moduleId="crm"><Pipeline /></ModuleGuard>} />
-                    <Route path="crm/contacts" element={<ModuleGuard moduleId="crm"><CrmContacts /></ModuleGuard>} />
-                    <Route path="crm/comodato-contracts" element={<ModuleGuard moduleId="crm"><ComodatoContracts /></ModuleGuard>} />
-                    <Route path="crm/automations" element={<ModuleGuard moduleId="crm"><CrmAutomations /></ModuleGuard>} />
-                    <Route path="crm/reports" element={<ModuleGuard moduleId="crm"><CrmReports /></ModuleGuard>} />
-                    <Route path="crm/team" element={<ModuleGuard moduleId="crm"><CrmTeam /></ModuleGuard>} />
-                    <Route path="crm/relationship" element={<ModuleGuard moduleId="crm"><CommercialRelationship /></ModuleGuard>} />
-
-                    {/* Gestão de Equipe (REDIRECT OLD ROUTES) */}
-                    <Route path="admin/gestao-equipe/usuarios-acesso" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
-
-                    {/* Apoio */}
-                    <Route path="admin/apoio" element={<ModuleGuard moduleId="apoio"><ApoioLayout /></ModuleGuard>}>
-                      <Route index element={<Navigate to="comodato/clientes" replace />} />
-                      
-                      <Route path="comodato" element={<ComodatoLayout />}>
-                        <Route index element={<Navigate to="clientes" replace />} />
-                        <Route path="clientes" element={<ClientesComodatoPage />} />
-                        <Route path="clientes/novo" element={<ClienteComodatoForm />} />
-                        <Route path="clientes/:id/editar" element={<ClienteComodatoForm />} />
-                        <Route path="clientes/:id/estoque" element={<EstoqueClientePage />} />
-                        <Route path="modelos" element={<ModelosEquipamentosPage />} />
-                        <Route path="modelos/novo" element={<ModeloEquipamentoForm />} />
-                        <Route path="modelos/:id/editar" element={<ModeloEquipamentoForm />} />
-                        <Route path="equipamentos/novo" element={<EquipamentoComodatoForm />} />
-                        <Route path="equipamentos/:id/editar" element={<EquipamentoComodatoForm />} />
-                        <Route path="entrega" element={<EntregaForm />} />
-                        <Route path="troca" element={<TrocaForm />} />
-                        <Route path="retirada" element={<RetiradaForm />} />
-                        {/* Fallback routes for list/details to avoid 404 */}
-                        <Route path="lista" element={<Navigate to="clientes" replace />} />
-                        <Route path="detalhes" element={<Navigate to="clientes" replace />} />
-                      </Route>
-                      
-                      <Route path="chamados" element={<ChamadosLayout />}>
-                          <Route index element={<Navigate to="todos" replace />} />
-                          <Route path="todos" element={<ChamadosTodosPage />} />
-                          {/* Sub-routes for status filters */}
-                          <Route path="abertos" element={<Navigate to="todos?status=aberto" replace />} />
-                          <Route path="em-andamento" element={<Navigate to="todos?status=em_andamento" replace />} />
-                          <Route path="em-progresso" element={<Navigate to="todos?status=em_andamento" replace />} />
-                          <Route path="resolvidos" element={<Navigate to="todos?status=resolvido" replace />} />
-                          <Route path="fechados" element={<Navigate to="todos?status=fechado" replace />} />
-                          
-                          <Route path="novo" element={<ChamadoForm />} />
-                          <Route path="motivos" element={<MotivosPage />} />
-                          <Route path="motivos/novo" element={<MotivoForm />} />
-                          <Route path="motivos/:id/editar" element={<MotivoForm />} />
-                          <Route path="formularios" element={<FormulariosPage />} />
-                          <Route path="formularios/novo" element={<FormularioForm />} />
-                          <Route path="formularios/:id/editar" element={<FormularioForm />} />
-                          <Route path=":id" element={<ChamadoDetalhesPage />} />
-                          <Route path=":id/editar" element={<ChamadoForm />} />
-                      </Route>
-
-                      <Route path="agenda" element={<AgendaLayout />}>
-                        <Route index element={<Navigate to="minha-agenda" replace />} />
-                        <Route path="minha-agenda" element={<MinhaAgendaPage />} />
-                        <Route path="calendario" element={<Navigate to="minha-agenda" replace />} />
-                        <Route path="eventos" element={<EventosPage />} />
-                        <Route path="agendamentos" element={<AgendamentosPage />} />
-                        <Route path="equipe" element={<AgendaEquipePage />} />
-                        <Route path="disponibilidade" element={<DisponibilidadePage />} />
-                        <Route path="disponibilidade/novo" element={<DisponibilidadeForm />} />
-                        <Route path="disponibilidade/:id/editar" element={<DisponibilidadeForm />} />
-                        <Route path="bloqueios" element={<BloqueiosPage />} />
-                        <Route path="bloqueios/novo" element={<BloqueioForm />} />
-                        <Route path="bloqueios/:id/editar" element={<BloqueioForm />} />
-                        <Route path="conflitos" element={<ConflitosPage />} />
-                      </Route>
-                      
-                      <Route path="notificacoes" element={<NotificacoesLayout />}>
-                        <Route index element={<Navigate to="minhas" replace />} />
-                        <Route path="minhas" element={<MinhasNotificacoesPage />} />
-                        <Route path="nao-lidas" element={<NaoLidasPage />} />
-                        <Route path="arquivadas" element={<ArquivadasPage />} />
-                        <Route path="preferencias" element={<PreferenciasPage />} />
-                      </Route>
-
-                      <Route path="geolocalizacao" element={<GeolocalizacaoLayout />}>
-                        <Route index element={<Navigate to="rastreamento" replace />} />
-                        <Route path="checkin-checkout" element={<CheckinCheckoutPage />} />
-                        <Route path="rastreamento" element={<RastreamentoPage />} />
-                        <Route path="mapa" element={<Navigate to="rastreamento" replace />} />
-                        <Route path="rotas" element={<RotasPage />} />
-                        <Route path="historico" element={<HistoricoPage />} />
-                        <Route path="relatorios" element={<RelatoriosGeoPage />} />
-                        <Route path="integracoes" element={<IntegracoesPage />} />
-                        <Route path="integracoes/novo" element={<IntegracaoForm />} />
-                        <Route path="integracoes/:id/editar" element={<IntegracaoForm />} />
-                        <Route path="dados-clientes" element={<DadosClientesApoioPage />} />
-                      </Route>
-                      {/* Routes with accents */}
-                      <Route path="geolocalização" element={<Navigate to="geolocalizacao" replace />} />
-
-                      <Route path="relatorios" element={<RelatoriosLayout />}>
-                        <Route index element={<Navigate to="dashboard-apoio" replace />} />
-                        <Route path="dashboard" element={<RelatoriosDashboardPage />} />
-                        <Route path="dashboard-apoio" element={<ApoioDashboardPage />} />
-                        <Route path="geral" element={<Navigate to="dashboard-apoio" replace />} />
-                        <Route path="comodato" element={<RelatorioComodatoPage />} />
-                        <Route path="operacional" element={<RelatorioOperacionalPage />} />
-                        <Route path="alertas" element={<AlertasPage />} />
-                        <Route path="dashboard-personalizado" element={<DashboardPersonalizadoPage />} />
-                        <Route path="personalizado" element={<PersonalizadoPage />} />
-                      </Route>
-
-                      {/* Personas (REDIRECT OLD ROUTES) */}
-                      <Route path="personas" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
-
-                      {/* Manutenção Equipamentos (Submodule) */}
-                      <Route path="manutencao-equipamentos" element={<ModuleGuard moduleId="manutencao_equip"><ManutencaoEquipamentosPage /></ModuleGuard>} />
-                      {/* Aliases/Redirects */}
-                      <Route path="manutencao" element={<Navigate to="manutencao-equipamentos" replace />} />
-                      <Route path="manutenção" element={<Navigate to="manutencao-equipamentos" replace />} />
-                      <Route path="manutencao-equipamentos/preventiva" element={<ManutencaoEquipamentosPage />} />
-                      <Route path="manutencao-equipamentos/corretiva" element={<ManutencaoEquipamentosPage />} />
-
-                      {/* Configurações Redirect */}
-                      <Route path="configuracoes" element={<Navigate to="/configuracoes" replace />} />
-
-                    </Route>
-
-                    {/* UNIFIED SETTINGS */}
-                    <Route path="configuracoes" element={<ModuleGuard moduleId="configuracoes"><ConfiguracoesLayout /></ModuleGuard>}>
-                      <Route index element={<Navigate to="perfil" replace />} />
-                      {/* General */}
-                      <Route path="perfil" element={<PerfilUsuarioPage />} />
-                      <Route path="seguranca" element={<SegurancaPage />} />
-                      <Route path="notificacoes" element={<NotificacoesGeraisPage />} />
-                      <Route path="privacidade" element={<PrivacidadePage />} />
-                      <Route path="aparencia" element={<AparenciaPage />} />
-                      <Route path="integracoes" element={<IntegracoesGlobaisPage />} />
-                      <Route path="faturamento" element={<FaturamentoPage />} />
-                      <Route path="backup" element={<BackupExportacaoPage />} />
-                      <Route path="logs" element={<LogsPage />} />
-                      <Route path="sobre" element={<SobreAjudaPage />} />
-                      
-                      {/* Redirect old user management routes to new location */}
-                      <Route path="usuarios/*" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
-                      <Route path="gestao-acesso-unificada" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
-                      
-                      {/* NEW CENTRALIZED MODULE */}
-                      <Route path="gestao-equipe" element={<ModuleGuard moduleId="settings_users"><CentralizedTeamManagement /></ModuleGuard>} />
-                      
-                      {/* System Diagnosis */}
-                      <Route path="diagnostico" element={<SystemDiagnosisPage />} />
-
-                      <Route path="apoio/relatorios" element={<PreferenciasRelatoriosPage />} />
-                      <Route path="apoio/dashboard" element={<PreferenciasDashboardPage />} />
-                      <Route path="apoio/geolocalizacao" element={<PreferenciasGeolocalizacaoPage />} />
-                      <Route path="apoio/agenda" element={<PreferenciasAgendaPage />} />
-                      <Route path="apoio/chamados" element={<PreferenciasChamadosPage />} />
-                      <Route path="apoio/comodato" element={<PreferenciasComodatoPage />} />
-                      <Route path="apoio/dados-clientes" element={<DadosClientesConfigPage />} />
-                      <Route path="apoio/avancadas" element={<ConfiguracoesAvancadasAPoioPage />} />
-                    </Route>
-
-                    <Route path="*" element={<NotFoundPage />} />
-                  </Route>
-                </Routes>
-              </Suspense>
-              <Toaster />
+              <AppContent />
             </PageActionProvider>
           </FilterProvider>
         </NotificationProvider>

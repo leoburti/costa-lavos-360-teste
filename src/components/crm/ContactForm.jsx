@@ -21,6 +21,8 @@ import { fetchCreditDossier } from '@/services/creditService';
 import { getCommercialHierarchy } from '@/services/apoioSyncService';
 import CreditDossierTemplate from '@/components/crm/CreditDossierTemplate';
 import { generatePDF } from '@/utils/pdfGenerator';
+import { useFormStatePersistence } from '@/hooks/useFormStatePersistence';
+import { PersistenceStatus } from '@/components/PersistenceStatus';
 
 console.log('Parsing ContactForm file...');
 
@@ -159,10 +161,57 @@ const FormField = ({ label, id, error, children, isRequired, className }) => (
 );
 
 const ContactForm = ({ contactData, onSaveSuccess }) => {
-    console.log('ContactForm rendering. Contact Data:', contactData ? 'Present' : 'Null');
     const { toast } = useToast();
     const { user } = useAuth();
     
+    const defaultValues = {
+        corporate_name: '',
+        fantasy_name: '',
+        cnpj: '',
+        state_registration: '',
+        industry_sector: '',
+        foundation_date: '',
+        address_zip_code: '',
+        address_street: '',
+        address_number: '',
+        address_complement: '',
+        address_district: '',
+        address_city: '',
+        address_state: '',
+        same_delivery_address: true,
+        delivery_address_zip_code: '',
+        delivery_address_street: '',
+        delivery_address_number: '',
+        delivery_address_complement: '',
+        delivery_address_district: '',
+        delivery_address_city: '',
+        delivery_address_state: '',
+        phone: '',
+        email: '',
+        representative_name: '',
+        representative_email: '',
+        representative_phone: '',
+        representative_role: '',
+        selected_supervisor_name: contactData?.custom_fields?.supervisor_name || contactData?.supervisor?.nome || '',
+        selected_seller_name: contactData?.custom_fields?.seller_name || contactData?.seller?.nome || '',
+        supervisor_id: contactData?.supervisor_id || null,
+        seller_id: contactData?.seller_id || null,
+        qualification_data: {
+            introduction_requested: false,
+            ...(contactData?.qualification_data || {})
+        },
+        ...contactData,
+    };
+
+    // Persistence Hook
+    const { handleBulkChange, status, lastSaved, clearDraft } = useFormStatePersistence(
+        `contact_form_${contactData?.id || 'new'}`, 
+        defaultValues,
+        (restored) => {
+            if (restored) reset(restored);
+        }
+    );
+
     // --- Data States ---
     const [hierarchy, setHierarchy] = useState([]); // From BD-CL
     const [internalUsers, setInternalUsers] = useState([]); // From System (Apoio)
@@ -178,56 +227,18 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
     const [dossierData, setDossierData] = useState(null);
     const dossierRef = useRef(null);
 
-    const { register, handleSubmit, control, formState: { errors, isSubmitting }, setValue, getValues, trigger, watch } = useForm({
+    const { register, handleSubmit, control, formState: { errors, isSubmitting }, setValue, getValues, trigger, watch, reset } = useForm({
         resolver: zodResolver(contactSchema),
-        defaultValues: {
-            corporate_name: '',
-            fantasy_name: '',
-            cnpj: '',
-            state_registration: '',
-            industry_sector: '',
-            foundation_date: '',
-            
-            // Main Address
-            address_zip_code: '',
-            address_street: '',
-            address_number: '',
-            address_complement: '',
-            address_district: '',
-            address_city: '',
-            address_state: '',
-
-            // Delivery Address
-            same_delivery_address: true,
-            delivery_address_zip_code: '',
-            delivery_address_street: '',
-            delivery_address_number: '',
-            delivery_address_complement: '',
-            delivery_address_district: '',
-            delivery_address_city: '',
-            delivery_address_state: '',
-
-            phone: '',
-            email: '',
-            representative_name: '',
-            representative_email: '',
-            representative_phone: '',
-            representative_role: '',
-            
-            // Use custom fields or existing data to populate init
-            selected_supervisor_name: contactData?.custom_fields?.supervisor_name || contactData?.supervisor?.nome || '',
-            selected_seller_name: contactData?.custom_fields?.seller_name || contactData?.seller?.nome || '',
-            
-            supervisor_id: contactData?.supervisor_id || null,
-            seller_id: contactData?.seller_id || null,
-
-            qualification_data: {
-                introduction_requested: false,
-                ...(contactData?.qualification_data || {})
-            },
-            ...contactData,
-        },
+        defaultValues,
     });
+
+    // Sync changes to persistence hook
+    useEffect(() => {
+        const subscription = watch((value) => {
+            handleBulkChange(value);
+        });
+        return () => subscription.unsubscribe();
+    }, [watch, handleBulkChange]);
 
     const sameDeliveryAddress = watch('same_delivery_address');
     const currentSupervisor = watch('selected_supervisor_name');
@@ -236,18 +247,12 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
     useEffect(() => {
         const loadCommercialData = async () => {
             setHierarchyLoading(true);
-            console.log('Iniciando carregamento de dados comerciais...');
-            
             try {
-                // 1. Fetch System Users (for UUID matching)
                 const { data: sysUsers, error: userError } = await supabase.rpc('get_all_users_with_roles');
                 if (userError) throw userError;
                 setInternalUsers(sysUsers || []);
-                console.log('Usuários internos carregados:', sysUsers?.length);
 
-                // 2. Fetch Commercial Hierarchy from BD-CL
                 const hierarchyData = await getCommercialHierarchy();
-                console.log('Hierarquia comercial (BD-CL) carregada:', hierarchyData?.length);
                 setHierarchy(hierarchyData || []);
 
             } catch (error) {
@@ -265,9 +270,6 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
         loadCommercialData();
     }, []);
 
-    // --- Computed Lists ---
-    
-    // Unique Supervisors List (filtering out 'Não Definido' if desirable, but keeping for now)
     const supervisorOptions = useMemo(() => {
         if (!hierarchy.length) return [];
         return hierarchy
@@ -276,7 +278,6 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             .sort();
     }, [hierarchy]);
 
-    // Sellers List based on selected supervisor
     const sellerOptions = useMemo(() => {
         if (!hierarchy.length) return [];
         
@@ -284,7 +285,6 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             const supervisorData = hierarchy.find(h => h.supervisor_nome === currentSupervisor);
             return supervisorData?.vendedores ? supervisorData.vendedores.sort() : [];
         } else {
-            // If no supervisor selected, show ALL distinct sellers
             const allSellers = new Set();
             hierarchy.forEach(h => {
                 if (h.vendedores) {
@@ -296,12 +296,8 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
     }, [hierarchy, currentSupervisor]);
 
 
-    // --- Handlers ---
-
     const handleIntegration = async () => {
         const cnpj = getValues('cnpj');
-        console.log('Starting integration for CNPJ:', cnpj);
-        
         if (!cnpj || cnpj.replace(/\D/g, '').length !== 14) {
             toast({
                 variant: "destructive",
@@ -318,7 +314,6 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             const apiData = await fetchCompanyData(cnpj);
             const mappedData = mapApiDataToForm(apiData);
 
-            // Fill fields explicitly
             let fieldsUpdated = 0;
             const keys = Object.keys(mappedData);
             for (const key of keys) {
@@ -408,23 +403,16 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
         }
     };
 
-    // Helper to fuzzy match or exact match names to UUIDs
     const findUserIdByName = (name) => {
         if (!name) return null;
         const normalizedSearch = name.toLowerCase().trim();
-        // Try exact match full name
         const exact = internalUsers.find(u => u.full_name?.toLowerCase().trim() === normalizedSearch);
         if (exact) return exact.user_id;
-        
-        // Try contains
         const partial = internalUsers.find(u => u.full_name?.toLowerCase().includes(normalizedSearch));
         return partial ? partial.user_id : null;
     };
 
     const onSubmit = async (data) => {
-        console.log('Form submitting...', data);
-        
-        // Validation: Check if Responsibles are selected
         if (!data.selected_supervisor_name || !data.selected_seller_name) {
             toast({
                 variant: 'destructive',
@@ -435,16 +423,9 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
         }
 
         try {
-            // Match selected names to UUIDs if possible
             const matchedSupervisorId = findUserIdByName(data.selected_supervisor_name);
             const matchedSellerId = findUserIdByName(data.selected_seller_name);
 
-            console.log('Matching Results:', {
-                supervisor: { name: data.selected_supervisor_name, id: matchedSupervisorId },
-                seller: { name: data.selected_seller_name, id: matchedSellerId }
-            });
-
-            // Prepare Payload
             let finalData = { ...data };
             
             if (finalData.same_delivery_address) {
@@ -460,26 +441,20 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
             const payload = {
                 ...finalData,
                 owner_id: user.id,
-                
-                // Use IDs if found, otherwise null (but store name in custom_fields)
                 supervisor_id: matchedSupervisorId, 
                 seller_id: matchedSellerId,
-                
                 qualification_data: finalData.qualification_data || {},
                 custom_fields: {
                     ...(contactData?.custom_fields || {}),
                     senhor_lavos_data: finalData.raw_integration_data,
-                    // Store the names explicitly to preserve selection from BD-CL even if no system user matches
                     supervisor_name: data.selected_supervisor_name,
                     seller_name: data.selected_seller_name
                 }
             };
             
-            // Remove virtual/helper fields from payload
             delete payload.raw_integration_data;
             delete payload.selected_supervisor_name;
             delete payload.selected_seller_name;
-            // Remove _ prefixed fields if any
             delete payload._supervisor_name;
             delete payload._seller_name;
 
@@ -492,8 +467,8 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
 
             if (result.error) throw result.error;
 
-            console.log('Save successful:', result.data);
             toast({ title: 'Sucesso!', description: `Contato ${contactData?.id ? 'atualizado' : 'criado'} com sucesso.` });
+            clearDraft();
             onSaveSuccess(result.data);
         } catch (error) {
             console.error("Submit error:", error);
@@ -502,8 +477,11 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 p-1">
-            {/* Hidden Container for PDF Generation */}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 p-1 relative">
+            <div className="absolute top-0 right-0">
+                <PersistenceStatus status={status} lastSaved={lastSaved} />
+            </div>
+
             <div className="absolute -left-[9999px] top-0">
                 {dossierData && (
                     <div className="w-[1000px]">

@@ -2,16 +2,29 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { format } from 'date-fns';
+import { format, startOfMonth } from 'date-fns';
 import { useDataScope } from '@/hooks/useDataScope';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 const FilterContext = createContext(undefined);
+
+// Defined outside component to ensure stability
+const INITIAL_FILTERS = {
+    supervisors: null,
+    sellers: null,
+    customerGroups: null,
+    regions: null,
+    clients: null,
+    searchTerm: '',
+    excludeEmployees: true,
+    showDefinedGroupsOnly: true,
+};
 
 const getInitialDateRange = () => {
     const today = new Date();
     return {
-        from: new Date(today.getFullYear(), today.getMonth(), 1),
-        to: new Date()
+        from: startOfMonth(today),
+        to: today
     };
 };
 
@@ -19,22 +32,27 @@ export const FilterProvider = ({ children }) => {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
     
-    // Defensively destructure useDataScope to prevent crashes if commercialFilter is undefined
     const { isRestricted, commercialFilter = {} } = useDataScope();
     
-    const [dateRange, setDateRangeState] = useState(getInitialDateRange());
+    // PERSISTENCE: Use localStorage hooks for maintaining state across reloads
+    const [storedDateRange, setStoredDateRange] = useLocalStorage('filter_date_range', null);
+    const [storedFilters, setStoredFilters] = useLocalStorage('filter_selections', INITIAL_FILTERS);
+
+    // Hydrate Date Range from storage or default
+    const [dateRange, setDateRangeState] = useState(() => {
+        if (storedDateRange && storedDateRange.from && storedDateRange.to) {
+            return {
+                from: new Date(storedDateRange.from),
+                to: new Date(storedDateRange.to)
+            };
+        }
+        return getInitialDateRange();
+    });
+
     const [previousDateRange, setPreviousDateRange] = useState({ from: undefined, to: undefined });
 
-    const [filters, setFiltersState] = useState({
-        supervisors: null,
-        sellers: null,
-        customerGroups: null,
-        regions: null,
-        clients: null,
-        searchTerm: '',
-        excludeEmployees: true,
-        showDefinedGroupsOnly: true,
-    });
+    // Sync runtime filters with stored filters
+    const [filters, setFiltersState] = useState(storedFilters);
 
     const [filterOptions, setFilterOptions] = useState({
         supervisors: [],
@@ -42,9 +60,11 @@ export const FilterProvider = ({ children }) => {
         customerGroups: [],
         regions: [],
         clients: [],
+        products: []
     });
     const [availablePeriods, setAvailablePeriods] = useState({});
 
+    // Update previous date range calculation
     useEffect(() => {
         if (dateRange?.from && dateRange?.to) {
             const diffTime = dateRange.to.getTime() - dateRange.from.getTime();
@@ -54,14 +74,27 @@ export const FilterProvider = ({ children }) => {
             prevEndDate.setDate(prevEndDate.getDate() - 1);
             
             const prevStartDate = new Date(prevEndDate);
-            prevStartDate.setDate(prevStartDate.getDate() - (diffDays - 1));
+            prevStartDate.setDate(prevStartDate.getDate() - (diffDays)); // Adjusted logic
             
             setPreviousDateRange({
                 from: prevStartDate,
                 to: prevEndDate
             });
+
+            // Persist new date range to local storage if it changed
+            const newStored = {
+                from: dateRange.from.toISOString(),
+                to: dateRange.to.toISOString()
+            };
+
+            // Guard clause to prevent loops: check if update is necessary
+            if (storedDateRange?.from !== newStored.from || storedDateRange?.to !== newStored.to) {
+                setStoredDateRange(newStored);
+            }
         }
-    }, [dateRange]);
+        // We omit storedDateRange from deps to rely on internal check or stable setter
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dateRange, setStoredDateRange]); 
 
     // Enforce data scope constraints on filters
     useEffect(() => {
@@ -86,22 +119,23 @@ export const FilterProvider = ({ children }) => {
                     }
                 }
                 
-                // Only update state if actual changes occurred to prevent render loops
                 return hasChanges ? newFilters : prev;
             });
         }
     }, [isRestricted, commercialFilter]);
 
+    // Save filters to persistence whenever they change
+    useEffect(() => {
+        setStoredFilters(filters);
+    }, [filters, setStoredFilters]);
+
     const updateFilters = useCallback((newFilters) => {
         setFiltersState(prev => {
-            // Prevent restricted users from clearing their mandatory filters
             if (isRestricted) {
                 if (commercialFilter.supervisor && newFilters.supervisors !== undefined) {
-                    // Ensure the restricted supervisor remains selected
                     newFilters.supervisors = [commercialFilter.supervisor];
                 }
                 if (commercialFilter.seller && newFilters.sellers !== undefined) {
-                    // Ensure the restricted seller remains selected
                     newFilters.sellers = [commercialFilter.seller];
                 }
             }
@@ -137,8 +171,13 @@ export const FilterProvider = ({ children }) => {
     }, [toast]);
     
     useEffect(() => {
-        fetchFilterOptions();
-    }, [fetchFilterOptions]);
+        // Only fetch if options are empty to prevent aggressive refetching
+        if (filterOptions.supervisors.length === 0) {
+            fetchFilterOptions();
+        } else {
+            setLoading(false);
+        }
+    }, [fetchFilterOptions, filterOptions.supervisors.length]);
     
     const computedFilters = useMemo(() => ({
         ...filters,
@@ -162,7 +201,6 @@ export const FilterProvider = ({ children }) => {
         rawDateRange: dateRange,
         setDateRange,
         updateFilters,
-        // Expose scope info to UI components if needed
         isRestricted, 
         commercialFilter
     }), [loading, filterOptions, availablePeriods, computedFilters, filters, updateFilters, dateRange, isRestricted, commercialFilter]);

@@ -2,69 +2,34 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { 
-  Search, 
-  Plus, 
-  Filter, 
-  MoreHorizontal, 
-  Edit, 
-  Eye, 
-  MapPin, 
-  Truck, 
-  XCircle, 
-  ChevronDown, 
-  ChevronUp,
-  Calendar as CalendarIcon,
-  Download,
+  Search, Plus, Filter, MoreHorizontal, Edit, Eye, MapPin, Truck, XCircle, ChevronDown, ChevronUp,
   Loader2
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useFormStatePersistence } from '@/hooks/useFormStatePersistence';
+import { PersistenceStatus } from '@/components/PersistenceStatus';
 
 // --- Constants ---
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50];
@@ -81,53 +46,55 @@ const STATUS_COLORS = {
 // --- Modals ---
 
 const CreateEditDeliveryModal = ({ isOpen, onClose, onSave, delivery, drivers, clients }) => {
-  const [formData, setFormData] = useState({
-    cliente_id: '',
-    motorista_id: '',
-    data_entrega: format(new Date(), 'yyyy-MM-dd'),
-    endereco: '',
-    status: 'pendente',
-    observacoes: ''
-  });
-
-  useEffect(() => {
-    if (delivery) {
-      setFormData({
-        cliente_id: delivery.cliente_id || '',
-        motorista_id: delivery.motorista_id || '',
-        data_entrega: delivery.data_entrega ? format(parseISO(delivery.data_entrega), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-        endereco: delivery.endereco || '', 
-        status: delivery.status || 'pendente',
-        observacoes: delivery.observacoes || ''
-      });
-    } else {
-      setFormData({
-        cliente_id: '',
-        motorista_id: '',
-        data_entrega: format(new Date(), 'yyyy-MM-dd'),
-        endereco: '',
-        status: 'pendente',
-        observacoes: ''
-      });
-    }
-  }, [delivery, isOpen]);
-
-  const handleChange = (key, value) => {
-    setFormData(prev => ({ ...prev, [key]: value }));
+  const deliveryId = delivery?.id || 'new';
+  
+  // Use persistence only for new or specifically identified edits to avoid collisions if multiple open
+  // If delivery is provided, it's an edit. We initialize with delivery data.
+  // However, useFormStatePersistence hydrates from storage if present.
+  // Strategy: If delivery exists (edit mode), we only use persistence if the ID matches stored draft.
+  // Otherwise, initialize from props. 
+  
+  const initialValues = {
+    cliente_id: delivery?.cliente_id || '',
+    motorista_id: delivery?.motorista_id || '',
+    data_entrega: delivery?.data_entrega ? format(parseISO(delivery.data_entrega), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+    endereco: delivery?.endereco || '', 
+    status: delivery?.status || 'pendente',
+    observacoes: delivery?.observacoes || ''
   };
+
+  const { formData, handleBulkChange, handleChange, status, lastSaved, clearDraft } = useFormStatePersistence(
+      `delivery_form_${deliveryId}`,
+      initialValues
+  );
+
+  // Sync if delivery prop changes significantly (e.g. opening a different delivery)
+  useEffect(() => {
+      if (delivery && delivery.id !== formData.id && status === 'idle') {
+          handleBulkChange(initialValues);
+      }
+  }, [delivery]);
 
   const handleSubmit = () => {
     onSave(formData);
+    clearDraft();
+  };
+
+  const handleClose = () => {
+      // Optional: clear draft on close if it's a new item to avoid stale data next time
+      // or keep it as "draft" feature. Keeping it is better.
+      onClose();
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{delivery ? 'Editar Entrega' : 'Nova Entrega'}</DialogTitle>
-          <DialogDescription>
-            Preencha os detalhes da entrega abaixo.
-          </DialogDescription>
+          <div className="flex justify-between items-center pr-6">
+            <DialogTitle>{delivery ? 'Editar Entrega' : 'Nova Entrega'}</DialogTitle>
+            <PersistenceStatus status={status} lastSaved={lastSaved} />
+          </div>
+          <DialogDescription>Preencha os detalhes da entrega abaixo.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
@@ -205,7 +172,7 @@ const CreateEditDeliveryModal = ({ isOpen, onClose, onSave, delivery, drivers, c
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={handleClose}>Cancelar</Button>
           <Button onClick={handleSubmit} className="bg-[#6B2C2C] hover:bg-[#5a2323] text-white">Salvar</Button>
         </DialogFooter>
       </DialogContent>
@@ -213,6 +180,7 @@ const CreateEditDeliveryModal = ({ isOpen, onClose, onSave, delivery, drivers, c
   );
 };
 
+// ... (Rest of components: AssignDriverModal, TrackingModal, CancelAlert - same as before)
 const AssignDriverModal = ({ isOpen, onClose, onAssign, delivery, drivers }) => {
   const [selectedDriver, setSelectedDriver] = useState('');
 
@@ -318,18 +286,14 @@ const CancelAlert = ({ isOpen, onClose, onConfirm }) => (
   </Dialog>
 );
 
-// --- Main Component ---
-
 const DeliveriesManagement = () => {
   const { toast } = useToast();
   
-  // Data State
   const [deliveries, setDeliveries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
 
-  // Filter State
   const [filters, setFilters] = useState({
     searchTerm: '',
     status: 'all',
@@ -338,12 +302,10 @@ const DeliveriesManagement = () => {
     endDate: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
   });
 
-  // Pagination & Sort State
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [sortConfig, setSortConfig] = useState({ key: 'data_entrega', direction: 'desc' });
 
-  // Modal State
   const [modals, setModals] = useState({
     createEdit: { open: false, data: null },
     assign: { open: false, data: null },
@@ -351,7 +313,6 @@ const DeliveriesManagement = () => {
     cancel: { open: false, data: null },
   });
 
-  // --- Initial Data Fetch ---
   useEffect(() => {
     const fetchResources = async () => {
         try {
@@ -359,12 +320,9 @@ const DeliveriesManagement = () => {
                 supabase.from('motoristas').select('id, nome').eq('ativo', true),
                 supabase.from('clientes').select('id, nome, ativo') 
             ]);
-            
             if (driversRes.error) throw driversRes.error;
             setDrivers(driversRes.data || []);
-            
             if (clientsRes.data) setClients(clientsRes.data);
-
         } catch (error) {
             console.error("Error fetching resources:", error);
         }
@@ -372,12 +330,10 @@ const DeliveriesManagement = () => {
     fetchResources();
   }, []);
 
-  // --- Deliveries Fetch ---
   useEffect(() => {
     const fetchDeliveries = async () => {
         setLoading(true);
         try {
-            // Robust JOIN query
             let query = supabase
                 .from('entregas')
                 .select(`
@@ -389,25 +345,18 @@ const DeliveriesManagement = () => {
                 .lte('data_entrega', new Date(filters.endDate).toISOString());
 
             const { data, error } = await query;
-
             if (error) throw error;
             setDeliveries(data || []);
         } catch (error) {
             console.error("Error fetching deliveries:", error);
-            toast({
-                variant: "destructive",
-                title: "Erro ao carregar entregas",
-                description: error.message
-            });
+            toast({ variant: "destructive", title: "Erro ao carregar entregas", description: error.message });
         } finally {
             setLoading(false);
         }
     };
-
     fetchDeliveries();
   }, [filters.startDate, filters.endDate, toast]);
 
-  // Helper to safely get client data
   const getClientData = (item) => {
       return {
           nome: item.cliente?.nome || item.cliente_nome || 'Cliente Desconhecido',
@@ -417,11 +366,8 @@ const DeliveriesManagement = () => {
       };
   };
 
-  // --- Derived Data (Filtering, Sorting, Pagination) ---
   const processedData = useMemo(() => {
     let result = [...deliveries];
-
-    // 1. Filter
     if (filters.searchTerm) {
         const lowerTerm = filters.searchTerm.toLowerCase();
         result = result.filter(item => {
@@ -437,13 +383,10 @@ const DeliveriesManagement = () => {
     if (filters.driverId !== 'all') {
         result = result.filter(item => item.motorista_id === filters.driverId);
     }
-
-    // 2. Sort
     if (sortConfig.key) {
         result.sort((a, b) => {
             let aVal = a[sortConfig.key];
             let bVal = b[sortConfig.key];
-
             if (sortConfig.key === 'cliente_nome') {
                 aVal = getClientData(a).nome;
                 bVal = getClientData(b).nome;
@@ -452,13 +395,11 @@ const DeliveriesManagement = () => {
                 aVal = a.motorista?.nome || '';
                 bVal = b.motorista?.nome || '';
             }
-
             if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
             if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
             return 0;
         });
     }
-
     return result;
   }, [deliveries, filters, sortConfig]);
 
@@ -468,8 +409,6 @@ const DeliveriesManagement = () => {
   }, [processedData, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(processedData.length / itemsPerPage);
-
-  // --- Handlers ---
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -495,14 +434,13 @@ const DeliveriesManagement = () => {
             toast({ title: "Entrega criada com sucesso" });
         }
         
-        // Refresh logic needed
-        const { data: refreshedData, error: refreshError } = await supabase
+        const { data: refreshedData } = await supabase
             .from('entregas')
             .select(`*, motorista:motoristas(id, nome), cliente:clientes(id, nome, email, telefone)`)
             .gte('data_entrega', new Date(filters.startDate).toISOString())
             .lte('data_entrega', new Date(filters.endDate).toISOString());
             
-        if (!refreshError) setDeliveries(refreshedData || []);
+        if (refreshedData) setDeliveries(refreshedData);
 
         setModals(prev => ({ ...prev, createEdit: { open: false, data: null } }));
     } catch (error) {
@@ -565,7 +503,6 @@ const DeliveriesManagement = () => {
       </Helmet>
 
       <div className="space-y-6 p-2 md:p-0">
-        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-[#6B2C2C]">Gestão de Entregas</h1>
@@ -579,7 +516,6 @@ const DeliveriesManagement = () => {
           </Button>
         </div>
 
-        {/* Filters */}
         <Card className="bg-slate-50/50 border-none">
           <CardContent className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
@@ -629,7 +565,6 @@ const DeliveriesManagement = () => {
           </CardContent>
         </Card>
 
-        {/* Table */}
         <Card>
             <CardContent className="p-0">
                 <div className="rounded-md border">
@@ -728,7 +663,6 @@ const DeliveriesManagement = () => {
                     </Table>
                 </div>
             </CardContent>
-            {/* Pagination */}
             <div className="p-4 border-t flex items-center justify-between">
                 <div className="text-sm text-muted-foreground">
                     Página {currentPage} de {totalPages || 1} ({processedData.length} registros)
@@ -756,7 +690,6 @@ const DeliveriesManagement = () => {
             </div>
         </Card>
 
-        {/* Modals */}
         {modals.createEdit.open && (
             <CreateEditDeliveryModal 
                 isOpen={modals.createEdit.open}

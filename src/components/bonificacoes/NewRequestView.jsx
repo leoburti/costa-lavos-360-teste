@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -13,33 +14,41 @@ import { Loader2, Send, Trash2, ArrowLeft } from 'lucide-react';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useFormStatePersistence } from '@/hooks/useFormStatePersistence';
+import { PersistenceStatus } from '@/components/PersistenceStatus';
 
 const formatCurrency = (value) => {
     if (typeof value !== 'number') return 'R$ 0,00';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-const NewRequestView = ({ setView }) => {
+const NewRequestView = ({ setView, onSuccess }) => {
     const { toast } = useToast();
     const { user } = useAuth();
     const { addNotification } = useNotifications();
 
+    // Persistence Hook
+    const { formData, handleChange, status, lastSaved, clearDraft } = useFormStatePersistence('bonificacao_new_request', {
+        selectedClient: null,
+        selectedProducts: [],
+        clientSupervisor: '',
+        clientSeller: '',
+        monthlyLimit: 0
+    });
+
+    // Use formData for controlled inputs
+    const { selectedClient, selectedProducts, clientSupervisor, clientSeller, monthlyLimit } = formData;
+
     const [clients, setClients] = useState([]);
     const [loadingClients, setLoadingClients] = useState(true);
-    const [selectedClient, setSelectedClient] = useState(null);
     const [clientSearchTerm, setClientSearchTerm] = useState('');
     
     const [allProducts, setAllProducts] = useState([]);
     const [loadingAllProducts, setLoadingAllProducts] = useState(false);
     const [productSearchTerm, setProductSearchTerm] = useState('');
     const debouncedProductSearchTerm = useDebounce(productSearchTerm, 300);
-
-    const [selectedProducts, setSelectedProducts] = useState([]);
     
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [monthlyLimit, setMonthlyLimit] = useState(0);
-    const [clientSupervisor, setClientSupervisor] = useState('');
-    const [clientSeller, setClientSeller] = useState('');
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -79,16 +88,15 @@ const NewRequestView = ({ setView }) => {
     }, [toast]);
     
     const handleClientSelect = async (client) => {
-        setSelectedClient(client);
-        setClientSupervisor(client.supervisor);
-        setClientSeller(client.seller);
-        
+        // Update multiple fields manually or via handleChange individually
+        // Better to update all related fields
+        let newMonthlyLimit = 0;
         try {
             const { data: settingsData } = await supabase.from('bonification_settings').select('monthly_limit_percentage').eq('id', 1).single();
             const limitPercentage = settingsData?.monthly_limit_percentage || 2;
             
             const lastMonth = subMonths(new Date(), 1);
-            const { data: salesData, error: salesError } = await supabase.rpc('get_revenue_for_validation', {
+            const { data: salesData } = await supabase.rpc('get_revenue_for_validation', {
                 p_start_date: format(startOfMonth(lastMonth), 'yyyy-MM-dd'),
                 p_end_date: format(endOfMonth(lastMonth), 'yyyy-MM-dd'),
                 p_exclude_employees: true,
@@ -96,25 +104,32 @@ const NewRequestView = ({ setView }) => {
                 p_clients: [client.label], 
                 p_search_term: null
             });
-            if (salesError) throw salesError;
             
-            setMonthlyLimit((salesData * limitPercentage) / 100);
+            newMonthlyLimit = (salesData * limitPercentage) / 100;
 
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Erro ao calcular limite do cliente', description: error.message });
-            setMonthlyLimit(0);
+            console.error(error);
+            newMonthlyLimit = 0;
         }
+
+        // Bulk update simulation using multiple handleChange (or could add bulk method to hook)
+        // Since hook uses setFormData(prev => ...), sequential calls work but trigger multiple saves.
+        // Better to do:
+        handleChange('selectedClient', client);
+        handleChange('clientSupervisor', client.supervisor);
+        handleChange('clientSeller', client.seller);
+        handleChange('monthlyLimit', newMonthlyLimit);
     };
     
     const handleAddProduct = (product) => {
         if (!selectedProducts.find(p => p.id === product.id)) {
-            setSelectedProducts(prev => [...prev, { ...product, quantity: 1, editablePrice: product.price }]);
+            handleChange('selectedProducts', [...selectedProducts, { ...product, quantity: 1, editablePrice: product.price }]);
         }
         setProductSearchTerm('');
     };
 
     const handleUpdateProduct = (productId, field, value) => {
-        setSelectedProducts(prev => prev.map(p => {
+        const updatedProducts = selectedProducts.map(p => {
             if (p.id === productId) {
                 const numericValue = parseFloat(value);
                 if (field === 'quantity' && numericValue > 0) {
@@ -125,16 +140,22 @@ const NewRequestView = ({ setView }) => {
                 }
             }
             return p;
-        }));
+        });
+        handleChange('selectedProducts', updatedProducts);
     };
 
     const handleRemoveProduct = (productId) => {
-        setSelectedProducts(prev => prev.filter(p => p.id !== productId));
+        handleChange('selectedProducts', selectedProducts.filter(p => p.id !== productId));
     };
 
+    const handleClearClient = () => {
+        handleChange('selectedClient', null);
+        handleChange('selectedProducts', []);
+        handleChange('monthlyLimit', 0);
+    };
 
     const totalBonification = useMemo(() => {
-        return selectedProducts.reduce((acc, p) => acc + (p.editablePrice * p.quantity), 0);
+        return (selectedProducts || []).reduce((acc, p) => acc + (p.editablePrice * p.quantity), 0);
     }, [selectedProducts]);
 
     const filteredClients = useMemo(() => {
@@ -166,7 +187,7 @@ const NewRequestView = ({ setView }) => {
         }));
 
         try {
-            const { data: requestData, error: requestError } = await supabase
+            const { error: requestError } = await supabase
                 .from('bonification_requests')
                 .insert({
                     user_id: user.id,
@@ -176,19 +197,18 @@ const NewRequestView = ({ setView }) => {
                     seller_name: clientSeller,
                     products_json: productsToSubmit,
                     total_amount: totalBonification,
-                    // status is now handled by the database trigger
-                }).select().single();
+                });
 
             if (requestError) throw requestError;
 
             toast({ title: 'Solicitação enviada com sucesso!', description: `Sua solicitação foi registrada e está sendo processada.` });
             
-            if (setView) {
-                setView('consult');
-            } else {
-                // Reset form if it's a standalone component
-                setSelectedClient(null);
-                setSelectedProducts([]);
+            clearDraft(); // Clear storage
+
+            if (onSuccess) onSuccess();
+            else if (setView) setView('consult');
+            else {
+                handleClearClient();
             }
 
         } catch (error) {
@@ -208,9 +228,12 @@ const NewRequestView = ({ setView }) => {
                 </Button>
             )}
             <Card>
-                <CardHeader>
-                    <CardTitle>Nova Solicitação de Bonificação</CardTitle>
-                    <CardDescription>Selecione um cliente para iniciar a solicitação.</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                        <CardTitle>Nova Solicitação de Bonificação</CardTitle>
+                        <CardDescription>Selecione um cliente para iniciar a solicitação.</CardDescription>
+                    </div>
+                    <PersistenceStatus status={status} lastSaved={lastSaved} />
                 </CardHeader>
                 <CardContent className="space-y-6">
                     {!selectedClient ? (
@@ -243,7 +266,7 @@ const NewRequestView = ({ setView }) => {
                                     </CardHeader>
                                     <CardContent>
                                         <p className="font-semibold">{selectedClient.label}</p>
-                                        <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => setSelectedClient(null)}>Trocar</Button>
+                                        <Button variant="link" size="sm" className="p-0 h-auto" onClick={handleClearClient}>Trocar</Button>
                                     </CardContent>
                                 </Card>
                                 <Card>
@@ -299,7 +322,7 @@ const NewRequestView = ({ setView }) => {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {selectedProducts.length === 0 ? (
+                                            {(selectedProducts || []).length === 0 ? (
                                                 <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum produto adicionado.</TableCell></TableRow>
                                             ) : (
                                                 selectedProducts.map((p) => (
