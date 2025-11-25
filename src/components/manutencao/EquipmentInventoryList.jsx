@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { useEquipmentInventory } from '@/hooks/useEquipmentInventory';
+import { searchEquipmentInventory } from '@/services/apoioSyncService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, RefreshCw, Layers, MapPin, CheckCircle, Wrench } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Layers, MapPin, Wrench } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useToast } from "@/components/ui/use-toast";
 import CheckInCheckOut from '@/components/CheckInCheckOut';
@@ -125,17 +126,79 @@ const InventoryItemActions = ({ item, onStartMaintenance, refreshInventory }) =>
 
 
 const EquipmentInventoryList = ({ onStartMaintenance }) => {
-  const {
-    groupedInventory,
-    loading,
-    searchTerm,
-    setSearchTerm,
-    groupBy,
-    setGroupBy,
-    refresh,
-    totalItems,
-  } = useEquipmentInventory('Fantasia');
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedTerm, setDebouncedTerm] = useState('');
+  const [groupBy, setGroupBy] = useState('Fantasia');
+  const [inventoryData, setInventoryData] = useState([]);
+  const [groupedInventory, setGroupedInventory] = useState({});
+  const { toast } = useToast();
 
+  // Debounce logic
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  const fetchInventory = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Fetch directly using service, bypassing potential broken hook/edge functions
+      const data = await searchEquipmentInventory(debouncedTerm);
+      
+      // Process and enrich data
+      const processedData = data.map(item => ({
+        ...item,
+        derivedStatus: item.AA3_STATUS || item.STAT || 'Ativo',
+        derivedLocation: item.Loja_texto || item.Loja
+      }));
+      
+      setInventoryData(processedData);
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro ao carregar inventário', 
+        description: error.message 
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedTerm, toast]);
+
+  // Group data whenever inventory or groupBy changes
+  useEffect(() => {
+    const grouped = {};
+    
+    inventoryData.forEach(item => {
+      let key = item[groupBy];
+      if (!key || key === 'null') key = 'Não Definido';
+      
+      if (!grouped[key]) {
+        grouped[key] = { active: [], inactive: [] };
+      }
+      
+      // Determine if active based on status
+      // Assuming 'Ativo' or empty status implies active for simplicity, adjust as needed
+      const isActive = item.derivedStatus === 'Ativo' || !item.derivedStatus;
+      
+      if (isActive) {
+        grouped[key].active.push(item);
+      } else {
+        grouped[key].inactive.push(item);
+      }
+    });
+    
+    setGroupedInventory(grouped);
+  }, [inventoryData, groupBy]);
+
+  useEffect(() => {
+    fetchInventory();
+  }, [fetchInventory]);
+
+  const totalItems = inventoryData.length;
   const hasContent = Object.keys(groupedInventory).length > 0;
 
   return (
@@ -149,7 +212,7 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
                 </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
-              <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+              <Button variant="outline" size="sm" onClick={fetchInventory} disabled={loading}>
                   <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                   Atualizar
               </Button>
@@ -161,9 +224,9 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
                 <SelectContent>
                   <SelectItem value="Fantasia">Por Fantasia</SelectItem>
                   <SelectItem value="Loja">Por Loja</SelectItem>
-                  <SelectItem value="Vendedor">Por Vendedor</SelectItem>
-                  <SelectItem value="Status">Por Status</SelectItem>
-                  <SelectItem value="Rede">Por Rede</SelectItem>
+                  <SelectItem value="Nome_Vendedor">Por Vendedor</SelectItem>
+                  <SelectItem value="AA3_STATUS">Por Status</SelectItem>
+                  <SelectItem value="REDE">Por Rede</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -224,10 +287,10 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
                         <TableBody>
                             {[...groupData.active, ...groupData.inactive].map((item) => (
                               <InventoryItemActions 
-                                key={item.Chave_ID} 
+                                key={item.Chave_ID || item.AA3_CHAPA} 
                                 item={item}
                                 onStartMaintenance={onStartMaintenance}
-                                refreshInventory={refresh}
+                                refreshInventory={fetchInventory}
                               />
                             ))}
                         </TableBody>

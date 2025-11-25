@@ -1,6 +1,5 @@
 
 import { supabase } from '@/lib/customSupabaseClient';
-import { EQUIPMENT_STATUS } from '@/constants/equipmentStatus';
 
 const invokeEdgeFunction = async (functionName) => {
   console.log(`Iniciando a chamada para a Edge Function ${functionName}...`);
@@ -177,6 +176,42 @@ export const searchClientesComodato = async (searchTerm) => {
         throw error;
     }
     return data;
+};
+
+// === SAFE CLIENT SEARCH (Using Edge Function + RPC to fix Parsing Errors) ===
+export const searchClients = async (searchTerm) => {
+  console.log('Searching clients via Edge Function (search-clients)...', searchTerm);
+  if (!searchTerm || searchTerm.length < 3) return [];
+
+  try {
+    // Invoke the Edge Function which calls the robust RPC
+    // This bypasses the client-side parser issues with "Desc.Regiao" (dots) and "N Fantasia" (spaces)
+    const { data, error } = await supabase.functions.invoke('search-clients', {
+        body: { searchTerm }
+    });
+
+    if (error) {
+      console.error('Error in search-clients Edge Function:', error);
+      throw error;
+    }
+
+    // Map the clean JSON keys from RPC back to the legacy keys expected by the UI components
+    // to ensure compatibility without refactoring the entire frontend
+    const mappedData = (data.data || []).map(client => ({
+        "Cliente": client.client_code,
+        "Loja": client.store,
+        "Nome": client.name,
+        "N Fantasia": client.fantasy_name,
+        "Endereco": client.address,
+        "Desc.Regiao": client.region_desc
+    }));
+
+    return mappedData;
+  } catch (err) {
+    console.error('Exception searching clients:', err);
+    // Fail gracefully by returning empty array instead of crashing
+    return [];
+  }
 };
 
 export const getClienteDetalhesComodato = async (clienteId, loja) => {
@@ -419,10 +454,6 @@ export const searchCommercialEntities = async (type, searchTerm) => {
 
         if (error) throw error;
 
-        // Distinct client-side due to lack of .distinct() modifier in simple JS select sometimes,
-        // but ideally we use .select(col).distinct() if enabled or RPC.
-        // For robust distinct search on large table 'bd-cl', RPC is better, 
-        // but let's try simple distinct processing here first.
         const uniqueNames = [...new Set(data.map(item => item[column]))].filter(Boolean).filter(n => n !== 'Não Definido');
         return uniqueNames;
     } catch (error) {
@@ -452,4 +483,24 @@ export const validateCommercialEntity = async (type, name) => {
         console.error("Validation error:", error);
         return false;
     }
+};
+
+// === Search Equipment Inventory Direct (Bypass Edge Function) ===
+export const searchEquipmentInventory = async (searchTerm) => {
+  let query = supabase.from('bd_cl_inv').select('*');
+  
+  if (searchTerm && searchTerm.trim() !== '') {
+    const term = searchTerm.trim();
+    // Using ILIKE via .or syntax for flexible search
+    query = query.or(`Fantasia.ilike.%${term}%,Equipamento.ilike.%${term}%,AA3_CHAPA.ilike.%${term}%,Loja.ilike.%${term}%,Nome_Vendedor.ilike.%${term}%,REDE.ilike.%${term}%`);
+  }
+  
+  // Limit to prevent large payload on broad searches
+  const { data, error } = await query.limit(100);
+  
+  if (error) {
+    console.error("Erro ao buscar inventário:", error);
+    throw error;
+  }
+  return data;
 };

@@ -1,175 +1,461 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Search, Loader2, User, MapPin, Save } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { 
+  Search, 
+  Loader2, 
+  User, 
+  MapPin, 
+  FileText, 
+  Package, 
+  Edit3, 
+  CheckCircle2,
+  Save,
+  X,
+  Wrench,
+  Layers,
+  ClipboardList,
+  AlertTriangle
+} from 'lucide-react';
 import { useClientSearch } from '@/hooks/useClientSearch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { format } from 'date-fns';
+import ComodatoEquipmentSelector from './ComodatoEquipmentSelector';
+import ClientOwnedEquipmentForm from './ClientOwnedEquipmentForm';
+import PartsSelector from './PartsSelector';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const MaintenanceForm = () => {
+const MaintenanceForm = ({ onCancel, onSaveSuccess }) => {
   const { toast } = useToast();
+  const { user } = useSupabaseAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   
-  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm();
+  // Separate state for different equipment sources
+  const [selectedComodato, setSelectedComodato] = useState([]);
+  const [selectedClientOwned, setSelectedClientOwned] = useState([]);
   
-  // Use the new Edge Function hook
+  const [selectedParts, setSelectedParts] = useState([]);
+  
+  const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    defaultValues: {
+      service_date: format(new Date(), 'yyyy-MM-dd'),
+      technician_name: user?.user_metadata?.full_name || user?.email || 'Técnico Atual',
+      cost: 0
+    }
+  });
+  
+  // Combined list of all selected equipments for downstream logic
+  const allSelectedEquipments = useMemo(() => {
+    return [...selectedComodato, ...selectedClientOwned];
+  }, [selectedComodato, selectedClientOwned]);
+
+  // Hook for searching clients via Edge Function
   const { clients, isLoading: isLoadingClients } = useClientSearch(searchTerm);
 
-  // Handle manual search trigger (optional, since hook debounces)
-  const handleSearch = (e) => {
-    e.preventDefault();
-    // The hook reacts to state change automatically
-  };
+  // Update total cost when parts change
+  useEffect(() => {
+    const partsTotal = selectedParts.reduce((acc, part) => acc + (part.quantity * (part.unitPrice || 0)), 0);
+    setValue('cost', partsTotal.toFixed(2));
+  }, [selectedParts, setValue]);
+
+  // Handle click outside to close search results
+  useEffect(() => {
+    const handleClickOutside = () => setIsSearching(false);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const selectClient = (client) => {
     setSelectedClient(client);
-    setValue('client_id', client.id);
-    setValue('client_loja', client.loja);
-    setValue('client_name', client.nome_fantasia);
-    setValue('client_address', client.endereco);
-    setSearchTerm(''); // Clear search to hide list
+    setValue('client_id', client.code);
+    setValue('client_store', client.store);
+    setValue('client_name', client.fantasy_name || client.name);
+    setSearchTerm('');
     setIsSearching(false);
+    
+    // Reset subsequent steps
+    setSelectedComodato([]);
+    setSelectedClientOwned([]);
+    setSelectedParts([]);
+    
+    toast({
+      description: `Cliente ${client.fantasy_name || client.name} selecionado.`,
+    });
   };
 
   const onSubmit = async (data) => {
-    console.log("Submitting maintenance data:", data);
-    toast({
-      title: "Solicitação Enviada",
-      description: "A solicitação de manutenção foi registrada com sucesso.",
-      variant: "success"
+    // Validation: Must select at least one equipment
+    if (allSelectedEquipments.length === 0) {
+      toast({
+        title: "Atenção",
+        description: "Selecione pelo menos um equipamento (Comodato ou Próprio) para registrar a manutenção.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validation: Parts must be assigned to an equipment
+    const unassignedParts = selectedParts.some(p => !p.equipmentId);
+    if (unassignedParts) {
+        toast({
+            title: "Atenção",
+            description: "Todas as peças selecionadas devem ser associadas a um equipamento.",
+            variant: "destructive"
+        });
+        return;
+    }
+
+    console.log("Submitting maintenance data:", { 
+      ...data, 
+      selectedClient, 
+      equipments: allSelectedEquipments,
+      parts: selectedParts
     });
-    reset();
-    setSelectedClient(null);
+    
+    try {
+      // Simulate API call
+      // Real implementation would save to tables
+      
+      // Simulated delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      toast({
+        title: "Sucesso!",
+        description: `Manutenção registrada para ${allSelectedEquipments.length} equipamento(s).`,
+        variant: "success"
+      });
+      
+      if (onSaveSuccess) onSaveSuccess();
+      else {
+        reset();
+        setSelectedClient(null);
+        setSelectedComodato([]);
+        setSelectedClientOwned([]);
+        setSelectedParts([]);
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar o registro.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Nova Solicitação de Manutenção</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <TooltipProvider>
+    <Card className="border-none shadow-sm bg-white">
+      <CardContent className="p-0">
+        {/* Header Section */}
+        <div className="p-6 border-b">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-2 bg-blue-50 rounded-lg">
+              <FileText className="h-5 w-5 text-blue-600" />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900">Registrar Manutenção</h2>
+          </div>
+          <p className="text-sm text-muted-foreground ml-11">
+            Preencha os dados abaixo para registrar uma nova manutenção.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-8">
+          
+          {/* STEP 1: Selecionar Cliente */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-gray-800">
+              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-bold">1</div>
+              <h3 className="font-medium">Selecionar Cliente</h3>
+            </div>
             
-            {/* Client Search Section */}
-            <div className="space-y-2 relative">
-              <Label>Buscar Cliente</Label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            {!selectedClient ? (
+              <div className="relative ml-8" onClick={(e) => e.stopPropagation()}>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
                   <Input 
-                    placeholder="Digite nome, fantasia ou código do cliente..." 
-                    className="pl-9"
+                    placeholder="Buscar cliente por nome ou código..." 
+                    className="pl-10 h-11 bg-gray-50/50 border-gray-200 focus:bg-white transition-colors"
                     value={searchTerm}
                     onChange={(e) => {
                       setSearchTerm(e.target.value);
                       setIsSearching(true);
                     }}
+                    onFocus={() => setIsSearching(true)}
                   />
-                </div>
-              </div>
-
-              {/* Search Results Dropdown */}
-              {isSearching && searchTerm.length >= 2 && (
-                <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-lg">
-                  {isLoadingClients ? (
-                    <div className="p-4 flex justify-center items-center text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Buscando clientes via Edge...
-                    </div>
-                  ) : clients.length > 0 ? (
-                    <ScrollArea className="h-[200px]">
-                      <div className="p-1">
-                        {clients.map((client) => (
-                          <div 
-                            key={client.full_id}
-                            onClick={() => selectClient(client)}
-                            className="flex flex-col p-2 hover:bg-accent cursor-pointer rounded-sm transition-colors border-b last:border-0 border-border/50"
-                          >
-                            <div className="font-medium flex justify-between">
-                              <span>{client.nome_fantasia || client.razao_social}</span>
-                              <Badge variant="outline" className="text-xs">{client.id}-{client.loja}</Badge>
-                            </div>
-                            <span className="text-xs text-muted-foreground truncate">{client.endereco}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  ) : (
-                    <div className="p-4 text-center text-sm text-muted-foreground">
-                      Nenhum cliente encontrado.
+                  {isLoadingClients && (
+                    <div className="absolute right-3 top-3">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            {/* Selected Client Display */}
-            {selectedClient && (
-              <div className="bg-muted/30 p-4 rounded-lg border border-primary/20 animate-in fade-in">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-primary/10 rounded-full text-primary">
-                    <User size={20} />
+                {/* Search Results Dropdown */}
+                {isSearching && searchTerm.length >= 2 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-xl animate-in fade-in-0 zoom-in-95 duration-100 max-h-[300px] overflow-hidden">
+                    {clients.length > 0 ? (
+                      <ScrollArea className="h-[240px]">
+                        <div className="p-1">
+                          {clients.map((client) => (
+                            <div 
+                              key={`${client.code}-${client.store}`}
+                              onClick={() => selectClient(client)}
+                              className="flex flex-col p-3 hover:bg-blue-50/50 cursor-pointer rounded-md transition-all border-b last:border-0 border-gray-50 group"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sm text-gray-900 group-hover:text-blue-700">
+                                    {client.fantasy_name || client.name}
+                                    </span>
+                                    {client.has_equipment && (
+                                        <Badge variant="outline" className="text-[10px] border-amber-200 text-amber-700 bg-amber-50">
+                                            <Wrench className="h-3 w-3 mr-1" /> Equip.
+                                        </Badge>
+                                    )}
+                                </div>
+                                <Badge variant="secondary" className="text-[10px] bg-gray-100 text-gray-600 group-hover:bg-white shrink-0 ml-2">
+                                  {client.code}-{client.store}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                                <MapPin className="h-3 w-3" />
+                                <span className="truncate">{client.address || 'Sem endereço'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        {isLoadingClients ? 'Buscando...' : 'Nenhum cliente encontrado.'}
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-1">
-                    <h4 className="font-semibold">{selectedClient.nome_fantasia}</h4>
-                    <p className="text-sm text-muted-foreground">{selectedClient.razao_social}</p>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                      <MapPin size={12} />
-                      {selectedClient.endereco}
+                )}
+              </div>
+            ) : (
+              <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex justify-between items-center animate-in fade-in slide-in-from-top-2 ml-8">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-white rounded-full border border-blue-100 shadow-sm text-blue-600">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-gray-900">{selectedClient.fantasy_name || selectedClient.name}</h4>
+                        {selectedClient.has_equipment && (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
+                                <Wrench className="h-3 w-3" /> Possui Equipamentos
+                            </Badge>
+                        )}
+                    </div>
+                    <p className="text-sm text-gray-500">{selectedClient.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="bg-white text-xs font-normal">
+                        Cód: {selectedClient.code}-{selectedClient.store}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <MapPin className="h-3 w-3" /> {selectedClient.address}
+                      </span>
                     </div>
                   </div>
                 </div>
-                <input type="hidden" {...register('client_id', { required: true })} />
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    setSelectedClient(null);
+                    setSelectedComodato([]);
+                    setSelectedClientOwned([]);
+                    setSelectedParts([]);
+                  }}
+                  className="text-muted-foreground hover:text-destructive hover:bg-red-50"
+                >
+                  <X className="h-4 w-4 mr-2" /> Trocar
+                </Button>
               </div>
             )}
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Separator />
+
+          {/* STEP 2: Equipamentos em Comodato */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-gray-800">
+              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-bold">2</div>
+              <h3 className="font-medium">Selecionar Equipamentos em Comodato</h3>
+            </div>
+            <div className="ml-8">
+                <ComodatoEquipmentSelector 
+                    clientId={selectedClient?.code} // Using code/id string
+                    selectedEquipments={selectedComodato}
+                    onSelectionChange={setSelectedComodato}
+                />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* STEP 3: Equipamentos do Cliente */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-gray-800">
+              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-bold">3</div>
+              <h3 className="font-medium">Equipamentos Próprios do Cliente (Opcional)</h3>
+            </div>
+            <div className="ml-8">
+                <ClientOwnedEquipmentForm 
+                    clientId={selectedClient?.code}
+                    selectedEquipments={selectedClientOwned}
+                    onSelectionChange={setSelectedClientOwned}
+                />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* STEP 4: Detalhes do Serviço */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-gray-800">
+              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-bold">4</div>
+              <h3 className="font-medium">Detalhes da Manutenção</h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 ml-8">
               <div className="space-y-2">
-                <Label htmlFor="equipment">Equipamento (Opcional)</Label>
-                <Input id="equipment" placeholder="Número de série ou modelo" {...register('equipment')} />
+                <Label htmlFor="maintenance_type" className="text-xs uppercase text-muted-foreground font-semibold">Tipo de Manutenção*</Label>
+                <Select onValueChange={(val) => setValue('maintenance_type', val)}>
+                  <SelectTrigger className="bg-gray-50/50 border-gray-200">
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="preventiva">Preventiva</SelectItem>
+                    <SelectItem value="corretiva">Corretiva</SelectItem>
+                    <SelectItem value="instalacao">Instalação</SelectItem>
+                    <SelectItem value="retirada">Retirada</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="priority">Prioridade</Label>
-                <select 
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  {...register('priority')}
-                >
-                  <option value="baixa">Baixa</option>
-                  <option value="media">Média</option>
-                  <option value="alta">Alta</option>
-                  <option value="critica">Crítica</option>
-                </select>
+                <Label htmlFor="service_date" className="text-xs uppercase text-muted-foreground font-semibold">Data do Serviço</Label>
+                <Input 
+                  type="date" 
+                  id="service_date"
+                  className="bg-gray-50/50 border-gray-200"
+                  {...register('service_date')}
+                />
+              </div>
+
+              <div className="md:col-span-2 space-y-2">
+                <Label htmlFor="description" className="text-xs uppercase text-muted-foreground font-semibold">Descrição/Observações*</Label>
+                <Textarea 
+                  id="description" 
+                  placeholder="Descreva o problema encontrado e as ações realizadas..."
+                  className="min-h-[100px] bg-gray-50/50 border-gray-200 resize-none"
+                  {...register('description', { required: true })}
+                />
+                {errors.description && <span className="text-xs text-destructive">Campo obrigatório</span>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="next_maintenance" className="text-xs uppercase text-muted-foreground font-semibold">Próxima Manutenção (Opcional)</Label>
+                <Input 
+                  type="date" 
+                  id="next_maintenance"
+                  className="bg-gray-50/50 border-gray-200"
+                  {...register('next_maintenance')}
+                />
+              </div>
+
+              <div className="md:col-span-2 space-y-2">
+                <Label htmlFor="technician" className="text-xs uppercase text-muted-foreground font-semibold">Técnico Responsável</Label>
+                <Input 
+                  readOnly 
+                  className="bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed"
+                  {...register('technician_name')}
+                />
               </div>
             </div>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="description">Descrição do Problema</Label>
-              <textarea 
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="Descreva o problema detalhadamente..."
-                {...register('description', { required: true })}
-              />
-              {errors.description && <span className="text-xs text-destructive">Campo obrigatório</span>}
+          <Separator />
+
+          {/* STEP 5: Peças Substituídas */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-gray-800">
+              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-bold">5</div>
+              <h3 className="font-medium">Peças Substituídas ({selectedParts.length})</h3>
             </div>
 
-            <div className="flex justify-end">
-              <Button type="submit" disabled={!selectedClient}>
-                <Save className="mr-2 h-4 w-4" />
-                Registrar Solicitação
-              </Button>
-            </div>
+            <div className="ml-8 space-y-4">
+                {allSelectedEquipments.length === 0 ? (
+                    <div className="p-4 bg-amber-50 text-amber-800 rounded-md border border-amber-200 text-sm flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Selecione ao menos um equipamento (Passo 2 ou 3) para adicionar peças.
+                    </div>
+                ) : (
+                    <PartsSelector 
+                        selectedParts={selectedParts}
+                        onPartsChange={setSelectedParts}
+                        availableEquipments={allSelectedEquipments}
+                    />
+                )}
 
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+                <div className="flex justify-end">
+                    <div className="w-full md:w-1/3 space-y-2">
+                        <Label htmlFor="cost" className="text-xs uppercase text-muted-foreground font-semibold">Custo Total (Calculado)</Label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-gray-500 text-sm">R$</span>
+                            <Input 
+                                type="number" 
+                                id="cost"
+                                placeholder="0.00"
+                                readOnly
+                                className="bg-gray-100 border-gray-200 pl-9 font-bold text-gray-800"
+                                {...register('cost')}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Footer Actions */}
+          <div className="flex justify-end gap-3 pt-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={onCancel}
+              className="text-gray-600 border-gray-300 hover:bg-gray-50"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={!selectedClient || allSelectedEquipments.length === 0}
+              className="bg-primary hover:bg-primary/90 min-w-[140px]"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              Salvar Registro
+            </Button>
+          </div>
+
+        </form>
+      </CardContent>
+    </Card>
+    </TooltipProvider>
   );
 };
 

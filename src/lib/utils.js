@@ -12,8 +12,10 @@ import {
   endOfYear, 
   subDays, 
   subMonths, 
-  subYears 
+  subYears,
+  format
 } from "date-fns"
+import { ptBR } from "date-fns/locale"
 
 export function cn(...inputs) {
   return twMerge(clsx(inputs))
@@ -27,6 +29,16 @@ export const formatCurrency = (value) => {
     style: 'currency',
     currency: 'BRL',
   }).format(amount);
+};
+
+export const formatDate = (date, formatString = 'dd/MM/yyyy') => {
+  if (!date) return '-';
+  try {
+    return format(new Date(date), formatString, { locale: ptBR });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return '-';
+  }
 };
 
 export const getDateRange = (preset) => {
