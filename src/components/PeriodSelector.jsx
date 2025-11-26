@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -26,6 +27,7 @@ const PeriodSelector = () => {
 
   const handlePreset = (preset, labelText) => {
     const range = getDateRange(preset);
+    // Updating context triggers fetchData in DashboardPage via useEffect dependency
     setDateRange(range);
     setLabel(labelText);
     setIsOpen(false);
@@ -44,10 +46,10 @@ const PeriodSelector = () => {
     <div className="flex items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-[180px] justify-between bg-background">
+          <Button variant="outline" className="w-[180px] justify-between bg-white border-gray-200 shadow-sm hover:bg-gray-50">
             <div className="flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-              <span className="truncate">{label}</span>
+              <CalendarIcon className="h-4 w-4 text-blue-600" />
+              <span className="truncate text-gray-700">{label}</span>
             </div>
             <ChevronDown className="h-4 w-4 opacity-50" />
           </Button>

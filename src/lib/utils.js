@@ -23,13 +23,36 @@ export function cn(...inputs) {
 
 export const formatCurrency = (value) => {
   const amount = Number(value);
-  if (isNaN(amount)) return 'R$ 0,00';
+  if (isNaN(amount) || amount === null) return 'R$ 0,00';
   
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 };
+
+export const formatNumber = (value) => {
+  const num = Number(value);
+  if (isNaN(num) || num === null) return '0';
+  return new Intl.NumberFormat('pt-BR').format(num);
+};
+
+export const formatLargeNumberCompact = (num) => {
+  if (num === undefined || num === null) return 'R$ 0';
+  const amount = Number(num);
+  if (isNaN(amount)) return 'R$ 0';
+
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 1, // Adjust as needed for compact display
+  }).format(amount);
+};
+
 
 export const formatDate = (date, formatString = 'dd/MM/yyyy') => {
   if (!date) return '-';

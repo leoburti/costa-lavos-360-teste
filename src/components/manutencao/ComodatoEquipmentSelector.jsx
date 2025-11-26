@@ -1,17 +1,29 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useClientEquipments } from '@/hooks/useClientEquipments';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Database, Wrench, CalendarDays } from 'lucide-react';
+import { Database, Wrench, CalendarDays, AlertTriangle } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 const ComodatoEquipmentSelector = ({ clientId, selectedEquipments, onSelectionChange }) => {
-  const { equipments, isLoading } = useClientEquipments(clientId);
+  const { equipments, isLoading, isError } = useClientEquipments(clientId);
 
-  // Filter only Comodato items
-  const comodatoEquipments = equipments.filter(eq => eq.tipo_propriedade === 'comodato' || !eq.tipo_propriedade);
+  useEffect(() => {
+    console.log('--- ComodatoEquipmentSelector Debug ---');
+    console.log('Client ID:', clientId);
+    console.log('Raw Equipments Data:', equipments);
+    console.log('Is Loading:', isLoading);
+    console.log('Is Error:', isError);
+  }, [clientId, equipments, isLoading, isError]);
+
+  // Filter only Comodato items (RPC now ensures 'comodato' is set for ERP items)
+  const comodatoEquipments = equipments.filter(eq => {
+    const isComodato = eq.tipo_propriedade === 'comodato' || !eq.tipo_propriedade;
+    if (!isComodato) console.log('Filtered out equipment (not comodato):', eq);
+    return isComodato;
+  });
 
   const handleToggle = (equipment) => {
     const isSelected = selectedEquipments.some(e => e.id === equipment.id);
@@ -33,7 +45,18 @@ const ComodatoEquipmentSelector = ({ clientId, selectedEquipments, onSelectionCh
   }
 
   if (isLoading) {
-    return <div className="p-4 text-center text-muted-foreground">Carregando inventário...</div>;
+    return <div className="p-4 text-center text-muted-foreground animate-pulse">Carregando inventário...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="p-4 text-center text-red-500 border border-red-100 rounded-md bg-red-50">
+        <p className="text-sm flex items-center justify-center gap-2">
+          <AlertTriangle className="h-4 w-4" />
+          Erro ao carregar equipamentos. Tente novamente.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -52,14 +75,15 @@ const ComodatoEquipmentSelector = ({ clientId, selectedEquipments, onSelectionCh
         <div className="space-y-2">
           {comodatoEquipments.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <p className="text-sm">Nenhum equipamento em comodato encontrado para este cliente.</p>
+              <p className="text-sm font-medium">Nenhum equipamento em comodato encontrado.</p>
+              <p className="text-xs text-gray-400 mt-1">Verifique se o cliente possui código vinculado no ERP.</p>
             </div>
           ) : (
-            comodatoEquipments.map((equip) => {
+            comodatoEquipments.map((equip, idx) => {
               const isSelected = selectedEquipments.some(e => e.id === equip.id);
               return (
                 <div 
-                  key={equip.id} 
+                  key={equip.id || `equip-${idx}`} 
                   className={`flex items-start space-x-3 p-3 rounded-lg border transition-all cursor-pointer ${
                     isSelected 
                       ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200' 
@@ -78,7 +102,7 @@ const ComodatoEquipmentSelector = ({ clientId, selectedEquipments, onSelectionCh
                       htmlFor={`comodato-${equip.id}`}
                       className="text-sm font-semibold text-gray-900 cursor-pointer"
                     >
-                      {equip.nome}
+                      {equip.nome || "Equipamento Sem Nome"}
                     </label>
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       {equip.modelo && (
@@ -91,6 +115,11 @@ const ComodatoEquipmentSelector = ({ clientId, selectedEquipments, onSelectionCh
                         <span className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
                           <Wrench className="h-3 w-3" /> {equip.localizacao}
                         </span>
+                      )}
+                      {equip.source === 'erp' && (
+                        <Badge variant="outline" className="text-[10px] h-5 border-blue-200 text-blue-700 bg-blue-50">
+                          ERP
+                        </Badge>
                       )}
                     </div>
                     {equip.data_instalacao && (

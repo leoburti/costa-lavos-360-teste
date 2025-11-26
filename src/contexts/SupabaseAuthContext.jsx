@@ -4,7 +4,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { handleAuthError, logout, signIn as authSignInService } from '@/services/authService';
 import { useToast } from '@/components/ui/use-toast';
-import { queryClient } from '@/lib/queryClient'; // Import to clear cache on logout
+import { queryClient } from '@/lib/queryClient';
 
 export const SupabaseAuthContext = createContext();
 
@@ -22,9 +22,6 @@ export const SupabaseAuthProvider = ({ children }) => {
       const cached = localStorage.getItem(CACHE_KEY);
       if (!cached) return null;
       const parsed = JSON.parse(cached);
-      // Optional: check if cache is expired (e.g. > 24h)
-      // const now = new Date().getTime();
-      // if (now - parsed.lastUpdated > 1000 * 60 * 60 * 24) return null;
       return parsed;
     } catch (error) {
       console.error("Failed to parse user context from cache", error);
@@ -32,9 +29,15 @@ export const SupabaseAuthProvider = ({ children }) => {
     }
   });
 
+  // Use a ref to track userContext to avoid dependency loops in useCallback
+  const userContextRef = useRef(userContext);
+  useEffect(() => {
+    userContextRef.current = userContext;
+  }, [userContext]);
+
   const fetchingRef = useRef(false);
 
-  // Optimized fetchUserContext
+  // Optimized fetchUserContext - Stable reference (no dependencies)
   const fetchUserContext = useCallback(async (sessionUser) => {
     if (!sessionUser) {
       setUserContext(null);
@@ -42,14 +45,14 @@ export const SupabaseAuthProvider = ({ children }) => {
       return null;
     }
 
-    // If we already have context for this user and it's recent (< 5 min), skip fetch
-    // This prevents redundant fetches on "minimizing/restoring" tabs
-    if (userContext && userContext.id === sessionUser.id) {
+    // Check cache using ref to avoid dependency loop
+    const currentContext = userContextRef.current;
+    if (currentContext && currentContext.id === sessionUser.id) {
         const now = new Date().getTime();
-        const age = now - (userContext.lastUpdated || 0);
+        const age = now - (currentContext.lastUpdated || 0);
+        // 5 minutes cache
         if (age < 1000 * 60 * 5) {
-            console.log('[AuthContext] Using cached context (fresh)');
-            return userContext;
+            return currentContext;
         }
     }
 
@@ -57,8 +60,6 @@ export const SupabaseAuthProvider = ({ children }) => {
     fetchingRef.current = true;
 
     try {
-      // console.log(`[AuthContext] Fetching for user email: ${sessionUser.email}`);
-      
       const { data, error } = await supabase.rpc('get_user_role', { p_user_id: sessionUser.id });
 
       if (error) {
@@ -160,7 +161,7 @@ export const SupabaseAuthProvider = ({ children }) => {
 
     } catch (error) {
       console.error("[AuthContext] Fatal error in fetchUserContext:", error.message);
-      if (!userContext) {
+      if (!userContextRef.current) {
           handleAuthError(error);
           setUserContext(null);
           localStorage.removeItem(CACHE_KEY);
@@ -169,12 +170,11 @@ export const SupabaseAuthProvider = ({ children }) => {
     } finally {
       fetchingRef.current = false;
     }
-  }, [userContext]); 
+  }, []); // Removed userContext dependency to prevent infinite loops
 
   const forceRoleRefetch = useCallback(async () => {
     if (user) {
       setLoading(true);
-      // Force fetch by clearing ref check conceptually
       fetchingRef.current = false;
       await fetchUserContext(user);
       setLoading(false);
@@ -186,8 +186,14 @@ export const SupabaseAuthProvider = ({ children }) => {
 
     const initializeAuth = async () => {
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
         
+        if (error) {
+            handleAuthError(error);
+            if (mounted) setLoading(false);
+            return;
+        }
+
         if (mounted) {
           setSession(initialSession);
           setUser(initialSession?.user ?? null);
@@ -201,6 +207,7 @@ export const SupabaseAuthProvider = ({ children }) => {
         }
       } catch (e) {
         console.error("Auth initialization error", e);
+        handleAuthError(e);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -212,10 +219,8 @@ export const SupabaseAuthProvider = ({ children }) => {
       async (event, newSession) => {
         if (!mounted) return;
 
-        // Ignore TOKEN_REFRESHED to prevent unnecessary state updates/refetches
         if (event === 'TOKEN_REFRESHED') {
-            // console.log('Token refreshed silently');
-            setSession(newSession); // Update session tokens only
+            setSession(newSession);
             return;
         }
 
@@ -224,13 +229,14 @@ export const SupabaseAuthProvider = ({ children }) => {
         setUser(sessionUser);
         
         if (sessionUser) {
-             if (event === 'SIGNED_IN' || !userContext) {
+             // Only fetch if signed in or context is missing
+             if (event === 'SIGNED_IN' || !userContextRef.current) {
                  await fetchUserContext(sessionUser);
              }
         } else if (event === 'SIGNED_OUT') {
             setUserContext(null);
             localStorage.removeItem(CACHE_KEY);
-            queryClient.clear(); // Clear all React Query cache on logout
+            queryClient.clear();
         }
         setLoading(false);
       }
@@ -269,8 +275,6 @@ export const SupabaseAuthProvider = ({ children }) => {
     forceRoleRefetch,
   };
 
-  // Prevent white screen during initial loading if we have no session OR no context
-  // But if we have persisted context, show app immediately while checking session in bg
   if (loading && !session && !userContext) {
     return <div className="flex h-screen w-full items-center justify-center bg-background"><LoadingSpinner message="Inicializando sistema..." /></div>;
   }

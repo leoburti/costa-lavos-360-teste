@@ -1,28 +1,36 @@
 
-import { useEdgeFunctionQuery } from '@/hooks/useEdgeFunctionQuery';
-import { useDebounce } from '@/hooks/useDebounce';
+import { useMemo } from 'react';
+import { useClientEquipments } from './useClientEquipments';
 
 export const useEquipmentSearch = (clientId, searchTerm) => {
-  const debouncedSearch = useDebounce(searchTerm, 300);
+  // Reuse the robust client equipment fetcher to ensure data consistency
+  // This prevents multiple conflicting queries for the same data
+  const { equipments, isLoading, refetch, isError } = useClientEquipments(clientId);
   
-  const query = useEdgeFunctionQuery(
-    'search-equipamentos',
-    { clientId, searchTerm: debouncedSearch },
-    {
-      enabled: !!clientId,
-      staleTime: 1000 * 60 * 2, // 2 minutes cache
-      retry: 1,
-      refetchOnWindowFocus: false
-    }
-  );
-
-  const equipments = Array.isArray(query.data) ? query.data : [];
+  const filteredEquipments = useMemo(() => {
+    if (!equipments) return [];
+    if (!searchTerm) return equipments;
+    
+    const lowerTerm = searchTerm.toLowerCase();
+    return equipments.filter(item => {
+      const nome = item.nome?.toLowerCase() || '';
+      const modelo = item.modelo?.toLowerCase() || '';
+      const serie = item.serie?.toLowerCase() || '';
+      const local = item.localizacao?.toLowerCase() || '';
+      
+      return (
+        nome.includes(lowerTerm) ||
+        modelo.includes(lowerTerm) ||
+        serie.includes(lowerTerm) ||
+        local.includes(lowerTerm)
+      );
+    });
+  }, [equipments, searchTerm]);
 
   return {
-    equipments,
-    isLoading: query.isLoading,
-    isError: query.isError,
-    error: query.error,
-    refetch: query.refetch
+    equipments: filteredEquipments,
+    isLoading,
+    isError,
+    refetch
   };
 };

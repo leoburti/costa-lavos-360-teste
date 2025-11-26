@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
@@ -18,8 +19,7 @@ const MetricCard = ({ title, value, change, changeType, icon: Icon, subtitle }) 
   const trend = getTrendInfo();
   
   const displayValue = value === null || value === undefined ? 'N/A' : value;
-  const valueAsString = String(displayValue);
-  const isZeroOrNA = displayValue === 'N/A' || parseFloat(valueAsString.replace(/[^0-9,-]/g, '').replace(',', '.')) === 0;
+  const isZeroOrNA = displayValue === 'N/A' || (typeof displayValue === 'string' && parseFloat(displayValue.replace(/[^0-9,-]/g, '').replace(',', '.')) === 0) || (typeof displayValue === 'number' && displayValue === 0);
   
   return (
     <motion.div

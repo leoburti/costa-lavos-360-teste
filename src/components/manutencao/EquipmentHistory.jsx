@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from "@/components/ui/use-toast";
@@ -195,7 +196,7 @@ const EquipmentHistory = () => {
             }
              setIsGeneratingPdf(false);
              setPdfRecord(null);
-        }, 500); // Small delay to ensure the component renders with the correct data
+        }, 500);
     };
 
     const fetchHistory = useCallback(async () => {
@@ -212,7 +213,7 @@ const EquipmentHistory = () => {
                     maintenance_answers (id, valor, maintenance_question_templates (pergunta))
                 `)
                 .order('data_inicio', { ascending: false })
-                .limit(100); // Limit to prevent large payload issues
+                .limit(100);
 
             if (error) throw error;
             setRecords(data);

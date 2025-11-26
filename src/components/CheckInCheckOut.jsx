@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,7 +58,10 @@ const CheckInCheckOut = ({
   onCheckOut,
   disabled = false,
   isCheckInLoading = false,
-  isCheckOutLoading = false
+  isCheckOutLoading = false,
+  showCheckIn = true,
+  showCheckOut = true,
+  title
 }) => {
   const { getLocation, error: geoError, clearError: clearGeoError } = useGeolocation();
   const { toast } = useToast();
@@ -67,6 +71,8 @@ const CheckInCheckOut = ({
   // Manual entry state
   const [manualMode, setManualMode] = useState(false);
   const [manualData, setManualData] = useState({ lat: '', lng: '', address: '' });
+
+  const displayTitle = title || (showCheckIn && showCheckOut ? "Controle de Ponto Geográfico" : (showCheckIn ? "Registro de Chegada (Check-in)" : "Registro de Saída (Check-out)"));
 
   const handleCheckIn = async () => {
     if (manualMode) {
@@ -149,13 +155,15 @@ const CheckInCheckOut = ({
   const loadingCheckIn = isCheckInLoading || localCheckInLoading;
   const loadingCheckOut = isCheckOutLoading || localCheckOutLoading;
 
+  if (!showCheckIn && !showCheckOut) return null;
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-start">
         <div>
-            <h3 className="font-semibold text-base">Controle de Ponto Geográfico</h3>
+            <h3 className="font-semibold text-base">{displayTitle}</h3>
             <p className="text-sm text-muted-foreground">
-            Registre o início e o fim da sua atividade no local.
+            {manualMode ? 'Insira as coordenadas manualmente.' : 'Utilize o GPS para registrar o local.'}
             </p>
         </div>
         <Button 
@@ -206,25 +214,30 @@ const CheckInCheckOut = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Button
-          onClick={handleCheckIn}
-          disabled={loadingCheckIn || hasCheckIn || disabled}
-          variant={hasCheckIn ? "secondary" : "default"}
-          className="w-full"
-        >
-          {loadingCheckIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (manualMode ? <Navigation className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />)}
-          {hasCheckIn ? 'Check-in Realizado' : (manualMode ? 'Salvar Check-in Manual' : 'Fazer Check-in GPS')}
-        </Button>
-        <Button
-          onClick={handleCheckOut}
-          disabled={loadingCheckOut || !hasCheckIn || hasCheckOut || disabled}
-          variant={hasCheckOut ? "secondary" : "default"}
-          className="w-full"
-        >
-          {loadingCheckOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (manualMode ? <Navigation className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4" />)}
-          {hasCheckOut ? 'Check-out Realizado' : (manualMode ? 'Salvar Check-out Manual' : 'Fazer Check-out GPS')}
-        </Button>
+      <div className={`grid gap-4 ${showCheckIn && showCheckOut ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+        {showCheckIn && (
+            <Button
+            onClick={handleCheckIn}
+            disabled={loadingCheckIn || hasCheckIn || disabled}
+            variant={hasCheckIn ? "secondary" : "default"}
+            className="w-full"
+            >
+            {loadingCheckIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (manualMode ? <Navigation className="mr-2 h-4 w-4" /> : <MapPin className="mr-2 h-4 w-4" />)}
+            {hasCheckIn ? 'Check-in Realizado' : (manualMode ? 'Salvar Check-in Manual' : 'Fazer Check-in GPS')}
+            </Button>
+        )}
+        
+        {showCheckOut && (
+            <Button
+            onClick={handleCheckOut}
+            disabled={loadingCheckOut || !hasCheckIn || hasCheckOut || disabled}
+            variant={hasCheckOut ? "secondary" : "default"}
+            className="w-full"
+            >
+            {loadingCheckOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (manualMode ? <Navigation className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4" />)}
+            {hasCheckOut ? 'Check-out Realizado' : (manualMode ? 'Salvar Check-out Manual' : 'Fazer Check-out GPS')}
+            </Button>
+        )}
       </div>
 
       {geoError && !manualMode && (
@@ -241,20 +254,24 @@ const CheckInCheckOut = ({
       )}
 
       <div className="space-y-2">
-        <GeolocationDisplay
-          label="Check-in (Chegada)"
-          timestamp={record?.check_in_time}
-          address={record?.check_in_address}
-          lat={record?.check_in_lat}
-          lng={record?.check_in_lng}
-        />
-        <GeolocationDisplay
-          label="Check-out (Saída)"
-          timestamp={record?.check_out_time}
-          address={record?.check_out_address}
-          lat={record?.check_out_lat}
-          lng={record?.check_out_lng}
-        />
+        {showCheckIn && (
+            <GeolocationDisplay
+            label="Check-in (Chegada)"
+            timestamp={record?.check_in_time}
+            address={record?.check_in_address}
+            lat={record?.check_in_lat}
+            lng={record?.check_in_lng}
+            />
+        )}
+        {showCheckOut && (
+            <GeolocationDisplay
+            label="Check-out (Saída)"
+            timestamp={record?.check_out_time}
+            address={record?.check_out_address}
+            lat={record?.check_out_lat}
+            lng={record?.check_out_lng}
+            />
+        )}
       </div>
     </div>
   );

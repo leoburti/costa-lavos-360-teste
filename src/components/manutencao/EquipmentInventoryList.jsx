@@ -1,6 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/customSupabaseClient';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { searchEquipmentInventory } from '@/services/apoioSyncService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -13,6 +12,7 @@ import { Loader2, Search, RefreshCw, Layers, MapPin, Wrench } from 'lucide-react
 import { formatDate } from '@/lib/utils';
 import { useToast } from "@/components/ui/use-toast";
 import CheckInCheckOut from '@/components/CheckInCheckOut';
+import { supabase } from '@/lib/customSupabaseClient';
 import {
   Dialog,
   DialogContent,
@@ -25,62 +25,68 @@ const InventoryItemActions = ({ item, onStartMaintenance, refreshInventory }) =>
   const { toast } = useToast();
   const [maintenanceRecord, setMaintenanceRecord] = useState(item.maintenance || {});
 
+  useEffect(() => {
+    setMaintenanceRecord(item.maintenance || {});
+  }, [item.maintenance]);
+
   const updateMaintenanceStatus = async (updateData) => {
-    // Check if a maintenance record already exists for this inventory item
-    let { data: existingMaint, error: findError } = await supabase
-        .from('maintenance')
-        .select('id')
-        .eq('inventory_item_id', item.Chave_ID)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-    
-    if (findError && findError.code !== 'PGRST116') { // PGRST116: no rows found
-        toast({ variant: 'destructive', title: 'Erro ao buscar manutenção', description: findError.message });
-        return;
+    try {
+      let { data: existingMaint, error: findError } = await supabase
+          .from('maintenance')
+          .select('id')
+          .eq('inventory_item_id', item.Chave_ID)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+      
+      if (findError && findError.code !== 'PGRST116') {
+          toast({ variant: 'destructive', title: 'Erro', description: findError.message });
+          return;
+      }
+
+      let result;
+      if (existingMaint) {
+          result = await supabase.from('maintenance').update(updateData).eq('id', existingMaint.id).select().single();
+      } else {
+          let { data: eq, error: eqError } = await supabase.from('equipment').select('id').eq('serial', item.AA3_CHAPA).single();
+
+          if (eqError && eqError.code !== 'PGRST116') {
+              toast({ variant: "destructive", title: "Erro", description: eqError.message });
+              return;
+          }
+
+          let equipmentId = eq?.id;
+          if (!equipmentId) {
+               const { data: newEq, error: createEqError } = await supabase.from('equipment').insert({ 
+                 nome: item.Equipamento, 
+                 serial: item.AA3_CHAPA, 
+                 status: 'ativo' 
+               }).select('id').single();
+               
+               if (createEqError) {
+                  toast({ variant: "destructive", title: "Erro", description: createEqError.message });
+                  return;
+               }
+               equipmentId = newEq.id;
+          }
+          
+          result = await supabase.from('maintenance').insert({ 
+            ...updateData, 
+            inventory_item_id: item.Chave_ID, 
+            equipment_id: equipmentId 
+          }).select().single();
+      }
+
+      if (result.error) {
+          toast({ variant: 'destructive', title: 'Erro', description: result.error.message });
+      } else {
+          setMaintenanceRecord(result.data);
+          if(refreshInventory) refreshInventory();
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Erro inesperado', description: e.message });
     }
-
-    let result;
-    if (existingMaint) {
-        // Update existing record
-        result = await supabase.from('maintenance').update(updateData).eq('id', existingMaint.id).select().single();
-    } else {
-        // Find corresponding equipment in catalog
-        let { data: eq, error: eqError } = await supabase.from('equipment').select('id').eq('serial', item.AA3_CHAPA).single();
-
-        if (eqError && eqError.code !== 'PGRST116') {
-            toast({ variant: "destructive", title: "Erro ao buscar equipamento no catálogo", description: eqError.message });
-            return;
-        }
-
-        let equipmentId = eq?.id;
-        if (!equipmentId) {
-             const { data: newEq, error: createEqError } = await supabase.from('equipment').insert({ nome: item.Equipamento, serial: item.AA3_CHAPA, status: 'ativo' }).select('id').single();
-             if (createEqError) {
-                toast({ variant: "destructive", title: "Erro ao criar equipamento no catálogo", description: createEqError.message });
-                return;
-             }
-             equipmentId = newEq.id;
-        }
-        
-        // Create new record
-        result = await supabase.from('maintenance').insert({ ...updateData, inventory_item_id: item.Chave_ID, equipment_id: equipmentId }).select().single();
-    }
-
-    if (result.error) {
-        toast({ variant: 'destructive', title: 'Erro ao atualizar status', description: result.error.message });
-    } else {
-        setMaintenanceRecord(result.data);
-        refreshInventory();
-    }
-  };
-
-  const handleCheckIn = async (geoData) => {
-    await updateMaintenanceStatus(geoData);
-  };
-  
-  const handleCheckOut = async (geoData) => {
-    await updateMaintenanceStatus(geoData);
   };
 
   return (
@@ -116,14 +122,13 @@ const InventoryItemActions = ({ item, onStartMaintenance, refreshInventory }) =>
             </DialogHeader>
             <CheckInCheckOut 
               record={maintenanceRecord}
-              onCheckIn={handleCheckIn}
-              onCheckOut={handleCheckOut}
+              onCheckIn={updateMaintenanceStatus}
+              onCheckOut={updateMaintenanceStatus}
             />
         </DialogContent>
     </Dialog>
   );
 };
-
 
 const EquipmentInventoryList = ({ onStartMaintenance }) => {
   const [loading, setLoading] = useState(true);
@@ -131,10 +136,8 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
   const [debouncedTerm, setDebouncedTerm] = useState('');
   const [groupBy, setGroupBy] = useState('Fantasia');
   const [inventoryData, setInventoryData] = useState([]);
-  const [groupedInventory, setGroupedInventory] = useState({});
   const { toast } = useToast();
 
-  // Debounce logic
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedTerm(searchTerm);
@@ -145,33 +148,24 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
   const fetchInventory = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch directly using service, bypassing potential broken hook/edge functions
       const data = await searchEquipmentInventory(debouncedTerm);
-      
-      // Process and enrich data
-      const processedData = data.map(item => ({
+      const processedData = (data || []).map((item, idx) => ({
         ...item,
+        uniqueKey: item.Chave_ID || item.AA3_CHAPA || `temp-${idx}`,
         derivedStatus: item.AA3_STATUS || item.STAT || 'Ativo',
-        derivedLocation: item.Loja_texto || item.Loja
+        derivedLocation: item.Loja_texto || item.Loja || 'Local N/A'
       }));
-      
       setInventoryData(processedData);
     } catch (error) {
       console.error("Error fetching inventory:", error);
-      toast({ 
-        variant: 'destructive', 
-        title: 'Erro ao carregar inventário', 
-        description: error.message 
-      });
+      toast({ variant: 'destructive', title: 'Erro ao carregar inventário', description: error.message });
     } finally {
       setLoading(false);
     }
   }, [debouncedTerm, toast]);
 
-  // Group data whenever inventory or groupBy changes
-  useEffect(() => {
+  const groupedInventory = useMemo(() => {
     const grouped = {};
-    
     inventoryData.forEach(item => {
       let key = item[groupBy];
       if (!key || key === 'null') key = 'Não Definido';
@@ -180,18 +174,14 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
         grouped[key] = { active: [], inactive: [] };
       }
       
-      // Determine if active based on status
-      // Assuming 'Ativo' or empty status implies active for simplicity, adjust as needed
       const isActive = item.derivedStatus === 'Ativo' || !item.derivedStatus;
-      
       if (isActive) {
         grouped[key].active.push(item);
       } else {
         grouped[key].inactive.push(item);
       }
     });
-    
-    setGroupedInventory(grouped);
+    return grouped;
   }, [inventoryData, groupBy]);
 
   useEffect(() => {
@@ -235,7 +225,7 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar por Fantasia, Equipamento, Chapa, Loja, Vendedor, Rede..."
+            placeholder="Buscar por Fantasia, Equipamento, Chapa..."
             className="w-full pl-8"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -247,8 +237,7 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
           <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>
         ) : !hasContent ? (
           <div className="text-center text-muted-foreground py-16">
-            <p>Nenhum equipamento encontrado no inventário.</p>
-            <p className="text-sm mt-2">{searchTerm ? `Tente refinar sua busca por "${searchTerm}".` : "Verifique os filtros ou tente atualizar."}</p>
+            <p>Nenhum equipamento encontrado.</p>
           </div>
         ) : (
           <Accordion type="multiple" className="w-full">
@@ -263,11 +252,9 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
                 <AccordionItem value={groupKey} key={groupKey}>
                   <AccordionTrigger>
                     <div className="flex justify-between items-center w-full pr-4">
-                        <span className="font-semibold truncate" title={groupKey}>{groupKey}</span>
+                        <span className="font-semibold truncate max-w-[200px] sm:max-w-md" title={groupKey}>{groupKey}</span>
                         <div className="flex items-center gap-2 text-sm">
-                            <Badge variant="outline">{totalGroupCount} Total</Badge>
-                            <Badge variant="success">{activeCount} Ativo(s)</Badge>
-                            <Badge variant="destructive">{inactiveCount} Inativo(s)</Badge>
+                            <Badge variant="outline">{totalGroupCount}</Badge>
                         </div>
                     </div>
                   </AccordionTrigger>
@@ -277,17 +264,17 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
                         <TableHeader>
                             <TableRow>
                             <TableHead>Equipamento</TableHead>
-                            <TableHead>Fantasia/Local</TableHead>
+                            <TableHead>Local</TableHead>
                             <TableHead>Vendedor</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Data Venda</TableHead>
+                            <TableHead className="text-right">Data</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {[...groupData.active, ...groupData.inactive].map((item) => (
                               <InventoryItemActions 
-                                key={item.Chave_ID || item.AA3_CHAPA} 
+                                key={item.uniqueKey} 
                                 item={item}
                                 onStartMaintenance={onStartMaintenance}
                                 refreshInventory={fetchInventory}

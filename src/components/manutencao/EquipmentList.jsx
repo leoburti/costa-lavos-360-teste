@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -33,7 +34,7 @@ const EquipmentList = () => {
           equipment_families ( nome )
         `, { count: 'exact' })
         .order('nome', { ascending: true })
-        .limit(100); // Limit to prevent large payload issues
+        .limit(100);
 
       if (debouncedSearchTerm) {
         const orFilter = `nome.ilike.%${debouncedSearchTerm}%,ativo_fixo.ilike.%${debouncedSearchTerm}%,serial.ilike.%${debouncedSearchTerm}%,equipment_families.nome.ilike.%${debouncedSearchTerm}%`;

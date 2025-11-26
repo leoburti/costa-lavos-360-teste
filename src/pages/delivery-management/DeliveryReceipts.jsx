@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -120,7 +121,7 @@ const ItemList = ({ items, invoiceNum, itemsStatus, onUpdateStatus, isCompleted 
                         const val = e.target.value;
                         onUpdateStatus(item.descricao, { ...status, observation: val }, false); // false = don't save immediately on keystroke
                     }}
-                    onBlur={(e) => onUpdateStatus(item.descricao, { ...status, observation: e.target.value }, true)} // Save on blur
+                    onBlur={(e) => onUpdateStatus(item.descricao, { ...status, observation: e.target.value, updated_at: new Date().toISOString() }, true)} // Save on blur
                     disabled={isCompleted}
                     className="h-9 text-xs bg-background/80 border-input/50 focus:border-primary"
                 />
@@ -181,7 +182,7 @@ const DeliveryReceipts = () => {
         initialFormData[invoiceNum] = {
           id: entrega?.id || null,
           caixas_entregues: entrega?.caixas_entregues || '',
-          caixas_retiradas: entrega?.caixas_recolhidas || '',
+          caixas_recolhidas: entrega?.caixas_recolhidas || '',
           recebedor_nome: entrega?.recebedor_nome || '',
           recebedor_documento: entrega?.recebedor_documento || '',
           observacoes: entrega?.observacoes || '',
@@ -420,6 +421,7 @@ const DeliveryReceipts = () => {
                     {isFinalized ? <div className="text-center py-8"><CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-4" /><p className="font-semibold">Esta entrega já foi finalizada.</p></div>
                     : <div className="space-y-6">
                         <fieldset disabled={isFinalized}>
+                            {/* CheckIn - Topo da Lista */}
                             <CheckInCheckOut 
                                 record={receiptData} 
                                 onCheckIn={(data) => handleCheckIn(invoiceNum, data)} 
@@ -427,6 +429,7 @@ const DeliveryReceipts = () => {
                                 isCheckInLoading={status.isCheckInLoading} 
                                 isCheckOutLoading={status.isCheckOutLoading} 
                                 disabled={isFinalized}
+                                showCheckOut={false}
                             />
                             <hr className="my-6" />
                             <fieldset disabled={!hasCheckIn || isFinalized} className="space-y-6">
@@ -520,6 +523,19 @@ const DeliveryReceipts = () => {
                                     <div className="space-y-2"><Label className="flex items-center gap-2" htmlFor={`photos-${invoiceNum}`}><Camera className="h-4 w-4" /> Fotos Adicionais</Label><Input id={`photos-${invoiceNum}`} type="file" multiple onChange={(e) => handleInputChange(invoiceNum, 'fotos', e.target.files)} /></div>
                                 </div>
                                 
+                                {/* CheckOut - Fim do Processo (Acima de Finalizar) */}
+                                <div className="py-4">
+                                    <CheckInCheckOut 
+                                        record={receiptData} 
+                                        onCheckIn={(data) => handleCheckIn(invoiceNum, data)} 
+                                        onCheckOut={(data) => handleCheckOut(invoiceNum, data)} 
+                                        isCheckInLoading={status.isCheckInLoading} 
+                                        isCheckOutLoading={status.isCheckOutLoading} 
+                                        disabled={isFinalized}
+                                        showCheckIn={false}
+                                    />
+                                </div>
+
                                 <Button onClick={() => handleFinalize(invoiceNum)} disabled={status.isFinalLoading || !hasCheckIn || isFinalized} className="w-full h-12 text-lg">{status.isFinalLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Finalizar Entrega'}</Button>
                                 {status.finalError && <p className="text-sm text-destructive text-center flex items-center justify-center gap-2"><AlertTriangle className="h-4 w-4"/> {status.finalError}</p>}
                             </fieldset>

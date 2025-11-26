@@ -1,35 +1,39 @@
 
-import { useEdgeFunctionQuery } from '@/hooks/useEdgeFunctionQuery';
-import { useDebounce } from '@/hooks/useDebounce';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/customSupabaseClient';
+import { useDebounce } from './useDebounce';
 
-/**
- * Hook to search clients using Supabase Edge Functions
- * Replaces legacy RPC calls for better performance and stability.
- * Handles the specific response format from search_clients_safe.
- */
 export const useClientSearch = (searchTerm) => {
-  const debouncedSearch = useDebounce(searchTerm, 400); // Increased debounce slightly for better UX
-  
-  const query = useEdgeFunctionQuery(
-    'search-clients',
-    { searchTerm: debouncedSearch },
-    {
-      enabled: !!debouncedSearch && debouncedSearch.length >= 2,
-      staleTime: 1000 * 60 * 5, // 5 minutes cache
-      retry: 1,
-      refetchOnWindowFocus: false
-    }
-  );
+  const [clients, setClients] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  // Normalize data structure if needed
-  // The Edge function returns an array of objects directly: [{ code, name, ... }, ...]
-  const clients = Array.isArray(query.data) ? query.data : [];
+  useEffect(() => {
+    const searchClients = async () => {
+      if (!debouncedSearchTerm || debouncedSearchTerm.length < 2) {
+        setClients([]);
+        return;
+      }
 
-  return {
-    clients,
-    isLoading: query.isLoading,
-    isError: query.isError,
-    error: query.error,
-    refetch: query.refetch
-  };
+      setIsLoading(true);
+      try {
+        // Use the safe RPC function which handles searching correctly
+        const { data, error } = await supabase.rpc('search_clients_safe', {
+          p_search_term: debouncedSearchTerm
+        });
+
+        if (error) throw error;
+        setClients(data || []);
+      } catch (error) {
+        console.error('Error searching clients:', error);
+        setClients([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    searchClients();
+  }, [debouncedSearchTerm]);
+
+  return { clients, isLoading };
 };

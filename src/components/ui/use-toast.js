@@ -1,3 +1,4 @@
+
 import * as React from "react"
 
     const TOAST_LIMIT = 1
@@ -139,7 +140,7 @@ import * as React from "react"
             listeners.splice(index, 1)
           }
         }
-      }, [state])
+      }, []) // Optimized: Empty dependency array to avoid re-registration loop
 
       return {
         ...state,
