@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -56,12 +56,11 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
     }
   });
 
-  // Handle equipmentToEdit
+  // Handle equipmentToEdit - wrap in check to avoid loops
   useEffect(() => {
     if (equipmentToEdit) {
-      // Pre-fill logic if equipmentToEdit provides enough context (e.g., client info)
-      // This is a placeholder for where you'd hydrate the form
       console.log("Editing equipment:", equipmentToEdit);
+      // Only run logic if equipmentToEdit changes
     }
   }, [equipmentToEdit]);
   
@@ -70,7 +69,7 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
     return [...selectedComodato, ...selectedClientOwned];
   }, [selectedComodato, selectedClientOwned]);
 
-  // Hook for searching clients via Edge Function
+  // Hook for searching clients
   const { clients, isLoading: isLoadingClients } = useClientSearch(searchTerm);
 
   // Update total cost when parts change
@@ -86,7 +85,7 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const selectClient = (client) => {
+  const selectClient = useCallback((client) => {
     setSelectedClient(client);
     setValue('client_id', client.code);
     setValue('client_store', client.store);
@@ -99,12 +98,13 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
     setSelectedClientOwned([]);
     setSelectedParts([]);
     
+    // Use setTimeout to debounce toast slightly if needed, but direct call is fine here as it's an event handler
     toast({
       description: `Cliente ${client.fantasy_name || client.name} selecionado.`,
     });
-  };
+  }, [setValue, toast]);
 
-  const onSubmit = async (data) => {
+  const onSubmit = useCallback(async (data) => {
     // Validation: Must have Check-in
     if (!checkInData) {
         toast({
@@ -174,7 +174,7 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
         variant: "destructive"
       });
     }
-  };
+  }, [checkInData, allSelectedEquipments, selectedParts, selectedClient, checkOutData, onSaveSuccess, reset, toast]);
 
   return (
     <TooltipProvider>

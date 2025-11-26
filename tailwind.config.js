@@ -17,6 +17,23 @@ module.exports = {
       },
     },
     extend: {
+      zIndex: {
+        '0': '0',
+        '10': '10',
+        '20': '20',
+        '30': '30',
+        '40': '40',
+        '50': '50',
+        'base': '0',
+        'dropdown': '100',
+        'sticky': '200',
+        'fixed': '300',
+        'overlay': '400',
+        'modal': '500',
+        'popover': '600',
+        'toast': '800',
+        'tooltip': '900',
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -51,6 +68,18 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        }
       },
       borderRadius: {
         lg: "var(--radius)",

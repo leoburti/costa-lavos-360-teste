@@ -36,6 +36,16 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
+    /* Status Colors */
+    --info: 217 91% 60%; /* Blue-500 */
+    --info-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%; /* Green-500 */
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%; /* Amber-500 */
+    --warning-foreground: 0 0% 100%;
+
     --border: 34 20% 90%;
     --input: 34 20% 90%;
     --ring: 0 42% 30%;
@@ -67,6 +77,15 @@
  
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
+
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
  
     --border: 20 10% 20%;
     --input: 20 10% 20%;
@@ -128,5 +147,24 @@
 
   .prose blockquote {
       @apply border-l-primary;
+  }
+
+  /* Typography Hierarchy Utilities */
+  .page-title {
+    @apply text-3xl font-bold tracking-tight text-foreground;
+  }
+  
+  .page-subtitle {
+    @apply text-muted-foreground mt-1;
+  }
+
+  .section-title {
+    @apply text-xl font-semibold tracking-tight mb-4 text-foreground;
+  }
+
+  /* Table Utilities */
+  .table-sticky-first-col th:first-child,
+  .table-sticky-first-col td:first-child {
+    @apply sticky left-0 z-10 bg-background border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)];
   }
 }

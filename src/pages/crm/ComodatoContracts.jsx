@@ -1,170 +1,70 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+import React, { useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, FileText, Printer, Trash2, AlertTriangle } from 'lucide-react';
-import { format } from 'date-fns';
-import { useReactToPrint } from 'react-to-print';
-import ComodatoContract from '@/components/crm/ComodatoContract';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { FileText, Plus, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/components/ui/use-toast';
 
 const ComodatoContracts = () => {
-    const [contracts, setContracts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [selectedContract, setSelectedContract] = useState(null);
-    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-    const { toast } = useToast();
-    const contractRef = useRef();
+  const { user, session } = useSupabaseAuth();
+  const { toast } = useToast();
 
-    const handlePrint = useReactToPrint({
-        content: () => contractRef.current,
+  useEffect(() => {
+    console.log('[ComodatoContracts] Page mounted');
+    console.log('[ComodatoContracts] User:', user?.email);
+    console.log('[ComodatoContracts] Session active:', !!session);
+  }, [user, session]);
+
+  const handleNewContract = () => {
+    toast({
+      title: "Novo Contrato",
+      description: "Funcionalidade de criação de contrato em desenvolvimento.",
     });
+  };
 
-    const fetchContracts = useCallback(async () => {
-        setLoading(true);
-        const { data, error } = await supabase
-            .from('crm_comodato_contracts')
-            .select(`
-                id,
-                created_at,
-                deal_id,
-                contract_data,
-                crm_contacts (fantasy_name),
-                crm_deals (title)
-            `)
-            .order('created_at', { ascending: false });
+  return (
+    <div className="space-y-6 p-6">
+      <Helmet>
+        <title>Contratos de Comodato | CRM | Costa Lavos</title>
+      </Helmet>
 
-        if (error) {
-            toast({ variant: 'destructive', title: 'Erro ao buscar contratos', description: error.message });
-        } else {
-            setContracts(data);
-        }
-        setLoading(false);
-    }, [toast]);
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Contratos de Comodato</h1>
+          <p className="text-muted-foreground mt-1">
+            Gerencie os contratos de comodato dos seus clientes.
+          </p>
+        </div>
+        <Button onClick={handleNewContract}>
+          <Plus className="mr-2 h-4 w-4" /> Novo Contrato
+        </Button>
+      </div>
 
-    useEffect(() => {
-        fetchContracts();
-    }, [fetchContracts]);
-
-    const viewContract = (contract) => {
-        const dealData = {
-            ...contract.crm_deals,
-            crm_contacts: contract.contract_data.client
-        };
-        setSelectedContract(dealData);
-        setIsViewModalOpen(true);
-    };
-
-    const handleDeleteContract = async (contractId) => {
-        const { error } = await supabase.from('crm_comodato_contracts').delete().eq('id', contractId);
-        if (error) {
-            toast({ variant: 'destructive', title: 'Erro ao deletar contrato', description: error.message });
-        } else {
-            toast({ title: 'Sucesso!', description: 'Contrato deletado.' });
-            fetchContracts();
-        }
-    };
-
-    return (
-        <>
-            <Helmet>
-                <title>Contratos de Comodato - CRM</title>
-                <meta name="description" content="Gerencie os contratos de comodato gerados." />
-            </Helmet>
-            <div className="space-y-6">
-                <h1 className="text-3xl font-bold tracking-tight">Contratos de Comodato</h1>
-                
-                <div className="border rounded-lg">
-                    {loading ? (
-                        <div className="flex justify-center items-center h-64">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Data de Geração</TableHead>
-                                    <TableHead>Cliente</TableHead>
-                                    <TableHead>Negócio</TableHead>
-                                    <TableHead className="text-right">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {contracts.length > 0 ? (
-                                    contracts.map(contract => (
-                                        <TableRow key={contract.id}>
-                                            <TableCell>{format(new Date(contract.created_at), 'dd/MM/yyyy HH:mm')}</TableCell>
-                                            <TableCell>{contract.crm_contacts?.fantasy_name}</TableCell>
-                                            <TableCell>{contract.crm_deals?.title}</TableCell>
-                                            <TableCell className="text-right space-x-2">
-                                                <Button variant="outline" size="sm" onClick={() => viewContract(contract)}>
-                                                    <FileText className="h-4 w-4 mr-2" />
-                                                    Visualizar
-                                                </Button>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button variant="destructive" size="sm">
-                                                            <Trash2 className="h-4 w-4 mr-2" />
-                                                            Deletar
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                Esta ação não pode ser desfeita. Isso irá deletar permanentemente o registro do contrato.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => handleDeleteContract(contract.id)}>
-                                                                Deletar
-                                                            </AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={4} className="text-center h-24">Nenhum contrato encontrado.</TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    )}
-                </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Contratos Ativos</CardTitle>
+          <CardDescription>Lista de contratos vigentes e assinados.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-2 mb-4">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Buscar contratos..." className="pl-8" />
             </div>
-
-            <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-                <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
-                    <DialogHeader className="p-4 border-b">
-                        <DialogTitle>Visualizar Contrato de Comodato</DialogTitle>
-                    </DialogHeader>
-                    <div className="flex-1 overflow-y-auto p-6">
-                        <ComodatoContract deal={selectedContract} ref={contractRef} />
-                    </div>
-                    <DialogFooter className="p-4 border-t bg-muted/40">
-                        <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
+          </div>
+          
+          <div className="rounded-md border p-8 text-center text-muted-foreground bg-slate-50">
+            <FileText className="mx-auto h-10 w-10 mb-3 text-slate-300" />
+            <p>Nenhum contrato encontrado.</p>
+            <p className="text-sm">Utilize o botão "Novo Contrato" para iniciar.</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 };
 
 export default ComodatoContracts;

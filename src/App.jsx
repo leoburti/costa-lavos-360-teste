@@ -89,6 +89,11 @@ const DeliverySettings = lazy(() => import('@/pages/delivery-management/Settings
 // Gestão de Equipe
 const CentralizedTeamManagement = lazy(() => import('@/pages/configuracoes/gestao-equipe/CentralizedTeamManagement'));
 
+// Admin Configuration Pages (BUG-003 Fix)
+const UserManagementPage = lazy(() => import('@/pages/admin/configuracoes/UserManagementPage'));
+const ProfileManagementPage = lazy(() => import('@/pages/admin/configuracoes/ProfileManagementPage'));
+const SystemSettingsPage = lazy(() => import('@/pages/admin/configuracoes/SystemSettingsPage'));
+
 // Apoio Pages
 const ApoioLayout = lazy(() => import('@/pages/apoio/ApoioLayout'));
 // Comodato
@@ -272,7 +277,8 @@ const AppContent = () => {
                 <Route index element={<Navigate to="pipeline" replace />} />
                 <Route path="pipeline" element={<Pipeline />} />
                 <Route path="contacts" element={<CrmContacts />} />
-                <Route path="comodato-contracts" element={<ComodatoContracts />} />
+                {/* Explicit ModuleGuard for Comodato Contracts to ensure access */}
+                <Route path="comodato-contracts" element={<ModuleGuard moduleId="comodato_module"><ComodatoContracts /></ModuleGuard>} />
                 <Route path="automations" element={<CrmAutomations />} />
                 <Route path="reports" element={<CrmReports />} />
                 <Route path="team" element={<CrmTeam />} />
@@ -281,6 +287,14 @@ const AppContent = () => {
 
             {/* Gestão de Equipe (REDIRECT OLD ROUTES) */}
             <Route path="admin/gestao-equipe/usuarios-acesso" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
+
+            {/* Admin Configurations (Restored) */}
+            <Route path="admin/configuracoes">
+                <Route index element={<Navigate to="usuarios" replace />} />
+                <Route path="usuarios" element={<ModuleGuard moduleId="configuracoes"><UserManagementPage /></ModuleGuard>} />
+                <Route path="perfis" element={<ModuleGuard moduleId="configuracoes"><ProfileManagementPage /></ModuleGuard>} />
+                <Route path="sistema" element={<ModuleGuard moduleId="configuracoes"><SystemSettingsPage /></ModuleGuard>} />
+            </Route>
 
             {/* Apoio */}
             <Route path="admin/apoio" element={<ModuleGuard moduleId="apoio"><ApoioLayout /></ModuleGuard>}>

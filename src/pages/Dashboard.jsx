@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import MetricCard from '@/components/MetricCard';
 import ChartCard from '@/components/ChartCard';
 import RankingTable from '@/components/RankingTable';
-import DashboardHeader from '@/components/DashboardHeader';
+import { DashboardSkeleton } from '@/components/Skeletons';
 import { format as fnsFormat, parseISO } from 'date-fns';
 import { supabase } from '@/lib/customSupabaseClient';
 
@@ -155,14 +155,7 @@ const Dashboard = () => {
   }, [data]);
 
   if (loading && !data.kpi.netSales && !isOfflineMode) {
-    return (
-      <div className="flex items-center justify-center h-full pt-16">
-        <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-16 w-16 animate-spin text-primary" />
-            <p className="text-muted-foreground text-sm">Carregando dados acelerados...</p>
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const { kpi } = data || NUCLEAR_FALLBACK;
@@ -178,12 +171,12 @@ const Dashboard = () => {
         {/* Header with Offline Indicator */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
             <div>
-                <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                <h1 className="page-title flex items-center gap-2">
                     Visão Geral Comercial
                     {isOfflineMode && <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full flex items-center gap-1"><WifiOff size={12}/> Offline</span>}
                     {useRealData && !isOfflineMode && <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full flex items-center gap-1"><CheckCircle2 size={12}/> Dados Reais</span>}
                 </h1>
-                <p className="text-sm text-slate-500 flex items-center gap-2">
+                <p className="page-subtitle flex items-center gap-2">
                     {isOfflineMode 
                         ? "Exibindo dados estáticos de segurança." 
                         : <>Fonte: Tabela Cache Otimizada • Atualizado: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : '...'}</>
@@ -226,8 +219,8 @@ const Dashboard = () => {
                         <stop offset="95%" stopColor="hsl(var(--secondary))" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorEquipamentos" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        <stop offset="5%" stopColor="hsl(var(--info))" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="hsl(var(--info))" stopOpacity={0} />
                     </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
@@ -252,7 +245,7 @@ const Dashboard = () => {
                     <Legend />
                     <Area type="monotone" dataKey="Receita" stroke="hsl(var(--primary))" fill="url(#colorRevenue)" strokeWidth={2} />
                     <Area type="monotone" dataKey="Bonificação" stroke="hsl(var(--secondary))" fill="url(#colorBonification)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="Equipamentos" stroke="#3b82f6" fill="url(#colorEquipamentos)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="Equipamentos" stroke="hsl(var(--info))" fill="url(#colorEquipamentos)" strokeWidth={2} />
                 </AreaChart>
                 </ResponsiveContainer>
             </ChartCard>

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { searchEquipmentInventory } from '@/services/apoioSyncService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -137,32 +137,50 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
   const [groupBy, setGroupBy] = useState('Fantasia');
   const [inventoryData, setInventoryData] = useState([]);
   const { toast } = useToast();
+  
+  // Use refs to track mounting state and prevent updates on unmounted component
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedTerm(searchTerm);
+      if (isMounted.current) setDebouncedTerm(searchTerm);
     }, 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
   const fetchInventory = useCallback(async () => {
+    if (!isMounted.current) return;
     setLoading(true);
+    
     try {
+      console.log('[Inventory] Fetching with term:', debouncedTerm);
       const data = await searchEquipmentInventory(debouncedTerm);
+      
+      if (!isMounted.current) return;
+
       const processedData = (data || []).map((item, idx) => ({
         ...item,
         uniqueKey: item.Chave_ID || item.AA3_CHAPA || `temp-${idx}`,
         derivedStatus: item.AA3_STATUS || item.STAT || 'Ativo',
         derivedLocation: item.Loja_texto || item.Loja || 'Local N/A'
       }));
+      
       setInventoryData(processedData);
     } catch (error) {
       console.error("Error fetching inventory:", error);
-      toast({ variant: 'destructive', title: 'Erro ao carregar inventário', description: error.message });
+      if (isMounted.current) {
+        // Only toast if we are still mounted and it's a real error
+        toast({ variant: 'destructive', title: 'Erro ao carregar inventário', description: error.message });
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
-  }, [debouncedTerm, toast]);
+  }, [debouncedTerm]); // Removed toast dependency
 
   const groupedInventory = useMemo(() => {
     const grouped = {};

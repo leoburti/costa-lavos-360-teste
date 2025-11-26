@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -21,11 +21,20 @@ const EquipmentList = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [currentEquipment, setCurrentEquipment] = useState(null);
+  
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   const fetchEquipment = useCallback(async (isManualRefresh = false) => {
+    if (!isMounted.current) return;
     setLoading(true);
 
     try {
+      console.log('[EquipmentList] Fetching equipment...');
       let query = supabase
         .from('equipment')
         .select(`
@@ -45,19 +54,23 @@ const EquipmentList = () => {
       
       if (error) throw error;
       
-      setEquipment(data);
-      setTotalCount(count);
+      if (isMounted.current) {
+        setEquipment(data);
+        setTotalCount(count);
 
-      if (isManualRefresh) {
-        toast({ title: "Lista atualizada!", description: `${count} equipamentos encontrados.` });
+        if (isManualRefresh) {
+          toast({ title: "Lista atualizada!", description: `${count} equipamentos encontrados.` });
+        }
       }
     } catch (error) {
       console.error("Error fetching equipment:", error);
-      toast({ variant: 'destructive', title: 'Erro ao buscar equipamentos', description: error.message });
+      if (isMounted.current) {
+        toast({ variant: 'destructive', title: 'Erro ao buscar equipamentos', description: error.message });
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
-  }, [toast, debouncedSearchTerm]);
+  }, [debouncedSearchTerm]); // Removed toast from dependency array
 
   useEffect(() => {
     fetchEquipment();
@@ -79,12 +92,14 @@ const EquipmentList = () => {
   };
 
   const handleDelete = async (equipmentId) => {
-    const { error } = await supabase.from('equipment').delete().eq('id', equipmentId);
-    if (error) {
-      toast({ variant: 'destructive', title: 'Erro ao excluir equipamento', description: error.message });
-    } else {
+    try {
+      const { error } = await supabase.from('equipment').delete().eq('id', equipmentId);
+      if (error) throw error;
+      
       toast({ title: 'Sucesso!', description: 'Equipamento excluído.' });
       fetchEquipment();
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Erro ao excluir equipamento', description: error.message });
     }
   };
 

@@ -158,6 +158,8 @@ const EquipmentHistory = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [equipmentList, setEquipmentList] = useState([]);
+    
+    const isMounted = useRef(true);
 
     const [filters, setFilters] = useState({
         equipmentId: 'all',
@@ -168,13 +170,18 @@ const EquipmentHistory = () => {
     const [pdfRecord, setPdfRecord] = useState(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
+    useEffect(() => {
+        isMounted.current = true;
+        return () => { isMounted.current = false; };
+    }, []);
+
     const handleGeneratePDF = async (record) => {
         setIsGeneratingPdf(true);
         toast({title: 'Gerando PDF...', description: 'Aguarde enquanto preparamos seu relatório.'});
         setPdfRecord(record);
         
         setTimeout(async () => {
-            if (pdfRef.current) {
+            if (pdfRef.current && isMounted.current) {
                 try {
                     const canvas = await html2canvas(pdfRef.current, { useCORS: true, scale: 2 });
                     const imgData = canvas.toDataURL('image/png');
@@ -194,15 +201,19 @@ const EquipmentHistory = () => {
                     toast({ variant: 'destructive', title: 'Erro ao gerar PDF', description: e.message });
                 }
             }
-             setIsGeneratingPdf(false);
-             setPdfRecord(null);
+             if (isMounted.current) {
+                 setIsGeneratingPdf(false);
+                 setPdfRecord(null);
+             }
         }, 500);
     };
 
     const fetchHistory = useCallback(async () => {
+        if (!isMounted.current) return;
         setLoading(true);
         setError(null);
         try {
+            console.log('[EquipmentHistory] Fetching history...');
             const { data, error } = await supabase
                 .from('maintenance')
                 .select(`
@@ -216,24 +227,27 @@ const EquipmentHistory = () => {
                 .limit(100);
 
             if (error) throw error;
-            setRecords(data);
+            if (isMounted.current) setRecords(data);
         } catch (e) {
-            setError(e.message);
-            toast({ variant: 'destructive', title: 'Erro ao carregar histórico', description: e.message });
+            if (isMounted.current) {
+                setError(e.message);
+                toast({ variant: 'destructive', title: 'Erro ao carregar histórico', description: e.message });
+            }
         } finally {
-            setLoading(false);
+            if (isMounted.current) setLoading(false);
         }
-    }, [toast]);
+    }, []); // Removed toast
 
      const fetchEquipmentList = useCallback(async () => {
+        if (!isMounted.current) return;
         try {
             const { data, error } = await supabase.from('equipment').select('id, nome').order('nome').limit(500);
             if (error) throw error;
-            setEquipmentList(data);
+            if (isMounted.current) setEquipmentList(data);
         } catch (e) {
-            toast({ variant: 'destructive', title: 'Erro ao carregar lista de equipamentos.' });
+            if (isMounted.current) toast({ variant: 'destructive', title: 'Erro ao carregar lista de equipamentos.' });
         }
-    }, [toast]);
+    }, []); // Removed toast
 
     useEffect(() => {
         fetchHistory();
@@ -242,6 +256,7 @@ const EquipmentHistory = () => {
 
     useEffect(() => {
         let results = [...records];
+        // Use strict comparison for simple values or ensure stability
         if (filters.equipmentId !== 'all') {
             results = results.filter(r => r.equipment_id === filters.equipmentId);
         }
@@ -257,7 +272,7 @@ const EquipmentHistory = () => {
             results = results.filter(r => new Date(r.data_inicio) <= toDate);
         }
         setFilteredRecords(results);
-    }, [filters, records]);
+    }, [filters, records]); // filters is an object, can cause issues if not stable. But here it's state.
 
     const handleFilterChange = (key, value) => {
         setFilters(prev => ({ ...prev, [key]: value }));
