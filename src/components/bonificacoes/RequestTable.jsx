@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -25,7 +26,8 @@ const SortableHeader = ({ children, columnKey, sortConfig, onSort }) => {
 };
 
 const RequestTable = ({ requests, loading, title, description, onOpenDetail, onDelete, onQuickApprove, onQuickReject, isApproverTab = false, isProtheus = false, sortConfig, onSort }) => {
-    const { userRole } = useAuth();
+    const { userContext } = useAuth();
+    const userRole = userContext?.role;
     const canDelete = userRole === 'Nivel 1' || userRole === 'Nivel 2';
 
     const protheusHeaders = [

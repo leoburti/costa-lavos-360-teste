@@ -49,10 +49,19 @@ export const formatLargeNumberCompact = (num) => {
     currency: 'BRL',
     notation: 'compact',
     compactDisplay: 'short',
-    maximumFractionDigits: 1, // Adjust as needed for compact display
+    maximumFractionDigits: 1,
   }).format(amount);
 };
 
+export const formatPercentage = (value) => {
+  const num = parseFloat(value);
+  if (isNaN(num) || num === null) return '0,00%';
+  
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num) + '%';
+};
 
 export const formatDate = (date, formatString = 'dd/MM/yyyy') => {
   if (!date) return '-';
