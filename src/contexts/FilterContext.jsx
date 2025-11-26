@@ -74,11 +74,31 @@ export const FilterProvider = ({ children }) => {
         setStoredDateRange({ from: newRange.from?.toISOString(), to: newRange.to?.toISOString() });
     }, [setStoredDateRange]);
 
-    // Optimized updateFilters: Updates state only. Persistence is handled by useEffect.
+    // Optimized updateFilters: Updates state only if values ACTUALLY change
+    // This prevents infinite loops when components unconditionally call updateFilters in effects
     const updateFilters = useCallback((newFilters) => {
         setFiltersState(prev => {
-            const updated = { ...prev, ...newFilters };
-            return updated;
+            let hasChanges = false;
+            for (const key in newFilters) {
+                // Simple equality check. For arrays/objects, reference equality is checked initially.
+                // If deep comparison is needed, we might need lodash.isEqual, but usually strict equality is enough for avoiding simple loops.
+                if (prev[key] !== newFilters[key]) {
+                    hasChanges = true;
+                    break;
+                }
+            }
+            
+            // Special check for arrays if references differ but content might be same (basic length check optimization)
+            if (hasChanges && newFilters.clients && prev.clients) {
+                 if (Array.isArray(newFilters.clients) && Array.isArray(prev.clients)) {
+                     if (newFilters.clients.length === prev.clients.length && 
+                         newFilters.clients.every((val, index) => val === prev.clients[index])) {
+                         hasChanges = false; // Revert change flag if array content is identical
+                     }
+                 }
+            }
+
+            return hasChanges ? { ...prev, ...newFilters } : prev;
         });
     }, []);
 

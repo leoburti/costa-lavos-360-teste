@@ -73,6 +73,26 @@ export const formatDate = (date, formatString = 'dd/MM/yyyy') => {
   }
 };
 
+export const sortByProperty = (property, direction = 'ascending') => {
+  return (a, b) => {
+    const valueA = a[property];
+    const valueB = b[property];
+
+    // Handle nulls/undefined
+    if (valueA === valueB) return 0;
+    if (valueA == null) return 1; // Push nulls to end
+    if (valueB == null) return -1;
+
+    if (valueA < valueB) {
+      return direction === 'ascending' ? -1 : 1;
+    }
+    if (valueA > valueB) {
+      return direction === 'ascending' ? 1 : -1;
+    }
+    return 0;
+  };
+};
+
 export const getDateRange = (preset) => {
   const today = new Date();
   

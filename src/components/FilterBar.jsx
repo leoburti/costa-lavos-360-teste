@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { Input } from '@/components/ui/input';
@@ -18,9 +19,12 @@ const FilterBar = () => {
   }, [debouncedSearchTerm]);
 
   // Update local search term if global filter changes (e.g. cleared)
+  // FIX: Add equality check to prevent cycle between global update -> local update -> debounced update -> global update
   useEffect(() => {
-    setSearchTerm(filters.searchTerm || '');
-  }, [filters.searchTerm]);
+    if (filters.searchTerm !== debouncedSearchTerm) {
+       setSearchTerm(filters.searchTerm || '');
+    }
+  }, [filters.searchTerm]); // Removed debouncedSearchTerm from deps to break loop
 
   return (
     <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 sticky top-0 bg-background/95 backdrop-blur-sm z-10 py-4 px-4 sm:px-6 lg:px-8 border-b">

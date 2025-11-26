@@ -1,5 +1,5 @@
 
-import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { handleAuthError, logout, signIn as authSignInService } from '@/services/authService';
@@ -65,7 +65,6 @@ export const SupabaseAuthProvider = ({ children }) => {
       if (error) {
         console.error('[AuthContext] RPC Error:', error);
         // If RPC fails but we have a session, don't crash everything, just give basic role
-        // This allows user to at least be logged in, though maybe with restricted access
         console.warn('Falling back to default permissions due to RPC error');
       }
 
@@ -261,7 +260,8 @@ export const SupabaseAuthProvider = ({ children }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
   
-  const value = {
+  // Memoize value to prevent context consumers from re-rendering when nothing changes
+  const value = useMemo(() => ({
     session,
     user,
     userContext,
@@ -285,7 +285,7 @@ export const SupabaseAuthProvider = ({ children }) => {
         return { error };
     },
     forceRoleRefetch,
-  };
+  }), [session, user, userContext, loading, forceRoleRefetch, toast]);
 
   // Only show full screen loader if specifically loading AND no cache exists
   if (loading && !session && !userContext) {
