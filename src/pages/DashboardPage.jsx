@@ -5,12 +5,12 @@ import { getOverviewDataV2 } from '@/services/erpService';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw, AlertTriangle, DollarSign, Users, ShoppingCart, CreditCard, Gift, Truck, Calendar, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import MetricCard from '@/components/MetricCard';
 import SalesChart from '@/components/SalesChart';
 import PerformanceRanking from '@/components/dashboard/PerformanceRanking';
-import { cn, formatCurrency, formatNumber } from '@/lib/utils'; // Import formatNumber as well
+import { cn, formatCurrency, formatNumber } from '@/lib/utils';
+import { Helmet } from 'react-helmet-async';
 
 const DashboardPage = () => {
     const { filters, refreshKey, refreshData } = useFilters();
@@ -19,14 +19,22 @@ const DashboardPage = () => {
     const [lastUpdated, setLastUpdated] = useState(null);
     const [error, setError] = useState(null);
 
+    useEffect(() => {
+        console.log('[Dashboard] Mounted. Checking access and filters.');
+    }, []);
+
     const fetchData = useCallback(async () => {
         // Avoid fetching if dates are invalid
-        if (!filters.startDate || !filters.endDate) return;
+        if (!filters.startDate || !filters.endDate) {
+            console.warn('[Dashboard] Missing dates in filters', filters);
+            return;
+        }
 
         setLoading(true);
         setError(null);
         
         try {
+            console.log('[Dashboard] Fetching data...');
             const result = await getOverviewDataV2(
                 filters.startDate,
                 filters.endDate,
@@ -46,6 +54,7 @@ const DashboardPage = () => {
             
             setData(result);
             setLastUpdated(new Date());
+            console.log('[Dashboard] Data loaded successfully');
         } catch (err) {
             console.error("Erro no dashboard:", err);
             if (err.message?.includes("timeout") || err.message?.includes("statement timeout")) {
@@ -187,6 +196,11 @@ const DashboardPage = () => {
 
     return (
         <div className="space-y-6 p-6 pb-20 md:pb-8 bg-slate-50/50 min-h-screen">
+            <Helmet>
+                <title>Visão Geral - Costa Lavos 360</title>
+                <meta name="description" content="Dashboard comercial com indicadores de receita, vendas, bonificações e equipamentos." />
+            </Helmet>
+
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4">
                 <div>

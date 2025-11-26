@@ -8,17 +8,36 @@ import { useDataScope } from '@/hooks/useDataScope';
 import ConsultRequestsView from '@/components/bonificacoes/ConsultRequestsView';
 import NewRequestView from '@/components/bonificacoes/NewRequestView';
 import { Gift, ListPlus, FileSearch } from 'lucide-react';
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const BonificacoesPage = () => {
   const [activeTab, setActiveTab] = useState('nova-solicitacao');
-  const { user } = useAuth();
+  const { userContext, loading } = useAuth();
   const { isRestricted } = useDataScope();
-
+  
   // View state for internal navigation within sub-components
   const [view, setView] = useState('initial');
 
+  // Safety check for authentication loading state
+  if (loading) {
+    return <div className="flex h-full w-full items-center justify-center"><LoadingSpinner message="Carregando módulo de bonificações..." /></div>;
+  }
+
+  // Safety check for user context (double check even if Guard should catch it)
+  if (!userContext) {
+    return (
+        <div className="p-6">
+            <Alert variant="destructive">
+                <AlertTitle>Erro de Autenticação</AlertTitle>
+                <AlertDescription>Não foi possível carregar as informações do usuário. Por favor, faça login novamente.</AlertDescription>
+            </Alert>
+        </div>
+    );
+  }
+
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-500">
       <Helmet>
         <title>Bonificações | Costa Lavos 360°</title>
       </Helmet>
@@ -40,15 +59,15 @@ const BonificacoesPage = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full md:w-[600px] grid-cols-2 bg-white border shadow-sm p-1 rounded-lg">
-          <TabsTrigger value="nova-solicitacao" className="data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 flex items-center gap-2">
+          <TabsTrigger value="nova-solicitacao" className="data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 flex items-center gap-2 transition-all">
             <ListPlus className="h-4 w-4" /> Nova Solicitação
           </TabsTrigger>
-          <TabsTrigger value="consultar" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 flex items-center gap-2">
+          <TabsTrigger value="consultar" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 flex items-center gap-2 transition-all">
             <FileSearch className="h-4 w-4" /> Consultar / Aprovar
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="nova-solicitacao" className="space-y-4 animate-in fade-in-50 duration-300">
+        <TabsContent value="nova-solicitacao" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
           <Card className="border-t-4 border-t-pink-500 shadow-md">
             <CardHeader>
               <CardTitle>Nova Bonificação</CardTitle>
@@ -60,7 +79,7 @@ const BonificacoesPage = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="consultar" className="space-y-4 animate-in fade-in-50 duration-300">
+        <TabsContent value="consultar" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
            <ConsultRequestsView setView={setView} />
         </TabsContent>
       </Tabs>

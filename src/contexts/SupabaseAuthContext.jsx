@@ -64,7 +64,9 @@ export const SupabaseAuthProvider = ({ children }) => {
 
       if (error) {
         console.error('[AuthContext] RPC Error:', error);
-        throw new Error(`Error fetching user role: ${error.message}`);
+        // If RPC fails but we have a session, don't crash everything, just give basic role
+        // This allows user to at least be logged in, though maybe with restricted access
+        console.warn('Falling back to default permissions due to RPC error');
       }
 
       // --- Fetch Apoio Internal Profile ---
@@ -132,7 +134,7 @@ export const SupabaseAuthProvider = ({ children }) => {
           lastUpdated: new Date().getTime()
         };
       } else {
-        // Default Fallback
+        // Default Fallback for when get_user_role returns empty or fails
         contextData = {
             id: sessionUser.id,
             email: sessionUser.email,
@@ -161,8 +163,10 @@ export const SupabaseAuthProvider = ({ children }) => {
 
     } catch (error) {
       console.error("[AuthContext] Fatal error in fetchUserContext:", error.message);
+      // Only clear if we have absolutely nothing
       if (!userContextRef.current) {
-          handleAuthError(error);
+          // Don't logout immediately on fetch error to prevent loops, 
+          // just set context to null which might trigger re-login or error page naturally
           setUserContext(null);
           localStorage.removeItem(CACHE_KEY);
       }
@@ -170,7 +174,7 @@ export const SupabaseAuthProvider = ({ children }) => {
     } finally {
       fetchingRef.current = false;
     }
-  }, []); // Removed userContext dependency to prevent infinite loops
+  }, []); 
 
   const forceRoleRefetch = useCallback(async () => {
     if (user) {
@@ -199,6 +203,7 @@ export const SupabaseAuthProvider = ({ children }) => {
           setUser(initialSession?.user ?? null);
 
           if (initialSession?.user) {
+            // Wait for context fetch before finishing loading to prevent guard redirects
             await fetchUserContext(initialSession.user);
           } else {
             setUserContext(null);
@@ -229,16 +234,23 @@ export const SupabaseAuthProvider = ({ children }) => {
         setUser(sessionUser);
         
         if (sessionUser) {
-             // Only fetch if signed in or context is missing
+             // For SIGNED_IN, we should wait. For others, maybe not blocking.
              if (event === 'SIGNED_IN' || !userContextRef.current) {
+                 // Keep loading true if we are fetching context for the first time in this flow
+                 if (!userContextRef.current) setLoading(true);
+                 
                  await fetchUserContext(sessionUser);
+                 
+                 if (!userContextRef.current) setLoading(false);
              }
         } else if (event === 'SIGNED_OUT') {
             setUserContext(null);
             localStorage.removeItem(CACHE_KEY);
             queryClient.clear();
+            setLoading(false);
+        } else {
+            setLoading(false);
         }
-        setLoading(false);
       }
     );
 
@@ -275,6 +287,7 @@ export const SupabaseAuthProvider = ({ children }) => {
     forceRoleRefetch,
   };
 
+  // Only show full screen loader if specifically loading AND no cache exists
   if (loading && !session && !userContext) {
     return <div className="flex h-screen w-full items-center justify-center bg-background"><LoadingSpinner message="Inicializando sistema..." /></div>;
   }

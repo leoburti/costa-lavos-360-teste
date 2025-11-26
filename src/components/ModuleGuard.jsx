@@ -5,46 +5,51 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
 const ModuleGuard = ({ moduleId, children }) => {
-    const { userContext, loading } = useAuth();
+    const { userContext, loading, session } = useAuth();
     const location = useLocation();
 
-    if (loading && !userContext) {
+    // 1. Loading State: Wait for auth to resolve
+    if (loading) {
         return <div className="h-full w-full flex items-center justify-center"><LoadingSpinner message="Verificando permissões..." /></div>;
     }
 
-    if (!userContext) {
+    // 2. Auth Check: If no session or context, redirect to login
+    if (!session || !userContext) {
+        console.warn(`[ModuleGuard] No session/context found. Redirecting to login from: ${location.pathname}`);
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    // 1. Admin Override: Only STRICT Admin roles grant universal access
-    // 'Vendedor' (Level 2) or 'Supervisor' (Level 2/3) MUST NOT bypass this.
-    const isUniversalAdmin = ['Admin', 'Nivel 1', 'Nível 1'].includes(userContext.role);
+    // 3. Admin Override: Admin roles grant universal access
+    const userRole = userContext.role || '';
+    const isUniversalAdmin = ['admin', 'nivel 1', 'nível 1', 'nivel 5', 'nível 5', 'super admin'].includes(userRole.toLowerCase());
 
     if (isUniversalAdmin) {
         return children;
     }
 
-    // 2. No Module ID: If the route doesn't require a specific module, allow access
+    // 4. No Module ID: If route doesn't require specific module, allow access
     if (!moduleId) {
         return children;
     }
 
-    // 3. Strict Permission Check: Check if the exact module key exists and is true
-    // userContext.modulePermissions comes from the merged JSONB in Postgres (Persona + User overrides)
+    // 5. Strict Permission Check
+    // Check if the exact module key exists and is set to true in modulePermissions
     const hasAccess = userContext.modulePermissions?.[moduleId] === true;
 
-    // 4. Debugging for development (visible in console)
+    // 6. Debugging & Access Control
     if (!hasAccess) {
-        console.warn(`[ModuleGuard] Access DENIED.`);
-        console.warn(`- User: ${userContext.fullName} (${userContext.role})`);
-        console.warn(`- Target Module: ${moduleId}`);
+        console.warn(`[ModuleGuard] Access DENIED to ${location.pathname}`);
+        console.warn(`- User: ${userContext.fullName} (Role: ${userRole})`);
+        console.warn(`- Required Module: ${moduleId}`);
         console.warn(`- Has Permission? ${hasAccess}`);
         console.debug('- Available Permissions:', userContext.modulePermissions);
         
+        // Redirect to Unauthorized page instead of generic dashboard to avoid infinite loops
         return <Navigate to="/unauthorized" state={{ 
             requiredModule: moduleId, 
-            userRole: userContext.role,
-            userEmail: userContext.email
+            userRole: userRole,
+            userEmail: userContext.email,
+            from: location.pathname
         }} replace />;
     }
 

@@ -88,7 +88,8 @@ const Contacts = () => {
   return (
     <div className="space-y-6 p-6">
       <Helmet>
-        <title>Contatos CRM | Costa Lavos 360°</title>
+        <title>Contatos - CRM | Costa Lavos 360</title>
+        <meta name="description" content="Gerencie sua carteira de clientes, leads e oportunidades comerciais no CRM da Costa Lavos 360." />
       </Helmet>
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

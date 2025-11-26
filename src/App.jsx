@@ -16,8 +16,8 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import PageSkeleton from '@/components/PageSkeleton';
 import { prefetchCriticalRoutes } from '@/utils/performance';
 import UnauthorizedPage from '@/pages/UnauthorizedPage';
-import OfflineIndicator from '@/components/OfflineIndicator'; // Added
-import { useScrollRestoration } from '@/hooks/useScrollRestoration'; // Added
+import OfflineIndicator from '@/components/OfflineIndicator';
+import { useScrollRestoration } from '@/hooks/useScrollRestoration';
 
 // --- Optimized Lazy Imports ---
 
@@ -33,6 +33,16 @@ const AIChat = lazy(() => import('@/pages/AIChat'));
 const BonificacoesPage = lazy(() => import('@/pages/bonificacoes/BonificacoesPage'));
 const Tarefas = lazy(() => import('@/pages/Tarefas'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+
+// CRM Layout & Pages
+const CRM = lazy(() => import('@/pages/CRM'));
+const Pipeline = lazy(() => import('@/pages/crm/Pipeline'));
+const CrmContacts = lazy(() => import('@/pages/crm/Contacts'));
+const ComodatoContracts = lazy(() => import('@/pages/crm/ComodatoContracts'));
+const CrmAutomations = lazy(() => import('@/pages/crm/Automations'));
+const CrmReports = lazy(() => import('@/pages/crm/Reports'));
+const CrmTeam = lazy(() => import('@/pages/crm/Team'));
+const CommercialRelationship = lazy(() => import('@/pages/crm/CommercialRelationship'));
 
 // Analytics Pages
 const AnaliticoSupervisor = lazy(() => import('@/pages/AnaliticoSupervisor'));
@@ -75,15 +85,6 @@ const Disputes = lazy(() => import('@/pages/delivery-management/Disputes'));
 const DeliveryReports = lazy(() => import('@/pages/delivery-management/Reports'));
 const DeliveryReceipts = lazy(() => import('@/pages/delivery-management/DeliveryReceipts'));
 const DeliverySettings = lazy(() => import('@/pages/delivery-management/Settings'));
-
-// CRM Pages
-const Pipeline = lazy(() => import('@/pages/crm/Pipeline'));
-const CrmContacts = lazy(() => import('@/pages/crm/Contacts'));
-const ComodatoContracts = lazy(() => import('@/pages/crm/ComodatoContracts'));
-const CrmAutomations = lazy(() => import('@/pages/crm/Automations'));
-const CrmReports = lazy(() => import('@/pages/crm/Reports'));
-const CrmTeam = lazy(() => import('@/pages/crm/Team'));
-const CommercialRelationship = lazy(() => import('@/pages/crm/CommercialRelationship'));
 
 // Gestão de Equipe
 const CentralizedTeamManagement = lazy(() => import('@/pages/configuracoes/gestao-equipe/CentralizedTeamManagement'));
@@ -266,14 +267,17 @@ const AppContent = () => {
             <Route path="admin/delivery-management/delivery-receipts" element={<ModuleGuard moduleId="delivery"><DeliveryReceipts /></ModuleGuard>} />
             <Route path="admin/delivery-management/settings" element={<ModuleGuard moduleId="delivery"><DeliverySettings /></ModuleGuard>} />
 
-            {/* CRM */}
-            <Route path="crm/pipeline" element={<ModuleGuard moduleId="crm"><Pipeline /></ModuleGuard>} />
-            <Route path="crm/contacts" element={<ModuleGuard moduleId="crm"><CrmContacts /></ModuleGuard>} />
-            <Route path="crm/comodato-contracts" element={<ModuleGuard moduleId="crm"><ComodatoContracts /></ModuleGuard>} />
-            <Route path="crm/automations" element={<ModuleGuard moduleId="crm"><CrmAutomations /></ModuleGuard>} />
-            <Route path="crm/reports" element={<ModuleGuard moduleId="crm"><CrmReports /></ModuleGuard>} />
-            <Route path="crm/team" element={<ModuleGuard moduleId="crm"><CrmTeam /></ModuleGuard>} />
-            <Route path="crm/relationship" element={<ModuleGuard moduleId="crm"><CommercialRelationship /></ModuleGuard>} />
+            {/* CRM - Nested under CRM Layout */}
+            <Route path="crm" element={<ModuleGuard moduleId="crm"><CRM /></ModuleGuard>}>
+                <Route index element={<Navigate to="pipeline" replace />} />
+                <Route path="pipeline" element={<Pipeline />} />
+                <Route path="contacts" element={<CrmContacts />} />
+                <Route path="comodato-contracts" element={<ComodatoContracts />} />
+                <Route path="automations" element={<CrmAutomations />} />
+                <Route path="reports" element={<CrmReports />} />
+                <Route path="team" element={<CrmTeam />} />
+                <Route path="relationship" element={<CommercialRelationship />} />
+            </Route>
 
             {/* Gestão de Equipe (REDIRECT OLD ROUTES) */}
             <Route path="admin/gestao-equipe/usuarios-acesso" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
