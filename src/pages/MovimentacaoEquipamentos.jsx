@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
@@ -9,7 +10,7 @@ import AIInsight from '@/components/AIInsight';
 import MetricCard from '@/components/MetricCard';
 import ChartCard from '@/components/ChartCard';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAIInsight } from '@/hooks/useAIInsight';
 
@@ -20,13 +21,23 @@ const formatCurrency = (value) => {
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
-    const formattedLabel = format(parseISO(label), 'd MMM yyyy', { locale: ptBR });
-    return (
-      <div className="p-3 bg-card/80 border rounded-lg shadow-lg backdrop-blur-sm">
-        <p className="font-bold text-base">{formattedLabel}</p>
-        <p className="text-sm text-primary">Instalações: {payload[0].value}</p>
-      </div>
-    );
+    // Handle both string date (ISO) or Date object
+    let dateLabel = label;
+    try {
+       if(typeof label === 'string') {
+         dateLabel = parseISO(label);
+       }
+       const formattedLabel = format(dateLabel, 'd MMM yyyy', { locale: ptBR });
+       
+       return (
+        <div className="p-3 bg-card/80 border rounded-lg shadow-lg backdrop-blur-sm">
+          <p className="font-bold text-base">{formattedLabel}</p>
+          <p className="text-sm text-primary">Instalações: {payload[0].value}</p>
+        </div>
+      );
+    } catch (e) {
+      return null;
+    }
   }
   return null;
 };
@@ -36,6 +47,17 @@ const MovimentacaoEquipamentos = () => {
   const [loading, setLoading] = useState(true);
   const [movementData, setMovementData] = useState(null);
   const { toast } = useToast();
+
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+  // Debug Logs
+  useEffect(() => {
+    console.log('[MovimentacaoEquipamentos] Filters:', filters);
+    console.log('[MovimentacaoEquipamentos] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
 
   const aiData = useMemo(() => {
     if (!movementData) return null;
@@ -52,12 +74,11 @@ const MovimentacaoEquipamentos = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!filters.startDate || !filters.endDate) return;
       setLoading(true);
       const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
       const { data, error } = await supabase.rpc('get_equipment_movement', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
+        p_start_date: startDateStr,
+        p_end_date: endDateStr,
         p_exclude_employees: filters.excludeEmployees,
         p_supervisors: filters.supervisors,
         p_sellers: filters.sellers,
@@ -76,7 +97,7 @@ const MovimentacaoEquipamentos = () => {
       setLoading(false);
     };
     fetchData();
-  }, [filters, toast]);
+  }, [filters, toast, startDateStr, endDateStr]);
 
   useEffect(() => {
     if(aiData) {
@@ -126,7 +147,12 @@ const MovimentacaoEquipamentos = () => {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={history}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="movement_date" tickFormatter={(date) => format(parseISO(date), 'd MMM', { locale: ptBR })} />
+                <XAxis 
+                  dataKey="movement_date" 
+                  tickFormatter={(date) => {
+                    try { return format(parseISO(date), 'd MMM', { locale: ptBR }) } catch(e) { return date }
+                  }} 
+                />
                 <YAxis />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="installations" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />

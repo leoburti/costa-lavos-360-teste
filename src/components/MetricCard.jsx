@@ -25,31 +25,29 @@ const MetricCard = ({ title, value, change, changeType, icon: Icon, subtitle }) 
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -5, boxShadow: "0 10px 20px -5px rgba(0,0,0,0.07)" }}
-      className="bg-card p-5 rounded-xl border border-border transition-all duration-300 flex flex-col"
+      whileHover={{ y: -2, boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }}
+      className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm transition-all duration-300 flex flex-col min-h-[140px]"
     >
-      <div className="flex items-start justify-between mb-2">
-         <p className="text-sm font-medium text-muted-foreground">{title}</p>
+      <div className="flex items-start justify-between mb-3">
+         <p className="text-sm font-medium text-slate-500">{title}</p>
          {Icon && 
-          <div className="p-2 bg-muted rounded-md">
-            <Icon className="text-primary" size={20} />
+          <div className="p-2 bg-slate-100 rounded-md text-slate-600">
+            <Icon size={18} />
           </div>
          }
       </div>
 
-      <p className="text-xl lg:text-2xl font-bold text-foreground mb-1 tracking-tight">{displayValue}</p>
+      <p className="text-2xl font-bold text-slate-900 mb-1 tracking-tight">{displayValue}</p>
       
       {change && (
-        <div className={cn("flex items-center gap-1 text-xs font-semibold", trend.color)}>
+        <div className={cn("flex items-center gap-1 text-xs font-semibold mt-1", trend.color)}>
           {trend.icon}
           <span>{change}</span>
         </div>
       )}
+      
       {subtitle && (
-         <p className="text-xs text-muted-foreground mt-auto pt-2 truncate">{subtitle}</p>
-      )}
-      {isZeroOrNA && !subtitle && (
-        <p className="text-xs text-muted-foreground mt-auto pt-2">Nenhum dado no período.</p>
+         <p className="text-xs text-slate-400 mt-auto pt-2">{subtitle}</p>
       )}
     </motion.div>
   );

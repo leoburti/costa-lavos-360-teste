@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/customSupabaseClient';
 
 // Named exports required by CheckinCheckoutPage.jsx

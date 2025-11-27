@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/customSupabaseClient';
 
 // Helper formatting functions to ensure InputMasks receive correct format

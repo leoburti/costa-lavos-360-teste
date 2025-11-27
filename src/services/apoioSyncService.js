@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/customSupabaseClient';
 
 const invokeEdgeFunction = async (functionName) => {
@@ -503,4 +502,30 @@ export const searchEquipmentInventory = async (searchTerm) => {
     throw error;
   }
   return data;
+};
+
+// === NEW: Robust Fetchers for Deep Analysis ===
+export const getSupervisors = async () => {
+  // Explicitly quoting the column name to avoid "column does not exist" errors
+  const { data, error } = await supabase
+    .from('bd-cl')
+    .select('"Nome Supervisor"')
+    .not('"Nome Supervisor"', 'is', null)
+    .order('"Nome Supervisor"', { ascending: true });
+    
+  if (error) throw error;
+  // Deduplicate
+  return [...new Set(data.map(item => item['Nome Supervisor']))];
+};
+
+export const getVendedores = async () => {
+  // Explicitly quoting the column name
+  const { data, error } = await supabase
+    .from('bd-cl')
+    .select('"Nome Vendedor"')
+    .not('"Nome Vendedor"', 'is', null)
+    .order('"Nome Vendedor"', { ascending: true });
+
+  if (error) throw error;
+  return [...new Set(data.map(item => item['Nome Vendedor']))];
 };

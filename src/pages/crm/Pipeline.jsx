@@ -439,25 +439,12 @@ const Pipeline = () => {
         else if (overDeal) newStageId = overDeal.stage_id;
 
         // --- VALIDATION LOGIC ---
-        // Find current stage object
-        // Note: activeDeal from `deals` state might have the optimistically updated stage_id if dragOver fired
-        // But we need to know the *previous* stage to know if we are moving forward from Qualification
-        // Actually, `activeDeal` variable from `const activeDeal = deals.find...` captures the *latest* state.
-        // To do this correctly, we should rely on the optimistic update being 'true' but check constraints.
-        
-        // Re-find stages to compare order
-        const currentStageObj = stages.find(s => s.id === activeDeal.stage_id); // This is the NEW stage if optimistic update happened
-        // Wait, dnd-kit's dragOver updates state. So `activeDeal.stage_id` IS `newStageId`.
-        // We need to know if we came FROM qualification.
-        // For simplicity: If the target stage order > Qualification Stage Order, check.
+        const currentStageObj = stages.find(s => s.id === activeDeal.stage_id); 
         
         const qualStage = stages.find(s => s.name.toLowerCase().includes('qualificação'));
         const targetStageObj = stages.find(s => s.id === newStageId);
 
         if (qualStage && targetStageObj && targetStageObj.order > qualStage.order) {
-            // Moving forward from (or past) qualification.
-            // Check if qualification data is complete and approved.
-            // We check the deal's contact data.
             const qData = activeDeal.crm_contacts?.qualification_data || {};
             
             const requiredFields = qualificationFieldsConfig.filter(f => f.isRequired);

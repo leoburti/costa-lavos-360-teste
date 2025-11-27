@@ -30,6 +30,7 @@ import ClientOwnedEquipmentForm from './ClientOwnedEquipmentForm';
 import PartsSelector from './PartsSelector';
 import CheckInCheckOut from '@/components/CheckInCheckOut';
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { supabase } from '@/lib/customSupabaseClient';
 
 const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
   const { toast } = useToast();
@@ -37,6 +38,7 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Geolocation State
   const [checkInData, setCheckInData] = useState(null);
@@ -52,15 +54,20 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
     defaultValues: {
       service_date: format(new Date(), 'yyyy-MM-dd'),
       technician_name: user?.user_metadata?.full_name || user?.email || 'Técnico Atual',
-      cost: 0
+      cost: 0,
+      maintenance_type: 'preventiva'
     }
   });
 
-  // Handle equipmentToEdit - wrap in check to avoid loops
+  // Use a ref to track if we've already handled the edit prop to prevent loops
+  const hasInitializedEdit = React.useRef(false);
+
+  // Handle equipmentToEdit safely
   useEffect(() => {
-    if (equipmentToEdit) {
+    if (equipmentToEdit && !hasInitializedEdit.current) {
+      hasInitializedEdit.current = true;
       console.log("Editing equipment:", equipmentToEdit);
-      // Only run logic if equipmentToEdit changes
+      // Logic to populate form would go here, ensuring it runs only once
     }
   }, [equipmentToEdit]);
   
@@ -98,13 +105,17 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
     setSelectedClientOwned([]);
     setSelectedParts([]);
     
-    // Use setTimeout to debounce toast slightly if needed, but direct call is fine here as it's an event handler
     toast({
       description: `Cliente ${client.fantasy_name || client.name} selecionado.`,
     });
   }, [setValue, toast]);
 
   const onSubmit = useCallback(async (data) => {
+    if (!user) {
+        toast({ title: "Erro", description: "Usuário não autenticado.", variant: "destructive" });
+        return;
+    }
+
     // Validation: Must have Check-in
     if (!checkInData) {
         toast({
@@ -125,38 +136,62 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
       return;
     }
 
-    // Validation: Parts must be assigned to an equipment
-    const unassignedParts = selectedParts.some(p => !p.equipmentId);
-    if (unassignedParts) {
-        toast({
-            title: "Atenção",
-            description: "Todas as peças selecionadas devem ser associadas a um equipamento.",
-            variant: "destructive"
-        });
-        return;
-    }
+    setIsSubmitting(true);
 
-    const payload = { 
-      ...data, 
-      selectedClient, 
-      equipments: allSelectedEquipments,
-      parts: selectedParts,
-      check_in: checkInData,
-      check_out: checkOutData
-    };
-
-    console.log("Submitting maintenance data:", payload);
-    
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Save each maintenance record (one per equipment)
+      for (const equip of allSelectedEquipments) {
+          const maintenanceData = {
+              equipment_id: equip.id, // Ensure equipment ID is UUID from 'equipment' table or similar
+              user_id: user.id,
+              tecnico: data.technician_name,
+              data_inicio: checkInData.check_in_time || new Date().toISOString(),
+              data_fim: checkOutData?.check_out_time || new Date().toISOString(),
+              status: checkOutData ? 'concluido' : 'em_andamento',
+              tipo: data.maintenance_type || 'preventiva',
+              observacoes: data.description,
+              
+              // Check-in/out metadata
+              check_in_time: checkInData.check_in_time,
+              check_in_lat: checkInData.latitude,
+              check_in_lng: checkInData.longitude,
+              check_in_address: checkInData.address,
+              
+              check_out_time: checkOutData?.check_out_time,
+              check_out_lat: checkOutData?.latitude,
+              check_out_lng: checkOutData?.longitude,
+              check_out_address: checkOutData?.address,
+              
+              client_id: selectedClient ? `${selectedClient.code}-${selectedClient.store}` : null
+          };
+
+          const { data: maintenanceRecord, error: insertError } = await supabase
+              .from('maintenance')
+              .insert(maintenanceData)
+              .select()
+              .single();
+
+          if (insertError) throw insertError;
+
+          // Save parts for this equipment
+          const partsForThisEquip = selectedParts.filter(p => p.equipmentId === equip.id);
+          if (partsForThisEquip.length > 0 && maintenanceRecord) {
+              const partsData = partsForThisEquip.map(p => ({
+                  maintenance_id: maintenanceRecord.id,
+                  nome_peca: p.name,
+                  quantidade: p.quantity,
+                  custo_unitario: p.unitPrice
+              }));
+              
+              const { error: partsError } = await supabase
+                  .from('replaced_parts')
+                  .insert(partsData);
+                  
+              if (partsError) console.error("Error saving parts:", partsError);
+          }
+      }
       
-      toast({
-        title: "Sucesso!",
-        description: `Manutenção registrada para ${allSelectedEquipments.length} equipamento(s).`,
-        variant: "success"
-      });
-      
+      // We manually call success handler to ensure parent state updates correctly
       if (onSaveSuccess) onSaveSuccess();
       else {
         reset();
@@ -166,15 +201,24 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
         setSelectedParts([]);
         setCheckInData(null);
         setCheckOutData(null);
+        
+        toast({
+            title: "Sucesso!",
+            description: `Manutenção registrada para ${allSelectedEquipments.length} equipamento(s).`,
+            variant: "success"
+        });
       }
     } catch (error) {
+      console.error("Error submitting maintenance:", error);
       toast({
         title: "Erro",
-        description: "Não foi possível salvar o registro.",
+        description: "Não foi possível salvar o registro: " + error.message,
         variant: "destructive"
       });
+    } finally {
+        setIsSubmitting(false);
     }
-  }, [checkInData, allSelectedEquipments, selectedParts, selectedClient, checkOutData, onSaveSuccess, reset, toast]);
+  }, [checkInData, checkOutData, allSelectedEquipments, selectedParts, selectedClient, onSaveSuccess, reset, toast, user]);
 
   return (
     <TooltipProvider>
@@ -370,7 +414,7 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 ml-8">
                 <div className="space-y-2">
                     <Label htmlFor="maintenance_type" className="text-xs uppercase text-muted-foreground font-semibold">Tipo de Manutenção*</Label>
-                    <Select onValueChange={(val) => setValue('maintenance_type', val)}>
+                    <Select onValueChange={(val) => setValue('maintenance_type', val)} defaultValue="preventiva">
                     <SelectTrigger className="bg-gray-50/50 border-gray-200">
                         <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
@@ -492,15 +536,16 @@ const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
                     variant="outline" 
                     onClick={onCancel}
                     className="text-gray-600 border-gray-300 hover:bg-gray-50 h-10"
+                    disabled={isSubmitting}
                     >
                     Cancelar
                     </Button>
                     <Button 
                     type="submit" 
-                    disabled={!selectedClient || allSelectedEquipments.length === 0 || !checkInData}
+                    disabled={!selectedClient || allSelectedEquipments.length === 0 || !checkInData || isSubmitting}
                     className="bg-primary hover:bg-primary/90 min-w-[140px] h-10"
                     >
-                    <Save className="mr-2 h-4 w-4" />
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Salvar Registro
                     </Button>
                 </div>

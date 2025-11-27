@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import { useClientEquipments } from '@/hooks/useClientEquipments';
 import { ScrollArea } from '@/components/ui/scroll-area';

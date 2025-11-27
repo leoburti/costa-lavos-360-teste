@@ -1,4 +1,3 @@
-
 import { useRef, useState, useCallback } from 'react';
 import { useReactToPrint } from 'react-to-print';
 

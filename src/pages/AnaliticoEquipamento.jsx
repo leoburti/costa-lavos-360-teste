@@ -1,257 +1,165 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Helmet } from 'react-helmet-async';
-import { motion } from 'framer-motion';
-import { Loader2, Wrench, DollarSign, PackagePlus, ArrowRight, Store, Calendar, ShoppingCart, Hash } from 'lucide-react';
-import MetricCard from '@/components/MetricCard';
-import ChartCard from '@/components/ChartCard';
-import AIInsight from '@/components/AIInsight';
+
+import React, { useEffect, useState, useMemo } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
-import { useAIInsight } from '@/hooks/useAIInsight';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-
-const formatCurrency = (value) => {
-  if (value === undefined || value === null) return 'R$ 0,00';
-  return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
-const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/A';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatCurrency, formatNumber } from '@/lib/utils';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { Package, TrendingUp, Users } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const AnaliticoEquipamento = () => {
   const { filters } = useFilters();
+  const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [equipmentData, setEquipmentData] = useState([]);
-  const [selectedEquipment, setSelectedEquipment] = useState(null);
-  const { toast } = useToast();
+  const [error, setError] = useState(null);
 
-  const aiData = useMemo(() => {
-    if (!equipmentData || equipmentData.length === 0) return null;
-    const summary = {
-      totalEquipmentCost: equipmentData.reduce((acc, item) => acc + item.total_revenue, 0),
-      totalClients: new Set(equipmentData.flatMap(item => item.details.map(c => c.client_name))).size,
-      topEquipments: equipmentData.slice(0, 3).map(e => ({ name: e.equipment_name, revenue: e.total_revenue, client_count: e.client_count })),
-    };
-    return summary;
-  }, [equipmentData]);
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
-  const { insight, loading: loadingAI, generateInsights } = useAIInsight('equipment_roi_analysis', aiData);
+  // Debug Logs
+  useEffect(() => {
+    console.log('[AnaliticoEquipamento] Filters:', filters);
+    console.log('[AnaliticoEquipamento] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!filters.startDate || !filters.endDate) return;
-      setLoading(true);
-      setSelectedEquipment(null);
-      const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_detailed_equipment_analysis', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
-        p_exclude_employees: filters.excludeEmployees,
-        p_supervisors: filters.supervisors,
-        p_sellers: filters.sellers,
-        p_customer_groups: filters.customerGroups,
-        p_regions: filters.regions,
-        p_clients: selectedClients,
-        p_search_term: filters.searchTerm,
-        p_show_defined_groups_only: false,
-      });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      if (error) {
-        toast({
-          variant: 'destructive',
-          title: 'Erro ao buscar dados de equipamentos',
-          description: error.message,
-        });
-        setEquipmentData([]);
-      } else {
-        setEquipmentData(data || []);
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Buscar apenas CFOs de Equipamento
+        let query = supabase
+          .from('bd-cl')
+          .select('Descricao, Quantidade, Total, Cliente, Cfo')
+          .gte('DT Emissao', startDateStr)
+          .lte('DT Emissao', endDateStr)
+          .in('Cfo', ['5908', '6551', '6908', '5551']) // CFOs de Equipamento
+          .gt('Total', 0);
+
+        if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
+        
+        const { data, error: supabaseError } = await query.abortSignal(controller.signal);
+
+        if (supabaseError) throw supabaseError;
+        setRawData(data || []);
+
+      } catch (err) {
+        console.error("Erro Equipamentos:", err);
+        if (err.name === 'AbortError') setError("Timeout. Tente um período menor.");
+        else setError("Erro ao buscar dados de equipamentos.");
+      } finally {
+        setLoading(false);
+        clearTimeout(timeoutId);
       }
-      setLoading(false);
     };
 
     fetchData();
-  }, [filters, toast]);
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [filters, startDateStr, endDateStr]);
 
-  useEffect(() => {
-    if(aiData) {
-      generateInsights();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiData]);
-  
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-16 w-16 animate-spin text-primary" />
-      </div>
-    );
-  }
-  
-  const totalEquipmentCost = equipmentData.reduce((acc, item) => acc + item.total_revenue, 0);
-  const totalClients = new Set(equipmentData.flatMap(item => item.details.map(c => c.client_name))).size;
-  const mostValuableEquipment = equipmentData.length > 0 ? equipmentData[0] : { equipment_name: 'N/A', total_revenue: 0 };
+  const { aggregatedData, kpis } = useMemo(() => {
+    if (!rawData.length) return { aggregatedData: [], kpis: { totalRevenue: 0, totalCount: 0, uniqueClients: 0 } };
 
-  const handleEquipmentClick = (equipment) => {
-    setSelectedEquipment(equipment);
-  };
+    const items = {};
+    const uniqueClients = new Set();
+    let totalRevenue = 0;
+    let totalCount = 0;
 
-  const aggregatedDetails = selectedEquipment ? selectedEquipment.details.reduce((acc, detail) => {
-    const date = formatDate(detail.sale_date);
-    if (!acc[date]) {
-      acc[date] = { date, total: 0, clients: {} };
-    }
-    acc[date].total += detail.value;
-    
-    if (!acc[date].clients[detail.client_name]) {
-      acc[date].clients[detail.client_name] = { name: detail.client_name, total: 0, orders: {} };
-    }
-    acc[date].clients[detail.client_name].total += detail.value;
-
-    if (!acc[date].clients[detail.client_name].orders[detail.order_id]) {
-      acc[date].clients[detail.client_name].orders[detail.order_id] = { id: detail.order_id, total: 0, items: [] };
-    }
-    acc[date].clients[detail.client_name].orders[detail.order_id].total += detail.value;
-    acc[date].clients[detail.client_name].orders[detail.order_id].items.push({
-        quantity: detail.quantity,
-        value: detail.value
+    rawData.forEach(row => {
+      const name = row.Descricao || 'Desconhecido';
+      if (!items[name]) items[name] = { equipment_name: name, equipment_count: 0, total_revenue: 0, clients: new Set() };
+      
+      items[name].equipment_count += (row.Quantidade || 0);
+      items[name].total_revenue += (row.Total || 0);
+      items[name].clients.add(row.Cliente);
+      
+      uniqueClients.add(row.Cliente);
+      totalRevenue += (row.Total || 0);
+      totalCount += (row.Quantidade || 0);
     });
 
+    const aggregatedData = Object.values(items).map(item => ({
+      ...item,
+      client_count: item.clients.size
+    })).sort((a, b) => b.total_revenue - a.total_revenue);
 
-    return acc;
-  }, {}) : {};
+    return { 
+      aggregatedData, 
+      kpis: { totalRevenue, totalCount, uniqueClients: uniqueClients.size } 
+    };
+  }, [rawData]);
 
-  const dailyAggregatedData = Object.values(aggregatedDetails).map(day => ({
-    ...day,
-    clients: Object.values(day.clients).map(client => ({
-      ...client,
-      orders: Object.values(client.orders)
-    })).sort((a, b) => b.total - a.total)
-  })).sort((a, b) => new Date(b.date.split('/').reverse().join('-')) - new Date(a.date.split('/').reverse().join('-')));
+  if (loading && !rawData.length) return <div className="h-96 flex items-center justify-center"><LoadingSpinner message="Analisando equipamentos..." /></div>;
+  if (error) return <Alert variant="destructive" className="m-6"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
 
   return (
-    <>
-      <Helmet>
-        <title>Análise de Equipamentos - Costa Lavos</title>
-        <meta name="description" content="Análise do ROI de equipamentos, comparando a receita de produtos com o custo do equipamento." />
-      </Helmet>
-
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tighter">Análise Detalhada de Equipamentos</h1>
-          <p className="text-muted-foreground mt-1">Valor total e clientes atendidos por tipo de equipamento.</p>
-        </div>
-
-        <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <MetricCard title="Custo Total Equip." value={formatCurrency(totalEquipmentCost)} icon={Wrench} />
-          <MetricCard title="Total Clientes Atendidos" value={String(totalClients)} icon={PackagePlus} />
-          <MetricCard title="Equip. Mais Valioso" value={mostValuableEquipment.equipment_name} subtitle={formatCurrency(mostValuableEquipment.total_revenue)} icon={DollarSign} />
-        </div>
-
-        {selectedEquipment && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8"
-          >
-            <MetricCard 
-              title={`Quantidade de ${selectedEquipment.equipment_name}`} 
-              value={String(selectedEquipment.equipment_count || 0)} 
-              icon={Hash} 
-            />
-            <MetricCard 
-              title={`Valor Total de Venda (${selectedEquipment.equipment_name})`} 
-              value={formatCurrency(selectedEquipment.total_revenue)} 
-              icon={DollarSign} 
-            />
-          </motion.div>
-        )}
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartCard title="Valor Total por Equipamento">
-            <ScrollArea className="h-[400px]">
-              <div className="p-4 space-y-2">
-                {equipmentData.map((item, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.03 }}
-                    onClick={() => handleEquipmentClick(item)}
-                    className="p-3 rounded-lg border bg-card hover:bg-muted transition-colors cursor-pointer"
-                  >
-                    <div className="flex justify-between items-center">
-                      <p className="font-semibold text-sm truncate pr-4">{item.equipment_name}</p>
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="flex items-center gap-1.5">
-                          <Hash className="h-3 w-3" />
-                          <span>{item.equipment_count || 0}</span>
-                        </Badge>
-                        <Badge variant={selectedEquipment?.equipment_name === item.equipment_name ? "default" : "secondary"}>
-                          {formatCurrency(item.total_revenue)}
-                        </Badge>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </ScrollArea>
-          </ChartCard>
-          <ChartCard title={selectedEquipment ? `Detalhes de: ${selectedEquipment.equipment_name}` : "Selecione um Equipamento"}>
-            {selectedEquipment ? (
-              <ScrollArea className="h-[400px]">
-                <Accordion type="multiple" className="w-full p-2">
-                  {dailyAggregatedData.map((day, dayIndex) => (
-                    <AccordionItem value={`day-${dayIndex}`} key={dayIndex}>
-                      <AccordionTrigger className="hover:no-underline p-2 rounded-lg hover:bg-muted/50">
-                        <div className="flex items-center gap-2 w-full justify-between">
-                          <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /> <span className="font-semibold">{day.date}</span></div>
-                          <Badge variant="outline">{formatCurrency(day.total)}</Badge>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="pl-6 pt-2">
-                        <Accordion type="multiple" className="w-full">
-                          {day.clients.map((client, clientIndex) => (
-                            <AccordionItem value={`client-${clientIndex}`} key={clientIndex}>
-                              <AccordionTrigger className="hover:no-underline p-2 rounded-lg hover:bg-muted/50 text-sm">
-                                <div className="flex items-center gap-2 w-full justify-between">
-                                  <div className="flex items-center gap-2"><Store className="h-4 w-4 text-muted-foreground" /> <span className="font-medium truncate">{client.name}</span></div>
-                                  <Badge variant="secondary">{formatCurrency(client.total)}</Badge>
-                                </div>
-                              </AccordionTrigger>
-                              <AccordionContent className="pl-6 pt-2">
-                                {client.orders.map((order, orderIndex) => (
-                                  <div key={orderIndex} className="flex items-center gap-2 p-1.5 text-xs">
-                                    <ShoppingCart className="h-3 w-3 text-muted-foreground" />
-                                    <span>Pedido {order.id}:</span>
-                                    <span className="font-semibold ml-auto">{order.items[0].quantity}x {formatCurrency(order.total)}</span>
-                                  </div>
-                                ))}
-                              </AccordionContent>
-                            </AccordionItem>
-                          ))}
-                        </Accordion>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </ScrollArea>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-                <ArrowRight className="h-10 w-10 mb-4" />
-                <p className="font-semibold">Selecione um equipamento à esquerda</p>
-                <p className="text-sm">para ver os detalhes de clientes e pedidos.</p>
-              </div>
-            )}
-          </ChartCard>
-        </div>
-
+    <div className="p-6 space-y-6 animate-in fade-in duration-500">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Análise de Equipamentos</h1>
+        <p className="text-muted-foreground mt-1">Performance detalhada por tipo (Consulta Direta)</p>
       </div>
-    </>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="p-3 rounded-full bg-blue-100 text-blue-600"><TrendingUp className="h-6 w-6" /></div>
+            <div><p className="text-sm font-medium text-muted-foreground">Receita Gerada</p><h3 className="text-2xl font-bold">{formatCurrency(kpis.totalRevenue)}</h3></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="p-3 rounded-full bg-purple-100 text-purple-600"><Package className="h-6 w-6" /></div>
+            <div><p className="text-sm font-medium text-muted-foreground">Total Movimentado</p><h3 className="text-2xl font-bold">{formatNumber(kpis.totalCount)} un.</h3></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="p-3 rounded-full bg-orange-100 text-orange-600"><Users className="h-6 w-6" /></div>
+            <div><p className="text-sm font-medium text-muted-foreground">Clientes Envolvidos</p><h3 className="text-2xl font-bold">{formatNumber(kpis.uniqueClients)}</h3></div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle>Desempenho por Equipamento</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Equipamento</TableHead>
+                <TableHead className="text-right">Quantidade</TableHead>
+                <TableHead className="text-right">Clientes</TableHead>
+                <TableHead className="text-right">Valor Total</TableHead>
+                <TableHead className="text-right">Ticket Médio</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {aggregatedData.map((item, idx) => (
+                <TableRow key={idx}>
+                  <TableCell className="font-medium">{item.equipment_name}</TableCell>
+                  <TableCell className="text-right">{formatNumber(item.equipment_count)}</TableCell>
+                  <TableCell className="text-right">{formatNumber(item.client_count)}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(item.total_revenue)}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(item.total_revenue / (item.equipment_count || 1))}</TableCell>
+                </TableRow>
+              ))}
+              {aggregatedData.length === 0 && <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">Nenhum dado encontrado.</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

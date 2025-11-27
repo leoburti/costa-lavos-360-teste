@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, ChevronRight, Building2, User, Users, Store, Home } from 'lucide-react';
@@ -8,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
+import { format, isValid } from 'date-fns';
 
 const formatCurrency = (value) => {
   if (typeof value !== 'number') return 'R$ 0,00';
@@ -94,21 +96,33 @@ const BonificationDrilldownExplorer = () => {
 
   const fetchDrilldownData = useCallback(async (level, parentKeys) => {
     const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
-    const { data, error } = await supabase.rpc('get_bonification_drilldown_data', {
-      p_start_date: filters.startDate,
-      p_end_date: filters.endDate,
-      p_exclude_employees: filters.excludeEmployees,
-      p_supervisors: filters.supervisors,
-      p_sellers: filters.sellers,
-      p_customer_groups: filters.customerGroups,
-      p_regions: filters.regions,
-      p_clients: selectedClients,
-      p_search_term: filters.searchTerm,
+    
+    // Robust date parsing to avoid "undefined" values being passed to RPC
+    const rawFrom = filters.dateRange?.from ? new Date(filters.dateRange.from) : null;
+    const rawTo = filters.dateRange?.to ? new Date(filters.dateRange.to) : null;
+    
+    const startDate = isValid(rawFrom) ? format(rawFrom, 'yyyy-MM-dd') : null;
+    const endDate = isValid(rawTo) ? format(rawTo, 'yyyy-MM-dd') : null;
+
+    // Prepare params ensuring NO undefined values are passed which breaks RPC signature matching
+    const rpcParams = {
+      p_start_date: startDate,
+      p_end_date: endDate,
+      p_exclude_employees: filters.excludeEmployees ?? true,
+      p_supervisors: filters.supervisors || null,
+      p_sellers: filters.sellers || null,
+      p_customer_groups: filters.customerGroups || null,
+      p_regions: filters.regions || null,
+      p_clients: selectedClients || null,
+      p_search_term: filters.searchTerm || null,
       p_drilldown_level: level,
-      p_parent_keys: parentKeys
-    });
+      p_parent_keys: parentKeys || []
+    };
+
+    const { data, error } = await supabase.rpc('get_bonification_drilldown_data', rpcParams);
 
     if (error) {
+      console.error("Error fetching drilldown data:", error);
       toast({ variant: "destructive", title: `Erro ao detalhar`, description: error.message });
       return [];
     }

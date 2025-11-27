@@ -1,394 +1,174 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Helmet } from 'react-helmet-async';
-import { motion } from 'framer-motion';
-import { Loader2, Search, Store, Calendar, User, Package, Users, CheckCircle, XCircle, ChevronRight, Network } from 'lucide-react';
+
+import React, { useEffect, useState, useMemo } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useDebounce } from '@/hooks/useDebounce';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-
-const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/A';
-
-const statusMap = {
-  'ATIVO': { variant: 'success', icon: CheckCircle, label: 'Ativo' },
-  'INATIVO': { variant: 'destructive', icon: XCircle, label: 'Inativo' },
-};
-
-const getEquipmentStatus = (item) => {
-  return (item.Fantasia && item.Fantasia.trim().toUpperCase() === 'COSTA LAVOS') ? 'INATIVO' : 'ATIVO';
-};
-
-const StatusBadge = ({ status }) => {
-  const statusInfo = statusMap[status] || { variant: 'secondary', label: status };
-  return (
-    <Badge variant={statusInfo.variant} className="flex items-center gap-1.5 whitespace-nowrap">
-      {statusInfo.icon && <statusInfo.icon className="h-3 w-3" />}
-      {statusInfo.label}
-    </Badge>
-  );
-};
-
-const EquipmentInstanceItem = ({ item }) => (
-  <motion.div
-    initial={{ opacity: 0, y: -10 }}
-    animate={{ opacity: 1, y: 0 }}
-    className="p-3 bg-background/30 rounded-md border border-border/50"
-  >
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-      <div className="flex-1">
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5" title="Data de Instalação">
-            <Calendar className="h-3 w-3" />
-            <span>{formatDate(item.Data_Venda)}</span>
-          </div>
-          <div className="flex items-center gap-1.5 truncate" title="Vendedor">
-            <User className="h-3 w-3" />
-            <span className="truncate">{item.Nome_Vendedor}</span>
-          </div>
-        </div>
-      </div>
-      <StatusBadge status={getEquipmentStatus(item)} />
-    </div>
-  </motion.div>
-);
-
-const EquipmentGroupItem = ({ group }) => (
-  <AccordionItem value={group.equipmentName} className="border-b-0">
-    <AccordionTrigger className="p-3 bg-muted/50 rounded-t-lg hover:no-underline data-[state=open]:rounded-b-none">
-      <div className="flex items-center justify-between w-full gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Package className="h-5 w-5 text-primary" />
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-foreground truncate">{group.equipmentName}</p>
-            <p className="text-xs text-muted-foreground">{group.instances.length} unidade(s)</p>
-          </div>
-        </div>
-        <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
-      </div>
-    </AccordionTrigger>
-    <AccordionContent className="p-3 bg-muted/20 rounded-b-lg">
-      <div className="space-y-2">
-        {group.instances.map((instance, index) => (
-          <EquipmentInstanceItem key={`${instance['ID Cliente']}-${instance.Cod_Pro}-${index}`} item={instance} />
-        ))}
-      </div>
-    </AccordionContent>
-  </AccordionItem>
-);
-
-const ClientEquipmentItem = ({ client }) => (
-  <AccordionItem value={`${client.clientId}-${client.clientName}`} className="border-b-0">
-    <AccordionTrigger className="p-3 bg-card rounded-t-lg hover:no-underline data-[state=open]:rounded-b-none">
-      <div className="flex items-center justify-between w-full gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Store className="h-5 w-5 text-primary" />
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-foreground truncate">{client.clientName}</p>
-            <p className="text-xs text-muted-foreground">{client.totalEquipments} equipamento(s) em {client.equipmentGroups.length} tipo(s)</p>
-          </div>
-        </div>
-        <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
-      </div>
-    </AccordionTrigger>
-    <AccordionContent className="p-3 bg-muted/20 rounded-b-lg">
-      <Accordion type="multiple" className="space-y-2">
-        {client.equipmentGroups.map((group) => (
-          <EquipmentGroupItem key={group.equipmentName} group={group} />
-        ))}
-      </Accordion>
-    </AccordionContent>
-  </AccordionItem>
-);
-
-const NetworkGroupItem = ({ network }) => (
-  <AccordionItem value={network.networkName} className="border-b border-border/50 bg-card rounded-lg mb-3 shadow-sm hover:shadow-md transition-shadow duration-300">
-    <AccordionTrigger className="p-4 text-left hover:no-underline">
-      <div className="flex items-center justify-between w-full gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="p-2 bg-muted rounded-md">
-            <Network className="h-5 w-5 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-base text-foreground truncate">{network.networkName}</p>
-            <p className="text-xs text-muted-foreground">{network.totalEquipments} equipamento(s) em {network.clients.length} cliente(s)</p>
-          </div>
-        </div>
-        <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
-      </div>
-    </AccordionTrigger>
-    <AccordionContent>
-      <div className="border-t border-border/50 px-4 pt-4 pb-2">
-        <Accordion type="multiple" className="space-y-2">
-          {network.clients.map((client) => (
-            <ClientEquipmentItem key={`${client.clientId}-${client.clientName}`} client={client} />
-          ))}
-        </Accordion>
-      </div>
-    </AccordionContent>
-  </AccordionItem>
-);
+import { formatCurrency } from '@/lib/utils';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Package, MapPin, CheckCircle2, AlertCircle } from 'lucide-react';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const EquipamentosEmCampo = () => {
   const { filters } = useFilters();
+  const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [allInventoryData, setAllInventoryData] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  const { toast } = useToast();
+  const [error, setError] = useState(null);
 
-  const fetchAllInventory = useCallback(async () => {
-    setLoading(true);
-    console.log('[EquipamentosEmCampo] Attempting to fetch all inventory data via Edge Function.');
-    const { data, error } = await supabase.functions.invoke('get-all-inventory');
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
-    if (error) {
-      console.error('[EquipamentosEmCampo] Error fetching inventory from Edge Function:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao buscar inventário.',
-        description: `Não foi possível carregar os dados de equipamentos: ${error.message}.`,
-      });
-      setAllInventoryData([]);
-      setLoading(false);
-      return;
-    }
-    
-    console.log('[EquipamentosEmCampo] Successfully fetched inventory data.');
-    const processedInvData = data.map(item => ({
-      ...item,
-      QTD: (item.QTD === null || item.QTD === undefined || Number(item.QTD) === 0) ? 1 : Number(item.QTD)
-    }));
-    setAllInventoryData(processedInvData);
-    setLoading(false);
-  }, [toast]);
-
+  // Debug Logs
+  useEffect(() => {
+    console.log('[EquipamentosEmCampo] Filters:', filters);
+    console.log('[EquipamentosEmCampo] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
 
   useEffect(() => {
-    fetchAllInventory();
-  }, [fetchAllInventory]);
-  
-  const networkDrilldownData = useMemo(() => {
-    if (loading) return [];
-    
-    let data = allInventoryData;
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Para equipamentos em campo, consultamos o inventário (bd_cl_inv)
+        // Note: Inventário geralmente é um snapshot atual, mas podemos filtrar por data de venda/instalação se necessário.
+        // Aqui vamos filtrar por Data_Venda para respeitar o período, assumindo que é a data de instalação.
+        
+        let query = supabase
+          .from('bd_cl_inv')
+          .select('*')
+          .gte('Data_Venda', startDateStr)
+          .lte('Data_Venda', endDateStr);
 
-    if (debouncedSearchTerm) {
-      const lowercasedFilter = debouncedSearchTerm.toLowerCase();
-      data = data.filter(item =>
-        (item.Fantasia && item.Fantasia.toLowerCase().includes(lowercasedFilter)) ||
-        (item.Equipamento && item.Equipamento.toLowerCase().includes(lowercasedFilter)) ||
-        (item['ID Cliente'] && item['ID Cliente'].toString().toLowerCase().includes(lowercasedFilter)) ||
-        (item.Nome_Vendedor && item.Nome_Vendedor.toLowerCase().includes(lowercasedFilter)) ||
-        (item.Nome_Supervisor && item.Nome_Supervisor.toLowerCase().includes(lowercasedFilter)) ||
-        (item.Nome_Rede && item.Nome_Rede.toLowerCase().includes(lowercasedFilter))
-      );
-    }
-    
-    if (statusFilter !== 'all') {
-      data = data.filter(item => getEquipmentStatus(item) === statusFilter);
-    }
+        if (filters.supervisors?.length > 0) query = query.in('Nome_Supervisor', filters.supervisors);
+        if (filters.sellers?.length > 0) query = query.in('Nome_Vendedor', filters.sellers);
+        if (filters.regions?.length > 0) query = query.in('REGIAO', filters.regions);
+        if (filters.customerGroups?.length > 0) query = query.in('REDE', filters.customerGroups);
+        
+        const { data, error: supabaseError } = await query;
 
-    const contextFilteredData = data.filter(item => {
-      const supervisorMatch = !filters.supervisors || filters.supervisors.length === 0 || filters.supervisors.includes(item.Nome_Supervisor);
-      const sellerMatch = !filters.sellers || filters.sellers.length === 0 || filters.sellers.includes(item.Nome_Vendedor);
-      const regionMatch = !filters.regions || filters.regions.length === 0 || filters.regions.includes(item.REGIAO);
-      return supervisorMatch && sellerMatch && regionMatch;
-    });
+        if (supabaseError) throw supabaseError;
+        setRawData(data || []);
 
-    const groupedByNetwork = contextFilteredData.reduce((acc, item) => {
-      const networkName = item.Nome_Rede || 'Sem Rede';
-      if (!acc[networkName]) {
-        acc[networkName] = [];
+      } catch (err) {
+        console.error("Erro Inventário:", err);
+        setError("Erro ao carregar inventário de equipamentos.");
+      } finally {
+        setLoading(false);
       }
-      acc[networkName].push(item);
-      return acc;
-    }, {});
-
-    return Object.entries(groupedByNetwork).map(([networkName, networkItems]) => {
-      const groupedByClient = networkItems.reduce((acc, item) => {
-        const clientId = item['ID Cliente'] || 'unknown';
-        const clientName = item.Fantasia || `Cliente ${clientId}`;
-        const clientKey = `${clientId}-${clientName}`;
-
-        if (!acc[clientKey]) {
-          acc[clientKey] = { clientId, clientName, equipments: [] };
-        }
-        acc[clientKey].equipments.push(item);
-        return acc;
-      }, {});
-
-      const clients = Object.values(groupedByClient).map(({ clientId, clientName, equipments }) => {
-        const groupedByEquipment = equipments.reduce((acc, item) => {
-          const equipmentName = item.Equipamento || 'Equipamento não identificado';
-          if (!acc[equipmentName]) {
-            acc[equipmentName] = [];
-          }
-          acc[equipmentName].push(item);
-          return acc;
-        }, {});
-
-        const equipmentGroups = Object.entries(groupedByEquipment).map(([equipmentName, instances]) => ({
-          equipmentName,
-          instances: instances.sort((a, b) => new Date(b.Data_Venda) - new Date(a.Data_Venda)),
-        })).sort((a, b) => b.instances.length - a.instances.length);
-
-        return { clientId, clientName, totalEquipments: equipments.length, equipmentGroups };
-      }).sort((a, b) => b.totalEquipments - a.totalEquipments);
-
-      return {
-        networkName,
-        clients,
-        totalEquipments: networkItems.length,
-        clientCount: clients.length,
-      };
-    }).sort((a, b) => {
-      if (a.networkName === 'Sem Rede') return 1;
-      if (b.networkName === 'Sem Rede') return -1;
-      return b.totalEquipments - a.totalEquipments;
-    });
-  }, [allInventoryData, filters, statusFilter, debouncedSearchTerm, loading]);
-
-  const kpis = useMemo(() => {
-    const dataForKpis = networkDrilldownData.flatMap(network => network.clients.flatMap(client => client.equipmentGroups.flatMap(group => group.instances)));
-    const totalEquipments = dataForKpis.length;
-    const clientsWithEquipmentCount = new Set(dataForKpis.map(item => item['ID Cliente'])).size;
-    
-    let activeCount = 0;
-    let inactiveCount = 0;
-
-    dataForKpis.forEach(item => {
-      if (getEquipmentStatus(item) === 'ATIVO') {
-        activeCount++;
-      } else {
-        inactiveCount++;
-      }
-    });
-
-    return {
-      totalEquipments,
-      clientsWithEquipment: clientsWithEquipmentCount,
-      active: activeCount,
-      inactive: inactiveCount,
     };
-  }, [networkDrilldownData]);
+
+    fetchData();
+  }, [filters, startDateStr, endDateStr]);
+
+  const stats = useMemo(() => {
+    if (!rawData.length) return { total: 0, active: 0, maintenance: 0, byType: {} };
+    
+    const byType = {};
+    let total = 0;
+    let active = 0;
+    let maintenance = 0;
+
+    rawData.forEach(item => {
+      total++;
+      const status = item.AA3_STATUS || 'Ativo';
+      if (status === 'Ativo' || status === 'Instalado') active++;
+      else maintenance++;
+
+      const type = item.Equipamento || 'Outros';
+      byType[type] = (byType[type] || 0) + 1;
+    });
+
+    return { total, active, maintenance, byType };
+  }, [rawData]);
 
   return (
-    <>
-      <Helmet>
-        <title>Equipamentos em Campo - Costa Lavos</title>
-        <meta name="description" content="Inventário de todos os equipamentos instalados em clientes." />
-      </Helmet>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="p-4 sm:p-6 space-y-6"
-      >
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Equipamentos em Campo
-            </h1>
-            <p className="text-muted-foreground mt-1">Inventário de equipamentos por Rede e Cliente.</p>
-          </div>
-        </div>
+    <div className="p-6 space-y-6 animate-in fade-in duration-500">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Equipamentos em Campo</h1>
+        <p className="text-muted-foreground mt-1">Visão do inventário instalado no período selecionado.</p>
+      </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total de Equipamentos</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{loading ? <Loader2 className="h-6 w-6 animate-spin" /> : kpis.totalEquipments}</div>
-              <p className="text-xs text-muted-foreground">de {allInventoryData.length} linhas carregadas</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Clientes com Equipamentos</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{loading ? <Loader2 className="h-6 w-6 animate-spin" /> : kpis.clientsWithEquipment}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Equipamentos Ativos</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{loading ? <Loader2 className="h-6 w-6 animate-spin" /> : kpis.active}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Equipamentos Inativos</CardTitle>
-              <XCircle className="h-4 w-4 text-red-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{loading ? <Loader2 className="h-6 w-6 animate-spin" /> : kpis.inactive}</div>
-            </CardContent>
-          </Card>
-        </div>
+      {error && (
+        <Alert variant="destructive">
+          <AlertTitle>Erro</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 bg-card rounded-lg border">
-            <h2 className="text-lg font-semibold">Inventário por Rede ({networkDrilldownData.length})</h2>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <div className="relative flex-grow">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-full"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filtrar por status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Status</SelectItem>
-                  {Object.entries(statusMap).map(([key, value]) => (
-                    <SelectItem key={key} value={key}>{value.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="p-3 rounded-full bg-slate-100 text-slate-600"><Package className="h-6 w-6" /></div>
+            <div><p className="text-sm font-medium text-muted-foreground">Total Instalado</p><h3 className="text-2xl font-bold">{stats.total}</h3></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="p-3 rounded-full bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-6 w-6" /></div>
+            <div><p className="text-sm font-medium text-muted-foreground">Ativos/Operacionais</p><h3 className="text-2xl font-bold">{stats.active}</h3></div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="p-3 rounded-full bg-amber-100 text-amber-600"><AlertCircle className="h-6 w-6" /></div>
+            <div><p className="text-sm font-medium text-muted-foreground">Outros Status</p><h3 className="text-2xl font-bold">{stats.maintenance}</h3></div>
+          </CardContent>
+        </Card>
+      </div>
 
-          <ScrollArea className="h-[55vh] pr-4">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary mb-4" />
-                <p className="text-lg font-semibold">Buscando todos os registros via Edge Function...</p>
-                <p className="text-muted-foreground">Esta é a abordagem definitiva para garantir que nenhum dado seja deixado para trás.</p>
-              </div>
-            ) : networkDrilldownData.length > 0 ? (
-              <Accordion type="multiple" className="space-y-0">
-                {networkDrilldownData.map((network) => (
-                  <NetworkGroupItem key={network.networkName} network={network} />
+      <Card>
+        <CardHeader>
+          <CardTitle>Detalhamento por Cliente</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="h-64 flex items-center justify-center"><LoadingSpinner /></div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Equipamento</TableHead>
+                  <TableHead>Série / Chapa</TableHead>
+                  <TableHead>Data Instalação</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Localização</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rawData.slice(0, 100).map((item, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell className="font-medium">
+                      <div className="flex flex-col">
+                        <span>{item.Fantasia}</span>
+                        <span className="text-xs text-muted-foreground">{item.Loja_texto}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{item.Equipamento}</TableCell>
+                    <TableCell>{item.AA3_CHAPA || 'N/D'}</TableCell>
+                    <TableCell>{item.Data_Venda ? new Date(item.Data_Venda).toLocaleDateString('pt-BR') : '-'}</TableCell>
+                    <TableCell>
+                      <Badge variant={item.AA3_STATUS === 'Ativo' ? 'default' : 'secondary'}>
+                        {item.AA3_STATUS || 'Instalado'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-muted-foreground" />
+                        {item.REGIAO || 'N/D'}
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </Accordion>
-            ) : (
-              <div className="flex items-center justify-center h-full bg-card rounded-lg border border-dashed">
-                <p className="text-muted-foreground">Nenhum equipamento encontrado para os filtros selecionados.</p>
-              </div>
-            )}
-          </ScrollArea>
-        </div>
-      </motion.div>
-    </>
+                {rawData.length === 0 && <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">Nenhum equipamento encontrado no período.</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

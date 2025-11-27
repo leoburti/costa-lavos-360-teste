@@ -1,220 +1,216 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Helmet } from 'react-helmet-async';
-import { motion } from 'framer-motion';
-import { Loader2, TrendingUp, TrendingDown, UserCheck, UserX, AlertTriangle, CheckCircle, MinusCircle } from 'lucide-react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
-import AIInsight from '@/components/AIInsight';
-import ChartCard from '@/components/ChartCard';
-import MetricCard from '@/components/MetricCard';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useAIInsight } from '@/hooks/useAIInsight';
-
-const formatCurrency = (value) => value ? `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'R$ 0,00';
-
-const TrendIcon = ({ reason }) => {
-  switch (reason) {
-    case 'AUMENTO_EXPRESSIVO':
-    case 'AUMENTO':
-    case 'PROMISSOR':
-      return <TrendingUp className="h-5 w-5 text-emerald-500" />;
-    case 'QUEDA_ACENTUADA':
-    case 'RISCO_CHURN':
-      return <TrendingDown className="h-5 w-5 text-red-500" />;
-    default:
-      return <MinusCircle className="h-5 w-5 text-muted-foreground" />;
-  }
-};
-
-const TrendDetail = ({ data, loading }) => {
-  if (loading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-  }
-  if (!data || data.length === 0) {
-    return <div className="text-center py-10 text-muted-foreground">Nenhum cliente nesta categoria.</div>;
-  }
-  return (
-    <ScrollArea className="h-[400px]">
-      <div className="p-4 space-y-2">
-        {data.map((client, index) => (
-          <motion.div
-            key={index}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="p-3 rounded-lg bg-muted/50"
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="font-semibold text-sm truncate">{client.clientName}</p>
-                <p className="text-xs text-muted-foreground">{client.seller}</p>
-              </div>
-              <div className="text-right">
-                <p className={`font-bold text-sm ${client.trendChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                  {formatCurrency(client.trendChange)}
-                </p>
-                <p className="text-xs text-muted-foreground">Última Compra: {formatCurrency(client.lastPurchaseValue)}</p>
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-    </ScrollArea>
-  );
-};
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { TrendingUp, RefreshCw, TrendingDown, Minus } from 'lucide-react';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { formatCurrency } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const TendenciaVendas = () => {
   const { filters } = useFilters();
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [trendsData, setTrendsData] = useState(null);
-  const [activeTab, setActiveTab] = useState("AUMENTO_EXPRESSIVO");
-  const [analysisType, setAnalysisType] = useState('new_clients');
-  const { toast } = useToast();
+  const [error, setError] = useState(null);
 
-  const aiData = useMemo(() => {
-    if (!trendsData) return null;
-    const summary = Object.keys(trendsData).map(key => ({
-      reason: key,
-      count: trendsData[key].length,
-    }));
-    return { summary };
-  }, [trendsData]);
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
-  const { insight, loading: loadingAI, generateInsights } = useAIInsight('sales_trends', aiData);
-
+  // Debug Logs
   useEffect(() => {
-    const fetchTrendsData = async () => {
-      if (!filters.startDate || !filters.endDate) return;
-      setLoading(true);
-      const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_new_client_trends', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
-        p_exclude_employees: filters.excludeEmployees,
-        p_supervisors: filters.supervisors,
-        p_sellers: filters.sellers,
-        p_customer_groups: filters.customerGroups,
-        p_regions: filters.regions,
-        p_clients: selectedClients,
-        p_search_term: filters.searchTerm,
-        p_analysis_type: analysisType,
+    console.log('[TendenciaVendas] Filters:', filters);
+    console.log('[TendenciaVendas] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Para tendência, geralmente queremos ver um período um pouco maior para ver a curva,
+      // mas vamos respeitar o filtro do usuário para a análise principal.
+      // Se o usuário selecionar 1 mês, mostramos os dias. Se for > 3 meses, mostramos meses.
+      
+      const diffTime = Math.abs(new Date(endDateStr) - new Date(startDateStr));
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      
+      let query = supabase
+        .from('bd-cl')
+        .select('Total, "DT Emissao", Cfo')
+        .gte('DT Emissao', startDateStr)
+        .lte('DT Emissao', endDateStr)
+        .gt('Total', 0);
+
+      // Filtros adicionais
+      if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
+      if (filters.sellers?.length > 0) query = query.in('Nome Vendedor', filters.sellers);
+      if (filters.regions?.length > 0) query = query.in('Desc.Regiao', filters.regions);
+      if (filters.customerGroups?.length > 0) query = query.in('Nome Grp Cliente', filters.customerGroups);
+      if (filters.clients?.length > 0) query = query.in('N Fantasia', filters.clients.map(c => c.label));
+
+      const { data: rawData, error: supabaseError } = await query;
+
+      if (supabaseError) throw supabaseError;
+
+      // Processamento dos dados
+      const salesByDate = {};
+      
+      rawData.forEach(row => {
+        if (['5910', '6910', '5908', '6551', '6908', '5551'].includes(String(row.Cfo))) return; // Apenas vendas reais
+
+        const dateKey = diffDays > 90 
+          ? row['DT Emissao'].substring(0, 7) // YYYY-MM
+          : row['DT Emissao'].substring(0, 10); // YYYY-MM-DD
+        
+        if (!salesByDate[dateKey]) salesByDate[dateKey] = 0;
+        salesByDate[dateKey] += row.Total;
       });
 
-      if (error) {
-        toast({
-          variant: "destructive",
-          title: "Erro ao buscar dados de Tendências",
-          description: error.message,
-        });
-        setTrendsData(null);
-      } else {
-        const groupedData = (data || []).reduce((acc, item) => {
-          const reason = item.reason || 'INDEFINIDO';
-          if (!acc[reason]) {
-            acc[reason] = [];
-          }
-          acc[reason].push(item);
-          return acc;
-        }, {});
-        setTrendsData(groupedData);
-        const firstTab = Object.keys(groupedData)[0] || "AUMENTO_EXPRESSIVO";
-        setActiveTab(firstTab);
+      const chartData = Object.keys(salesByDate).sort().map(key => ({
+        period: key,
+        total: salesByDate[key],
+        // Média móvel simples (placeholder, ideal seria calcular com janelas)
+        media: salesByDate[key] // Placeholder para visualização
+      }));
+
+      // Calcular média móvel real (3 períodos)
+      for(let i = 0; i < chartData.length; i++) {
+        let sum = 0;
+        let count = 0;
+        for(let j = Math.max(0, i - 2); j <= i; j++) {
+          sum += chartData[j].total;
+          count++;
+        }
+        chartData[i].media = sum / count;
       }
+
+      setData(chartData);
+
+    } catch (err) {
+      console.error("Erro Tendencia:", err);
+      setError("Falha ao carregar dados de tendência.");
+    } finally {
       setLoading(false);
-    };
-
-    fetchTrendsData();
-  }, [filters, analysisType, toast]);
-
-  useEffect(() => {
-    if(aiData) {
-      generateInsights();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiData]);
-
-  const kpis = useMemo(() => {
-    if (!trendsData) return { growing: 0, falling: 0, stable: 0, promising: 0 };
-    return {
-      growing: (trendsData['AUMENTO_EXPRESSIVO']?.length || 0) + (trendsData['AUMENTO']?.length || 0),
-      falling: (trendsData['QUEDA_ACENTUADA']?.length || 0) + (trendsData['RISCO_CHURN']?.length || 0),
-      stable: trendsData['ESTABILIDADE']?.length || 0,
-      promising: trendsData['PROMISSOR']?.length || 0,
-    };
-  }, [trendsData]);
-
-  const tabs = useMemo(() => {
-    if (!trendsData) return [];
-    const order = ['PROMISSOR', 'AUMENTO_EXPRESSIVO', 'AUMENTO', 'ESTABILIDADE', 'QUEDA_ACENTUADA', 'RISCO_CHURN', 'INDEFINIDO'];
-    return order.filter(key => trendsData[key] && trendsData[key].length > 0);
-  }, [trendsData]);
-
-  const tabLabels = {
-    'PROMISSOR': 'Promissor',
-    'AUMENTO_EXPRESSIVO': 'Aumento Expressivo',
-    'AUMENTO': 'Aumento',
-    'ESTABILIDADE': 'Estabilidade',
-    'QUEDA_ACENTUADA': 'Queda Acentuada',
-    'RISCO_CHURN': 'Risco de Churn',
-    'INDEFINIDO': 'Indefinido',
   };
 
+  useEffect(() => {
+    fetchData();
+  }, [filters, startDateStr, endDateStr]);
+
+  const trendInfo = useMemo(() => {
+    if (data.length < 2) return { direction: 'neutral', percent: 0 };
+    const last = data[data.length - 1].media;
+    const first = data[0].media;
+    const percent = first !== 0 ? ((last - first) / first) * 100 : 0;
+    
+    return {
+      direction: percent > 5 ? 'up' : percent < -5 ? 'down' : 'neutral',
+      percent: Math.abs(percent)
+    };
+  }, [data]);
+
   return (
-    <>
-      <Helmet>
-        <title>Tendências de Vendas - Costa Lavos</title>
-        <meta name="description" content="Análise de tendências de compra dos clientes, identificando crescimento e risco de churn." />
-      </Helmet>
+    <div className="p-6 space-y-6 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Tendência de Vendas</h1>
+          <p className="text-muted-foreground mt-1">Análise temporal do faturamento e média móvel.</p>
+        </div>
+        <Button onClick={fetchData} variant="outline" disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </Button>
+      </div>
 
-      <motion.div 
-        className="space-y-8"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground tracking-tighter">Tendências de Vendas</h1>
-            <p className="text-muted-foreground mt-1">Identifique clientes em crescimento, estabilidade ou risco.</p>
+      {error && (
+        <Alert variant="destructive">
+          <AlertTitle>Erro</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {loading && !data.length ? (
+        <div className="h-96 flex items-center justify-center"><LoadingSpinner /></div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tendência do Período</CardTitle></CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2">
+                  {trendInfo.direction === 'up' && <TrendingUp className="h-8 w-8 text-emerald-500" />}
+                  {trendInfo.direction === 'down' && <TrendingDown className="h-8 w-8 text-red-500" />}
+                  {trendInfo.direction === 'neutral' && <Minus className="h-8 w-8 text-slate-400" />}
+                  <span className="text-2xl font-bold">
+                    {trendInfo.percent.toFixed(1)}%
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Variação da média móvel (Início vs Fim)</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pico de Vendas</CardTitle></CardHeader>
+              <CardContent>
+                <span className="text-2xl font-bold">
+                  {data.length > 0 ? formatCurrency(Math.max(...data.map(d => d.total))) : 'R$ 0,00'}
+                </span>
+                <p className="text-xs text-muted-foreground mt-1">Melhor desempenho no período</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Menor Desempenho</CardTitle></CardHeader>
+              <CardContent>
+                <span className="text-2xl font-bold">
+                  {data.length > 0 ? formatCurrency(Math.min(...data.map(d => d.total))) : 'R$ 0,00'}
+                </span>
+                <p className="text-xs text-muted-foreground mt-1">Pior desempenho no período</p>
+              </CardContent>
+            </Card>
           </div>
-          <Tabs value={analysisType} onValueChange={setAnalysisType} className="w-full sm:w-auto">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="new_clients_30">Novos Clientes (30 dias)</TabsTrigger>
-              <TabsTrigger value="new_clients">Novos Clientes (60 dias)</TabsTrigger>
-              <TabsTrigger value="all_clients">Todos Clientes (90 dias)</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
 
-        <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <MetricCard title="Clientes em Crescimento" value={kpis.growing} icon={UserCheck} />
-          <MetricCard title="Clientes em Queda" value={kpis.falling} icon={UserX} />
-          <MetricCard title="Clientes Estáveis" value={kpis.stable} icon={CheckCircle} />
-          <MetricCard title="Clientes Promissores" value={kpis.promising} icon={AlertTriangle} />
-        </div>
-
-        <ChartCard>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-              {tabs.map(tabKey => (
-                <TabsTrigger key={tabKey} value={tabKey}>
-                  {tabLabels[tabKey]} ({trendsData[tabKey]?.length || 0})
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {tabs.map(tabKey => (
-              <TabsContent key={tabKey} value={tabKey} className="mt-4">
-                <TrendDetail data={trendsData[tabKey]} loading={loading} />
-              </TabsContent>
-            ))}
-          </Tabs>
-        </ChartCard>
-      </motion.div>
-    </>
+          <Card>
+            <CardHeader>
+              <CardTitle>Evolução de Vendas & Média Móvel</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[450px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis 
+                    dataKey="period" 
+                    tick={{ fontSize: 12 }} 
+                    tickFormatter={(val) => {
+                      if (val.length === 7) { // YYYY-MM
+                        const [y, m] = val.split('-');
+                        return `${m}/${y}`;
+                      }
+                      // YYYY-MM-DD
+                      const [y, m, d] = val.split('-');
+                      return `${d}/${m}`;
+                    }}
+                  />
+                  <YAxis tickFormatter={(val) => `R$${(val/1000).toFixed(0)}k`} />
+                  <Tooltip 
+                    formatter={(value, name) => [formatCurrency(value), name === 'total' ? 'Vendas' : 'Média Móvel (3p)']}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend />
+                  <Bar dataKey="total" name="Vendas" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30} />
+                  <Line type="monotone" dataKey="media" name="Média Móvel" stroke="#f59e0b" strokeWidth={3} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
   );
 };
 

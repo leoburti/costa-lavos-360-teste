@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Crown, Users } from 'lucide-react';
@@ -9,18 +10,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const SupervisorRankingList = ({ data, isLoading }) => {
+const SupervisorRankingList = ({ data = [], isLoading }) => {
   const formatCurrency = (value) => {
     if (typeof value !== 'number') return 'R$ 0,00';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
   
-  const totalRevenueAllSupervisors = data.reduce((acc, item) => acc + item.total_revenue, 0);
-  const maxRevenue = data.length > 0 ? Math.max(...data.map(item => item.total_revenue)) : 0;
+  // Ensure data is an array before reduce
+  const safeData = Array.isArray(data) ? data : [];
+  const totalRevenueAllSupervisors = safeData.reduce((acc, item) => acc + (item.total_revenue || 0), 0);
+  const maxRevenue = safeData.length > 0 ? Math.max(...safeData.map(item => item.total_revenue || 0)) : 0;
   
   if (isLoading) {
     return (
-      <div className="space-y-4 pt-2 pb-4">
+      <div className="space-y-4 pt-2 pb-4 px-4">
         {[...Array(5)].map((_, i) => (
           <div key={i} className="flex items-center space-x-4 p-3">
             <div className="h-10 w-10 rounded-full bg-muted animate-pulse"></div>
@@ -34,7 +37,7 @@ const SupervisorRankingList = ({ data, isLoading }) => {
     );
   }
   
-  if (!data || data.length === 0) {
+  if (!safeData || safeData.length === 0) {
     return <p className="text-muted-foreground text-center py-10">Nenhum supervisor para exibir com os filtros atuais.</p>;
   }
 
@@ -42,9 +45,10 @@ const SupervisorRankingList = ({ data, isLoading }) => {
     <TooltipProvider>
       <div className="flow-root">
         <ul role="list" className="divide-y divide-border/50">
-          {data.map((item, index) => {
-            const percentageOfTotal = totalRevenueAllSupervisors > 0 ? (item.total_revenue / totalRevenueAllSupervisors) * 100 : 0;
-            const barWidth = maxRevenue > 0 ? (item.total_revenue / maxRevenue) * 100 : 0;
+          {safeData.map((item, index) => {
+            const revenue = item.total_revenue || 0;
+            const percentageOfTotal = totalRevenueAllSupervisors > 0 ? (revenue / totalRevenueAllSupervisors) * 100 : 0;
+            const barWidth = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0;
             
             const crownColor = index === 0 ? "text-amber-400" : index === 1 ? "text-slate-400" : index === 2 ? "text-amber-600" : "";
 
@@ -61,7 +65,7 @@ const SupervisorRankingList = ({ data, isLoading }) => {
                     {index < 3 ? <Crown className={cn("h-5 w-5", crownColor)} /> : <span className="text-sm font-bold text-primary">{index + 1}</span>}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
+                    <p className="text-sm font-semibold text-foreground truncate" title={item.name}>{item.name}</p>
                     <div className="mt-2">
                        <Tooltip>
                         <TooltipTrigger asChild>
@@ -76,17 +80,17 @@ const SupervisorRankingList = ({ data, isLoading }) => {
                             </div>
                         </TooltipTrigger>
                         <TooltipContent>
-                           <p>{formatCurrency(item.total_revenue)} em vendas</p>
+                           <p>{formatCurrency(revenue)} em vendas</p>
                         </TooltipContent>
                       </Tooltip>
                     </div>
                   </div>
                   <div className="flex-shrink-0 w-64 flex items-center justify-end space-x-6">
                     <div className="text-right">
-                      <p className="text-sm font-bold text-foreground">{formatCurrency(item.total_revenue)}</p>
+                      <p className="text-sm font-bold text-foreground">{formatCurrency(revenue)}</p>
                       <p className="text-xs text-muted-foreground">{percentageOfTotal.toFixed(2)}% do total</p>
                     </div>
-                     <div className="text-right">
+                     <div className="text-right hidden sm:block">
                       <p className="text-sm font-bold text-foreground">{formatCurrency(item.averageTicket)}</p>
                       <p className="text-xs text-muted-foreground">Ticket Médio</p>
                     </div>
@@ -94,11 +98,11 @@ const SupervisorRankingList = ({ data, isLoading }) => {
                       <TooltipTrigger>
                         <div className="flex items-center gap-1.5 text-muted-foreground">
                            <Users size={16} />
-                           <span className="text-sm font-semibold">{item.client_activation}</span>
+                           <span className="text-sm font-semibold">{item.client_activation || 0}</span>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
-                         <p>{item.client_activation} clientes ativados no período</p>
+                         <p>{item.client_activation || 0} clientes ativados no período</p>
                       </TooltipContent>
                     </Tooltip>
                   </div>

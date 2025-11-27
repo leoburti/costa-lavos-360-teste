@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Loader2, Target, TrendingUp, TrendingDown, Percent, ChevronRight, User, Users, ShoppingBag } from 'lucide-react';
 import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
 import AIInsight from '@/components/AIInsight';
 import ChartCard from '@/components/ChartCard';
 import MetricCard from '@/components/MetricCard';
 import { useAIInsight } from '@/hooks/useAIInsight';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const LoyaltyProgressBar = ({ score }) => {
   const getScoreColor = (s) => {
@@ -128,17 +128,23 @@ const SupervisorAccordion = ({ supervisor }) => (
 
 const AnaliseFidelidade = () => {
   const { filters } = useFilters();
-  const [loading, setLoading] = useState(true);
-  const [loyaltyData, setLoyaltyData] = useState({ kpis: {}, supervisors: [] });
-  const { toast } = useToast();
 
-  const fetchLoyaltyData = useCallback(async () => {
-    if (!filters.startDate || !filters.endDate) return;
-    setLoading(true);
-    const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-    const { data, error } = await supabase.rpc('get_loyalty_analysis_drilldown', {
-      p_start_date: filters.startDate,
-      p_end_date: filters.endDate,
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[AnaliseFidelidade] Filters:', filters);
+    console.log('[AnaliseFidelidade] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
+
+  const params = useMemo(() => {
+    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
+    return {
+      p_start_date: startDateStr,
+      p_end_date: endDateStr,
       p_exclude_employees: filters.excludeEmployees,
       p_supervisors: filters.supervisors,
       p_sellers: filters.sellers,
@@ -146,24 +152,17 @@ const AnaliseFidelidade = () => {
       p_regions: filters.regions,
       p_clients: selectedClients,
       p_search_term: filters.searchTerm,
-    });
+    };
+  }, [filters, startDateStr, endDateStr]);
 
-    if (error) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao buscar dados de Fidelidade",
-        description: error.message,
-      });
-      setLoyaltyData({ kpis: {}, supervisors: [] });
-    } else {
-      setLoyaltyData(data);
+  const { data: loyaltyData, loading } = useAnalyticalData(
+    'get_loyalty_analysis_drilldown',
+    params,
+    { 
+        enabled: !!startDateStr && !!endDateStr,
+        defaultValue: { kpis: {}, supervisors: [] }
     }
-    setLoading(false);
-  }, [filters, toast]);
-
-  useEffect(() => {
-    fetchLoyaltyData();
-  }, [fetchLoyaltyData]);
+  );
 
   const aiData = useMemo(() => {
     if (!loyaltyData || !loyaltyData.supervisors) return null;
@@ -175,13 +174,6 @@ const AnaliseFidelidade = () => {
   }, [loyaltyData]);
 
   const { insight, loading: loadingAI, generateInsights } = useAIInsight('loyalty_analysis', aiData);
-
-  useEffect(() => {
-    if(aiData) {
-      generateInsights();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiData]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -222,11 +214,7 @@ const AnaliseFidelidade = () => {
         <ChartCard title="Desempenho de Fidelidade por Equipe" childClassName="p-0">
           <TooltipProvider>
             <div className="p-4">
-              {loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : supervisors && supervisors.length > 0 ? (
+              {supervisors && supervisors.length > 0 ? (
                 <Accordion type="multiple" className="space-y-0">
                   {supervisors.map((supervisor, index) => (
                     <SupervisorAccordion key={`${supervisor.name}-${index}`} supervisor={supervisor} />

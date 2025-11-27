@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { usePartsSearch } from '@/hooks/usePartsSearch';
 import PartsSearchInput from './PartsSearchInput';

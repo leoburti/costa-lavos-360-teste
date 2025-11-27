@@ -1,4 +1,3 @@
-
 import React, { forwardRef } from 'react';
 import { CheckCircle, AlertTriangle, XCircle, TrendingUp, Shield, Building2, Scale, Landmark, CreditCard, Users, History } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

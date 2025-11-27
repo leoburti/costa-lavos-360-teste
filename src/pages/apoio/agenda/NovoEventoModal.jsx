@@ -51,13 +51,15 @@ export default function NovoEventoModal({ open, onOpenChange, onSuccess }) {
       const payload = {
         profissional_id: user.id,
         ...formData,
+        // Ensure tipo_evento value is compatible with DB enum
+        tipo_evento: formData.tipo_evento === 'outros' ? 'outro' : formData.tipo_evento,
         status: 'agendado'
       };
 
       const { error } = await supabase.rpc('create_evento_completo', {
         p_dados_evento: payload,
-        p_participantes: [], // Placeholder for future implementation
-        p_lembretes: [] // Placeholder for future implementation
+        p_participantes: [], 
+        p_lembretes: [] 
       });
 
       if (error) throw error;
@@ -121,7 +123,7 @@ export default function NovoEventoModal({ open, onOpenChange, onSuccess }) {
                   <SelectItem value="manutencao">Manutenção</SelectItem>
                   <SelectItem value="instalacao">Instalação</SelectItem>
                   <SelectItem value="treinamento">Treinamento</SelectItem>
-                  <SelectItem value="outros">Outros</SelectItem>
+                  <SelectItem value="outro">Outros</SelectItem>
                 </SelectContent>
               </Select>
             </div>

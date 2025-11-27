@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -185,9 +184,10 @@ const filterMenuByPermissions = (menu, userContext) => {
         }
 
         const moduleMatch = !item.moduleId || modulePermissions?.[item.moduleId];
-        const crmAccessMatch = !item.crmRequired || canAccessCrm;
+        // IMPORTANT: If canAccessCrm is undefined, assume false to be safe
+        const crmAccessMatch = !item.crmRequired || (canAccessCrm === true);
 
-        if (!moduleMatch || !crmAccessMatch) return null;
+        if (!moduleMatch || (item.crmRequired && !crmAccessMatch)) return null;
 
         if (item.subItems) {
             const accessibleSubItems = filter(item.subItems);
@@ -337,9 +337,11 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
     const [openGroups, setOpenGroups] = useState([]);
 
     const menuItems = useMemo(() => {
+        // Only return empty if loading AND we absolutely have no user data
+        // This prevents flickering if userContext updates slowly
         if (loading && !userContext) return [];
         try {
-            return filterMenuByPermissions(allMenuItems, userContext);
+            return filterMenuByPermissions(allMenuItems, userContext || {});
         } catch (error) {
             console.error("Error filtering menu items:", error);
             return [];
@@ -367,7 +369,7 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
     };
 
     // Force refresh of displayed role to ensure it's not hardcoded
-    const displayRole = userContext?.role || 'Carregando...';
+    const displayRole = userContext?.role || '...';
 
     const SidebarContent = () => (
         <div className="flex flex-col h-full bg-[#6B2C2C] text-white border-r border-[#7D3E3E]">

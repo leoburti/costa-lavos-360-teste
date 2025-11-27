@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { Loader2, DollarSign, AlertTriangle, TrendingUp, Building2, User, Store, CalendarDays } from 'lucide-react';
+import { Loader2, DollarSign, AlertTriangle, TrendingUp, Building2, User, Store } from 'lucide-react';
 import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
 import AIInsight from '@/components/AIInsight';
 import MetricCard from '@/components/MetricCard';
 import ChartCard from '@/components/ChartCard';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { useAIInsight } from '@/hooks/useAIInsight';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const formatCurrency = (value) => value != null ? `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
 const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : 'N/A';
@@ -73,9 +74,41 @@ const DrilldownLevel = ({ items, level = 0 }) => {
 
 const BaixoDesempenho = () => {
   const { filters } = useFilters();
-  const [loading, setLoading] = useState(true);
-  const [performanceData, setPerformanceData] = useState(null);
-  const { toast } = useToast();
+
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+  // Debug Logs
+  useEffect(() => {
+    console.log('[BaixoDesempenho] Filters:', filters);
+    console.log('[BaixoDesempenho] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
+
+  const params = useMemo(() => {
+    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
+    return {
+      p_start_date: startDateStr,
+      p_end_date: endDateStr,
+      p_exclude_employees: filters.excludeEmployees,
+      p_supervisors: filters.supervisors,
+      p_sellers: filters.sellers,
+      p_customer_groups: filters.customerGroups,
+      p_regions: filters.regions,
+      p_clients: selectedClients,
+      p_search_term: filters.searchTerm,
+    };
+  }, [filters, startDateStr, endDateStr]);
+
+  const { data: performanceData, loading } = useAnalyticalData(
+    'get_low_performance_clients',
+    params,
+    { 
+        enabled: !!startDateStr && !!endDateStr,
+        defaultValue: null
+    }
+  );
 
   const aiContextData = useMemo(() => {
     if (!performanceData) return null;
@@ -90,41 +123,6 @@ const BaixoDesempenho = () => {
   }, [performanceData]);
 
   const { insight, loading: loadingAI, generateInsights } = useAIInsight('low_performance_analysis', aiContextData);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!filters.startDate || !filters.endDate) return;
-      setLoading(true);
-      const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_low_performance_clients', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
-        p_exclude_employees: filters.excludeEmployees,
-        p_supervisors: filters.supervisors,
-        p_sellers: filters.sellers,
-        p_customer_groups: filters.customerGroups,
-        p_regions: filters.regions,
-        p_clients: selectedClients,
-        p_search_term: filters.searchTerm,
-      });
-
-      if (error) {
-        toast({ variant: "destructive", title: "Erro na Análise de Baixo Desempenho", description: error.message });
-        setPerformanceData(null);
-      } else {
-        setPerformanceData(data);
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, [filters, toast]);
-
-  useEffect(() => {
-    if(aiContextData) {
-      generateInsights();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiContextData]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;

@@ -13,18 +13,25 @@ const FilterBar = () => {
   const [searchTerm, setSearchTerm] = useState(filters.searchTerm || '');
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
+  // Effect 1: Sync local debounced term to Global Context
   useEffect(() => {
-    updateFilters({ searchTerm: debouncedSearchTerm });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchTerm]);
-
-  // Update local search term if global filter changes (e.g. cleared)
-  // FIX: Add equality check to prevent cycle between global update -> local update -> debounced update -> global update
-  useEffect(() => {
+    // Only update if different to avoid loop
     if (filters.searchTerm !== debouncedSearchTerm) {
-       setSearchTerm(filters.searchTerm || '');
+      updateFilters({ searchTerm: debouncedSearchTerm });
     }
-  }, [filters.searchTerm]); // Removed debouncedSearchTerm from deps to break loop
+  }, [debouncedSearchTerm, updateFilters, filters.searchTerm]);
+
+  // Effect 2: Sync Global Context changes back to local state (e.g. "Clear All" button)
+  useEffect(() => {
+    // Check if filters.searchTerm is defined and different from local state
+    // We use a check against debouncedSearchTerm to avoid overwriting user typing
+    if (filters.searchTerm !== undefined && filters.searchTerm !== searchTerm) {
+       if (filters.searchTerm !== debouncedSearchTerm) {
+         setSearchTerm(filters.searchTerm || '');
+       }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.searchTerm]); 
 
   return (
     <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 sticky top-0 bg-background/95 backdrop-blur-sm z-10 py-4 px-4 sm:px-6 lg:px-8 border-b">

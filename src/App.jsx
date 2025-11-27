@@ -18,6 +18,7 @@ import { prefetchCriticalRoutes } from '@/utils/performance';
 import UnauthorizedPage from '@/pages/UnauthorizedPage';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import { useScrollRestoration } from '@/hooks/useScrollRestoration';
+import ForensicFloatingButton from '@/components/ForensicFloatingButton';
 
 // --- Optimized Lazy Imports ---
 
@@ -28,14 +29,15 @@ const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const UpdatePassword = lazy(() => import('@/pages/auth/UpdatePassword'));
 
 // Main Feature Pages
-const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
+// RESTORED: DashboardComercial is now the main dashboard
+const DashboardComercial = lazy(() => import('@/pages/DashboardComercial'));
 const AIChat = lazy(() => import('@/pages/AIChat'));
 const BonificacoesPage = lazy(() => import('@/pages/bonificacoes/BonificacoesPage'));
 const Tarefas = lazy(() => import('@/pages/Tarefas'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 // CRM Layout & Pages
-const CRM = lazy(() => import('@/pages/CRM'));
+const CRM = lazy(() => import('@/pages/crm/CRM'));
 const Pipeline = lazy(() => import('@/pages/crm/Pipeline'));
 const CrmContacts = lazy(() => import('@/pages/crm/Contacts'));
 const ComodatoContracts = lazy(() => import('@/pages/crm/ComodatoContracts'));
@@ -89,7 +91,7 @@ const DeliverySettings = lazy(() => import('@/pages/delivery-management/Settings
 // Gestão de Equipe
 const CentralizedTeamManagement = lazy(() => import('@/pages/configuracoes/gestao-equipe/CentralizedTeamManagement'));
 
-// Admin Configuration Pages (BUG-003 Fix)
+// Admin Configuration Pages
 const UserManagementPage = lazy(() => import('@/pages/admin/configuracoes/UserManagementPage'));
 const ProfileManagementPage = lazy(() => import('@/pages/admin/configuracoes/ProfileManagementPage'));
 const SystemSettingsPage = lazy(() => import('@/pages/admin/configuracoes/SystemSettingsPage'));
@@ -174,6 +176,10 @@ const PrivacidadePage = lazy(() => import('@/pages/configuracoes/PrivacidadePage
 const FaturamentoPage = lazy(() => import('@/pages/configuracoes/FaturamentoPage'));
 const LogsPage = lazy(() => import('@/pages/configuracoes/LogsPage'));
 const SystemDiagnosisPage = lazy(() => import('@/pages/configuracoes/SystemDiagnosisPage'));
+const RPCDiagnosisPage = lazy(() => import('@/pages/configuracoes/RPCDiagnosisPage'));
+const DeepDiagnosisPage = lazy(() => import('@/pages/configuracoes/DeepDiagnosisPage'));
+const AutoDiagnosisPage = lazy(() => import('@/pages/configuracoes/AutoDiagnosisPage'));
+const ForensicDiagnosisPage = lazy(() => import('@/pages/configuracoes/ForensicDiagnosisPage'));
 
 // Apoio Configs
 const PreferenciasRelatoriosPage = lazy(() => import('@/pages/configuracoes/PreferenciasRelatoriosPage'));
@@ -184,6 +190,12 @@ const PreferenciasChamadosPage = lazy(() => import('@/pages/configuracoes/Prefer
 const PreferenciasComodatoPage = lazy(() => import('@/pages/configuracoes/PreferenciasComodatoPage'));
 const DadosClientesConfigPage = lazy(() => import('@/pages/configuracoes/DadosClientesPage'));
 const ConfiguracoesAvancadasAPoioPage = lazy(() => import('@/pages/configuracoes/ConfiguracoesAvancadasAPoioPage'));
+
+// Debug Pages
+const RPCTestPage = lazy(() => import('@/pages/debug/RPCTestPage'));
+const AnaliseProfundaPage = lazy(() => import('@/pages/debug/AnaliseProfundaPage'));
+const DataVerificationPage = lazy(() => import('@/pages/debug/DataVerificationPage'));
+const SupabaseTestPage = lazy(() => import('@/pages/debug/SupabaseTestPage'));
 
 // Memoized fallback to prevent re-renders of the spinner container
 const FullScreenLoader = memo(() => (
@@ -199,6 +211,7 @@ const AppContent = () => {
   return (
     <>
       <OfflineIndicator />
+      <ForensicFloatingButton />
       <Suspense fallback={<FullScreenLoader />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -218,7 +231,8 @@ const AppContent = () => {
             </AuthGuard>
           }>
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<ModuleGuard moduleId="dashboard_comercial"><DashboardPage /></ModuleGuard>} />
+            {/* RESTORED: Pointing to DashboardComercial */}
+            <Route path="dashboard" element={<ModuleGuard moduleId="dashboard_comercial"><DashboardComercial /></ModuleGuard>} />
             <Route path="ai-chat" element={<ModuleGuard moduleId="senhor_lavos"><AIChat /></ModuleGuard>} />
             
             {/* Analytics */}
@@ -277,7 +291,6 @@ const AppContent = () => {
                 <Route index element={<Navigate to="pipeline" replace />} />
                 <Route path="pipeline" element={<Pipeline />} />
                 <Route path="contacts" element={<CrmContacts />} />
-                {/* Explicit ModuleGuard for Comodato Contracts to ensure access */}
                 <Route path="comodato-contracts" element={<ModuleGuard moduleId="comodato_module"><ComodatoContracts /></ModuleGuard>} />
                 <Route path="automations" element={<CrmAutomations />} />
                 <Route path="reports" element={<CrmReports />} />
@@ -288,7 +301,7 @@ const AppContent = () => {
             {/* Gestão de Equipe (REDIRECT OLD ROUTES) */}
             <Route path="admin/gestao-equipe/usuarios-acesso" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
 
-            {/* Admin Configurations (Restored) */}
+            {/* Admin Configurations */}
             <Route path="admin/configuracoes">
                 <Route index element={<Navigate to="usuarios" replace />} />
                 <Route path="usuarios" element={<ModuleGuard moduleId="configuracoes"><UserManagementPage /></ModuleGuard>} />
@@ -314,7 +327,6 @@ const AppContent = () => {
                 <Route path="entrega" element={<EntregaForm />} />
                 <Route path="troca" element={<TrocaForm />} />
                 <Route path="retirada" element={<RetiradaForm />} />
-                {/* Fallback routes for list/details to avoid 404 */}
                 <Route path="lista" element={<Navigate to="clientes" replace />} />
                 <Route path="detalhes" element={<Navigate to="clientes" replace />} />
               </Route>
@@ -322,7 +334,6 @@ const AppContent = () => {
               <Route path="chamados" element={<ChamadosLayout />}>
                   <Route index element={<Navigate to="todos" replace />} />
                   <Route path="todos" element={<ChamadosTodosPage />} />
-                  {/* Sub-routes for status filters */}
                   <Route path="abertos" element={<Navigate to="todos?status=aberto" replace />} />
                   <Route path="em-andamento" element={<Navigate to="todos?status=em_andamento" replace />} />
                   <Route path="em-progresso" element={<Navigate to="todos?status=em_andamento" replace />} />
@@ -377,7 +388,6 @@ const AppContent = () => {
                 <Route path="integracoes/:id/editar" element={<IntegracaoForm />} />
                 <Route path="dados-clientes" element={<DadosClientesApoioPage />} />
               </Route>
-              {/* Routes with accents */}
               <Route path="geolocalização" element={<Navigate to="geolocalizacao" replace />} />
 
               <Route path="relatorios" element={<RelatoriosLayout />}>
@@ -392,18 +402,15 @@ const AppContent = () => {
                 <Route path="personalizado" element={<PersonalizadoPage />} />
               </Route>
 
-              {/* Personas (REDIRECT OLD ROUTES) */}
               <Route path="personas" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
 
               {/* Manutenção Equipamentos (Submodule) */}
               <Route path="manutencao-equipamentos" element={<ModuleGuard moduleId="manutencao_equip"><ManutencaoEquipamentosPage /></ModuleGuard>} />
-              {/* Aliases/Redirects */}
               <Route path="manutencao" element={<Navigate to="manutencao-equipamentos" replace />} />
               <Route path="manutenção" element={<Navigate to="manutencao-equipamentos" replace />} />
               <Route path="manutencao-equipamentos/preventiva" element={<ManutencaoEquipamentosPage />} />
               <Route path="manutencao-equipamentos/corretiva" element={<ManutencaoEquipamentosPage />} />
 
-              {/* Configurações Redirect */}
               <Route path="configuracoes" element={<Navigate to="/configuracoes" replace />} />
 
             </Route>
@@ -411,7 +418,6 @@ const AppContent = () => {
             {/* UNIFIED SETTINGS */}
             <Route path="configuracoes" element={<ModuleGuard moduleId="configuracoes"><ConfiguracoesLayout /></ModuleGuard>}>
               <Route index element={<Navigate to="perfil" replace />} />
-              {/* General */}
               <Route path="perfil" element={<PerfilUsuarioPage />} />
               <Route path="seguranca" element={<SegurancaPage />} />
               <Route path="notificacoes" element={<NotificacoesGeraisPage />} />
@@ -423,15 +429,16 @@ const AppContent = () => {
               <Route path="logs" element={<LogsPage />} />
               <Route path="sobre" element={<SobreAjudaPage />} />
               
-              {/* Redirect old user management routes to new location */}
               <Route path="usuarios/*" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
               <Route path="gestao-acesso-unificada" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
               
-              {/* NEW CENTRALIZED MODULE */}
               <Route path="gestao-equipe" element={<ModuleGuard moduleId="settings_users"><CentralizedTeamManagement /></ModuleGuard>} />
               
-              {/* System Diagnosis */}
               <Route path="diagnostico" element={<SystemDiagnosisPage />} />
+              <Route path="rpc-diagnostico" element={<RPCDiagnosisPage />} />
+              <Route path="diagnostico-profundo" element={<DeepDiagnosisPage />} />
+              <Route path="auto-diagnostico" element={<AutoDiagnosisPage />} />
+              <Route path="diagnostico-forense" element={<ForensicDiagnosisPage />} />
 
               <Route path="apoio/relatorios" element={<PreferenciasRelatoriosPage />} />
               <Route path="apoio/dashboard" element={<PreferenciasDashboardPage />} />
@@ -442,6 +449,12 @@ const AppContent = () => {
               <Route path="apoio/dados-clientes" element={<DadosClientesConfigPage />} />
               <Route path="apoio/avancadas" element={<ConfiguracoesAvancadasAPoioPage />} />
             </Route>
+
+            {/* DEBUGGING ROUTES */}
+            <Route path="debug/rpc-test" element={<RPCTestPage />} />
+            <Route path="debug/analise-profunda" element={<AnaliseProfundaPage />} />
+            <Route path="debug/verificacao-dados" element={<DataVerificationPage />} />
+            <Route path="debug/teste-supabase" element={<SupabaseTestPage />} />
 
             <Route path="*" element={<NotFoundPage />} />
           </Route>
@@ -454,7 +467,6 @@ const AppContent = () => {
 
 function App() {
   useEffect(() => {
-    // Aggressively prefetch routes after main thread is idle
     prefetchCriticalRoutes();
   }, []);
 

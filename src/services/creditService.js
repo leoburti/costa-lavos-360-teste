@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/customSupabaseClient';
 
 export const fetchCreditDossier = async ({ cnpj, cpf }) => {

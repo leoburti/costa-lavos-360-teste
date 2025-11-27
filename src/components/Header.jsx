@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Menu, Search, Bell, User, LogOut, Settings, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';

@@ -1,282 +1,185 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Helmet } from 'react-helmet-async';
-import { motion } from 'framer-motion';
-import { Loader2, User, DollarSign, Repeat, Calendar } from 'lucide-react';
-import ChartCard from '@/components/ChartCard';
-import { Treemap, ResponsiveContainer, Tooltip } from 'recharts';
+
+import React, { useEffect, useState, useMemo } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
-import AIInsight from '@/components/AIInsight';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useAIInsight } from '@/hooks/useAIInsight';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ZAxis, Legend } from 'recharts';
+import { formatCurrency } from '@/lib/utils';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
-const RFMTooltip = ({ active, payload }) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <div className="bg-card/90 backdrop-blur-sm p-4 border rounded-lg shadow-lg text-sm">
-        <p className="font-bold text-base mb-2">{data.name}</p>
-        <p><span className="font-semibold">Clientes:</span> {data.clientCount}</p>
-        <p><span className="font-semibold">Receita Total:</span> {data.totalMonetary.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-        <p><span className="font-semibold">Recência Média:</span> {data.avgRecency.toFixed(0)} dias</p>
-        <p><span className="font-semibold">Frequência Média:</span> {data.avgFrequency.toFixed(1)} compras</p>
-      </div>
-    );
-  }
-  return null;
-};
-
-const RFMCustomContent = (props) => {
-  const { depth, x, y, width, height, index, name, onClick, clientCount, color } = props;
-  if (depth === 0) return null;
-
-  return (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        style={{
-          fill: color,
-          stroke: 'hsl(var(--card))',
-          strokeWidth: 2,
-          strokeOpacity: 1,
-        }}
-        className="cursor-pointer transition-all hover:opacity-80"
-        onClick={() => onClick(props)}
-        rx={4}
-      />
-      {width > 100 && height > 50 && (
-        <text x={x + width / 2} y={y + height / 2 + 7} textAnchor="middle" fill="#fff" fontSize={16} className="font-bold pointer-events-none tracking-tight">
-          {name}
-        </text>
-      )}
-      {width > 120 && height > 70 && (
-         <text x={x + width / 2} y={y + height / 2 + 28} textAnchor="middle" fill="#fff" fontSize={12} fillOpacity={0.9} className="pointer-events-none">
-            {clientCount} clientes
-          </text>
-      )}
-    </g>
-  );
-}
-
-const ClientListModal = ({ segment, open, onOpenChange }) => {
-  if (!segment) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md" style={{ backgroundColor: segment.color }} />
-            Clientes do Segmento: {segment.name}
-          </DialogTitle>
-          <DialogDescription>
-            {segment.clientCount} clientes neste segmento.
-          </DialogDescription>
-        </DialogHeader>
-        <ScrollArea className="h-[60vh] mt-4">
-          <div className="pr-6 space-y-3">
-            {segment.clients.map((client, index) => (
-              <motion.div
-                key={client.clientName}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.03 }}
-                className="p-4 bg-muted/50 rounded-lg border"
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <p className="font-semibold text-foreground truncate pr-4">{client.clientName}</p>
-                  <p className="text-xs text-muted-foreground">{client.seller}</p>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="p-2 bg-background rounded-md">
-                    <Calendar className="mx-auto h-4 w-4 mb-1 text-primary" />
-                    <p className="font-bold">{client.recency} dias</p>
-                    <p className="text-muted-foreground">Recência</p>
-                  </div>
-                  <div className="p-2 bg-background rounded-md">
-                    <Repeat className="mx-auto h-4 w-4 mb-1 text-primary" />
-                    <p className="font-bold">{client.frequency}</p>
-                    <p className="text-muted-foreground">Frequência</p>
-                  </div>
-                  <div className="p-2 bg-background rounded-md">
-                    <DollarSign className="mx-auto h-4 w-4 mb-1 text-primary" />
-                    <p className="font-bold">{client.monetary.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                    <p className="text-muted-foreground">Valor</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
-  );
+const SEGMENT_COLORS = {
+  'Campeões': '#15803d',
+  'Clientes Fiéis': '#22c55e',
+  'Potenciais Fiéis': '#84cc16',
+  'Novos Clientes': '#3b82f6',
+  'Promissores': '#a855f7',
+  'Precisam de Atenção': '#f97316',
+  'Em Risco': '#ef4444',
+  'Hibernando': '#64748b'
 };
 
 const CalculoRFM = () => {
   const { filters } = useFilters();
+  const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [rfmData, setRfmData] = useState([]);
-  const [selectedSegment, setSelectedSegment] = useState(null);
-  const { toast } = useToast();
+  const [error, setError] = useState(null);
 
-  const aiData = useMemo(() => {
-    if (!rfmData || rfmData.length === 0) return null;
-    const summary = rfmData.map(s => ({
-      segment: s.name,
-      clientCount: s.clientCount,
-      totalMonetary: s.totalMonetary,
-      upsellPotential: s.clients.reduce((acc, c) => acc + c.upsellPotential, 0)
-    }));
-    return { summary };
-  }, [rfmData]);
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
-  const { insight, loading: loadingAI, generateInsights } = useAIInsight('rfm_analysis', aiData);
+  // Debug Logs
+  useEffect(() => {
+    console.log('[CalculoRFM] Filters:', filters);
+    console.log('[CalculoRFM] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
 
   useEffect(() => {
-    const fetchRfmData = async () => {
-      if (!filters.startDate || !filters.endDate) return;
+    if (!startDateStr || !endDateStr) return;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const fetchData = async () => {
       setLoading(true);
-      const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_rfm_analysis', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
-        p_exclude_employees: filters.excludeEmployees,
-        p_supervisors: filters.supervisors,
-        p_sellers: filters.sellers,
-        p_customer_groups: filters.customerGroups,
-        p_regions: filters.regions,
-        p_clients: selectedClients,
-        p_search_term: filters.searchTerm,
-      });
+      setError(null);
+      try {
+        let query = supabase
+          .from('bd-cl')
+          .select('Cliente, Nome, "N Fantasia", Total, "DT Emissao", Pedido, Cfo')
+          .gte('DT Emissao', startDateStr)
+          .lte('DT Emissao', endDateStr)
+          .gt('Total', 0);
 
-      if (error) {
-        toast({
-          variant: "destructive",
-          title: "Erro ao buscar dados de RFM",
-          description: error.message,
-        });
-        setRfmData([]);
-      } else {
-        const groupedData = data.reduce((acc, client) => {
-          const segment = client.segment;
-          if (!acc[segment]) {
-            acc[segment] = {
-              name: segment,
-              clients: [],
-              clientCount: 0,
-              totalMonetary: 0,
-              totalRecency: 0,
-              totalFrequency: 0,
-            };
-          }
-          acc[segment].clients.push(client);
-          acc[segment].clientCount += 1;
-          acc[segment].totalMonetary += client.monetary;
-          acc[segment].totalRecency += client.recency;
-          acc[segment].totalFrequency += client.frequency;
-          return acc;
-        }, {});
-
-        const result = Object.values(groupedData).map(segment => ({
-            ...segment,
-            avgRecency: segment.totalRecency / segment.clientCount,
-            avgFrequency: segment.totalFrequency / segment.clientCount,
-        }));
+        if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
         
-        setRfmData(result);
+        const { data, error: supabaseError } = await query.abortSignal(controller.signal);
+
+        if (supabaseError) throw supabaseError;
+        setRawData(data || []);
+
+      } catch (err) {
+        console.error("Erro RFM:", err);
+        if (err.name === 'AbortError') setError("Timeout na consulta. Tente um intervalo menor.");
+        else setError("Erro ao calcular RFM.");
+      } finally {
+        setLoading(false);
+        clearTimeout(timeoutId);
       }
-      setLoading(false);
     };
 
-    fetchRfmData();
-  }, [filters, toast]);
+    fetchData();
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [filters, startDateStr, endDateStr]);
 
-  useEffect(() => {
-    if(aiData) {
-      generateInsights();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiData]);
+  const chartData = useMemo(() => {
+    if (!rawData.length) return [];
+
+    const clients = {};
+    const today = new Date();
+
+    rawData.forEach(row => {
+      if (['5910', '6910', '5908', '6551', '6908', '5551'].includes(String(row.Cfo))) return;
+
+      const id = row.Cliente;
+      if (!clients[id]) {
+        clients[id] = {
+          id,
+          clientName: row['N Fantasia'] || row.Nome,
+          total: 0,
+          orders: new Set(),
+          lastDate: new Date(0) // epoch
+        };
+      }
+      clients[id].total += row.Total;
+      clients[id].orders.add(row.Pedido);
+      const date = new Date(row['DT Emissao']);
+      if (date > clients[id].lastDate) clients[id].lastDate = date;
+    });
+
+    const processed = Object.values(clients).map(c => {
+      const recency = Math.ceil(Math.abs(today - c.lastDate) / (1000 * 60 * 60 * 24));
+      const frequency = c.orders.size;
+      const monetary = c.total;
+
+      // Simple segmentation logic (simplified RFM)
+      let segment = 'Promissores';
+      if (frequency >= 4 && monetary > 10000) segment = 'Campeões';
+      else if (frequency >= 3) segment = 'Clientes Fiéis';
+      else if (recency <= 30 && frequency === 1) segment = 'Novos Clientes';
+      else if (recency > 90) segment = 'Hibernando';
+      else if (recency > 60) segment = 'Em Risco';
+      else if (monetary > 5000) segment = 'Potenciais Fiéis';
+      else if (recency > 30 && frequency < 2) segment = 'Precisam de Atenção';
+
+      return { ...c, recency, frequency, monetary, segment };
+    });
+
+    // Group by segment for chart
+    const grouped = {};
+    processed.forEach(p => {
+      if (!grouped[p.segment]) grouped[p.segment] = [];
+      grouped[p.segment].push(p);
+    });
+
+    return Object.entries(grouped).map(([key, value]) => ({
+      name: key,
+      data: value,
+      color: SEGMENT_COLORS[key] || '#888'
+    }));
+  }, [rawData]);
+
+  if (loading && !rawData.length) return <div className="h-96 flex items-center justify-center"><LoadingSpinner message="Calculando Matriz RFM..." /></div>;
   
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Standardized and vibrant color palette for RFM segments
-  const segmentColors = {
-    'Campeões': '#10B981', // Emerald 500
-    'Clientes Fiéis': '#3B82F6', // Blue 500
-    'Potenciais Fiéis': '#06B6D4', // Cyan 500
-    'Novos Clientes': '#8B5CF6', // Violet 500
-    'Promissores': '#F59E0B', // Amber 500
-    'Precisam de Atenção': '#F97316', // Orange 500
-    'Em Risco': '#EF4444', // Red 500
-    'Hibernando': '#6B7280', // Gray 500
-  };
-
-  const treemapData = rfmData.map(item => ({
-    name: item.name,
-    size: item.clientCount,
-    color: segmentColors[item.name] || '#94A3B8',
-    ...item
-  }));
+  if (error) return <Alert variant="destructive" className="m-6"><AlertTriangle className="h-4 w-4"/><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
 
   return (
-    <>
-      <Helmet>
-        <title>Cálculo RFM - Costa Lavos</title>
-        <meta name="description" content="Análise de clientes baseada no modelo RFM (Recência, Frequência, Valor)" />
-      </Helmet>
-
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">Cálculo RFM</h1>
-          <p className="text-muted-foreground mt-1">Segmentação de clientes por Recência, Frequência e Valor.</p>
-        </div>
-        
-        <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
-
-        <ChartCard title="Segmentação de Clientes RFM (por contagem de clientes)" height={500}>
-          <ResponsiveContainer width="100%" height="100%">
-            <Treemap
-              data={treemapData}
-              dataKey="size"
-              ratio={4/3}
-              stroke="hsl(var(--card))"
-              content={<RFMCustomContent onClick={(data) => setSelectedSegment(data)} />}
-            >
-             <Tooltip content={<RFMTooltip />} />
-            </Treemap>
-          </ResponsiveContainer>
-        </ChartCard>
-        
-        <ChartCard title="Legenda dos Segmentos RFM" childClassName="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {rfmData.sort((a,b) => b.totalMonetary - a.totalMonetary).map(item => (
-              <div key={item.name} className="flex items-start space-x-3">
-                <div className="w-3 h-3 mt-1.5 rounded-sm flex-shrink-0" style={{ backgroundColor: segmentColors[item.name] || '#94A3B8' }}></div>
-                <div>
-                  <p className="font-semibold">{item.name}</p>
-                  <p className="text-sm text-muted-foreground">{item.clientCount} clientes</p>
-                  <p className="text-sm font-bold text-foreground">{item.totalMonetary.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </ChartCard>
+    <div className="p-6 space-y-6 animate-in fade-in duration-500">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Matriz RFM</h1>
+        <p className="text-muted-foreground mt-1">Recência, Frequência e Valor Monetário (Consulta Direta)</p>
       </div>
-      <ClientListModal segment={selectedSegment} open={!!selectedSegment} onOpenChange={() => setSelectedSegment(null)} />
-    </>
+
+      <Card>
+        <CardHeader><CardTitle>Distribuição de Clientes</CardTitle></CardHeader>
+        <CardContent className="h-[500px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" dataKey="recency" name="Recência" label={{ value: 'Dias sem compra', position: 'insideBottom', offset: -10 }} reversed />
+              <YAxis type="number" dataKey="monetary" name="Valor" unit="R$" label={{ value: 'Valor Total', angle: -90, position: 'insideLeft' }} />
+              <ZAxis type="number" dataKey="frequency" range={[50, 400]} name="Frequência" />
+              <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ payload }) => {
+                if (payload && payload.length) {
+                  const d = payload[0].payload;
+                  return (
+                    <div className="bg-white p-3 border rounded shadow-lg text-sm">
+                      <p className="font-bold">{d.clientName}</p>
+                      <p>Seg: {d.segment}</p>
+                      <p>Rec: {d.recency} dias</p>
+                      <p>Val: {formatCurrency(d.monetary)}</p>
+                      <p>Freq: {d.frequency} pedidos</p>
+                    </div>
+                  );
+                }
+                return null;
+              }} />
+              <Legend />
+              {chartData.map((s) => (
+                <Scatter key={s.name} name={s.name} data={s.data} fill={s.color} />
+              ))}
+            </ScatterChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

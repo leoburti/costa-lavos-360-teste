@@ -1,4 +1,3 @@
-
 import { clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { 
@@ -73,15 +72,19 @@ export const formatDate = (date, formatString = 'dd/MM/yyyy') => {
   }
 };
 
+/**
+ * Creates a comparator function for sorting arrays of objects.
+ * Handles null/undefined values by pushing them to the end.
+ */
 export const sortByProperty = (property, direction = 'ascending') => {
   return (a, b) => {
     const valueA = a[property];
     const valueB = b[property];
 
-    // Handle nulls/undefined
+    // Handle nulls/undefined: always push to bottom regardless of direction
     if (valueA === valueB) return 0;
-    if (valueA == null) return 1; // Push nulls to end
-    if (valueB == null) return -1;
+    if (valueA === null || valueA === undefined) return 1;
+    if (valueB === null || valueB === undefined) return -1;
 
     if (valueA < valueB) {
       return direction === 'ascending' ? -1 : 1;

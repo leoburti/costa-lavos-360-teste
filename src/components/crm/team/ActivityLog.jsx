@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Phone, Mail, Users, CheckCircle2, Circle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';

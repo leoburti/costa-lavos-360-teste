@@ -1,133 +1,119 @@
-
-import React, { useEffect, useState } from 'react';
-import { Helmet } from 'react-helmet-async';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Shield, Plus, Loader2 } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/customSupabaseClient';
+import { Loader2 } from 'lucide-react';
 
 const ProfileManagementPage = () => {
+  const { user, session } = useAuth();
   const { toast } = useToast();
-  const [profiles, setProfiles] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
 
   useEffect(() => {
-    console.log('[ProfileManagementPage] Component mounted');
-    fetchProfiles();
-  }, []);
+    if (user) {
+      setFullName(user.user_metadata?.full_name || '');
+      setEmail(user.email || '');
+    }
+  }, [user]);
 
-  const fetchProfiles = async () => {
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
     setLoading(true);
+
     try {
-      const { data, error } = await supabase
-        .from('apoio_perfis')
-        .select('*')
-        .order('nome');
+      const { error } = await supabase.auth.updateUser({
+        data: { full_name: fullName }
+      });
 
       if (error) throw error;
 
-      setProfiles(data || []);
-    } catch (error) {
-      console.error('[ProfileManagementPage] Error fetching profiles:', error);
+      // Also update public.users table for consistency
+      await supabase.from('users').update({ full_name: fullName }).eq('id', user.id);
+
       toast({
-        variant: 'destructive',
-        title: 'Erro ao carregar perfis',
-        description: error.message,
+        title: "Perfil atualizado",
+        description: "Suas informações foram salvas com sucesso.",
+      });
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o perfil.",
+        variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateProfile = () => {
-    toast({
-      title: "Novo Perfil",
-      description: "Criação de perfil em desenvolvimento.",
-    });
-  };
-
   return (
-    <div className="p-6 space-y-6">
-      <Helmet>
-        <title>Gerenciamento de Perfis | Admin | Costa Lavos</title>
-      </Helmet>
-
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gerenciamento de Perfis</h1>
-          <p className="text-muted-foreground mt-1">
-            Definição de papéis e permissões de acesso.
-          </p>
-        </div>
-        <Button onClick={handleCreateProfile}>
-          <Plus className="mr-2 h-4 w-4" /> Novo Perfil
-        </Button>
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Meu Perfil</h2>
+        <p className="text-muted-foreground">Gerencie suas informações pessoais e preferências.</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Perfis de Acesso</CardTitle>
-          <CardDescription>Perfis configurados no sistema e suas permissões associadas.</CardDescription>
+          <CardTitle>Informações Pessoais</CardTitle>
+          <CardDescription>Atualize seu nome e visualize seu email.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Permissões</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      <div className="flex justify-center items-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                        <span className="ml-2 text-muted-foreground">Carregando perfis...</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : profiles.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                      Nenhum perfil encontrado.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  profiles.map((profile) => (
-                    <TableRow key={profile.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <Shield className="h-4 w-4 text-blue-600" />
-                          {profile.nome}
-                        </div>
-                      </TableCell>
-                      <TableCell>{profile.descricao || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant={profile.ativo ? 'success' : 'secondary'}>
-                          {profile.ativo ? 'Ativo' : 'Inativo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-muted-foreground">
-                          {profile.permissoes ? Object.keys(profile.permissoes).length : 0} módulos configurados
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">Editar</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+          <form onSubmit={handleUpdateProfile} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" value={email} disabled className="bg-slate-50" />
+              <p className="text-[0.8rem] text-muted-foreground">O email não pode ser alterado diretamente.</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Nome Completo</Label>
+              <Input 
+                id="fullName" 
+                value={fullName} 
+                onChange={(e) => setFullName(e.target.value)} 
+                placeholder="Seu nome" 
+              />
+            </div>
+
+            <Button type="submit" disabled={loading} className="bg-brand-primary">
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar Alterações
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Segurança</CardTitle>
+          <CardDescription>Gerencie suas credenciais de acesso.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label className="text-base">Alterar Senha</Label>
+              <p className="text-sm text-muted-foreground">Você receberá um email para redefinir sua senha.</p>
+            </div>
+            <Button variant="outline" onClick={async () => {
+                try {
+                    await supabase.auth.resetPasswordForEmail(email, {
+                        redirectTo: window.location.origin + '/update-password',
+                    });
+                    toast({ title: "Email enviado", description: "Verifique sua caixa de entrada." });
+                } catch (e) {
+                    toast({ title: "Erro", description: "Falha ao enviar email.", variant: "destructive" });
+                }
+            }}>
+              Redefinir
+            </Button>
           </div>
         </CardContent>
       </Card>

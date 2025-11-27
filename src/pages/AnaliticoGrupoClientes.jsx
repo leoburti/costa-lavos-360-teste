@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+import React, { useMemo, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import ChartCard from '@/components/ChartCard';
 import AIInsight from '@/components/AIInsight';
@@ -6,65 +7,56 @@ import CustomerGroupDrilldownExplorer from '@/components/CustomerGroupDrilldownE
 import TreeMapChart from '@/components/TreeMapChart';
 import { useFilters } from '@/contexts/FilterContext';
 import { useAIInsight } from '@/hooks/useAIInsight';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
 import { Loader2 } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, isValid } from 'date-fns';
 
 const AnaliticoGrupoClientes = () => {
   const { filters } = useFilters();
-  const { toast } = useToast();
-  const [treemapData, setTreemapData] = useState([]);
-  const [loadingTreemap, setLoadingTreemap] = useState(true);
 
-  const fetchTreemapData = useCallback(async () => {
-    if (!filters.startDate || !filters.endDate) return;
-    
-    setLoadingTreemap(true);
-    try {
-      const { data, error } = await supabase.rpc('get_treemap_data', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
-        p_exclude_employees: filters.excludeEmployees,
-        p_supervisors: filters.supervisors,
-        p_sellers: filters.sellers,
-        p_customer_groups: filters.customerGroups,
-        p_regions: filters.regions,
-        p_clients: filters.clients, // Correctly formatted array of strings from context
-        p_search_term: filters.searchTerm,
-        p_analysis_mode: 'customerGroup',
-        p_show_defined_groups_only: true,
-      });
+  // Safe date extraction
+  const dateRange = useMemo(() => {
+      const now = new Date();
+      const from = filters.dateRange?.from && isValid(new Date(filters.dateRange.from)) ? new Date(filters.dateRange.from) : startOfMonth(now);
+      const to = filters.dateRange?.to && isValid(new Date(filters.dateRange.to)) ? new Date(filters.dateRange.to) : endOfMonth(now);
+      return { from, to };
+  }, [filters.dateRange]);
 
-      if (error) throw error;
-      setTreemapData(data);
-    } catch (error) {
-      console.error("Error fetching treemap data:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar dados do gráfico",
-        description: error.message,
-      });
-      setTreemapData([]);
-    } finally {
-      setLoadingTreemap(false);
-    }
-  }, [filters, toast]);
+  const startDateStr = format(dateRange.from, 'yyyy-MM-dd');
+  const endDateStr = format(dateRange.to, 'yyyy-MM-dd');
 
-  useEffect(() => {
-    fetchTreemapData();
-  }, [fetchTreemapData]);
+  const params = useMemo(() => ({
+    p_start_date: startDateStr,
+    p_end_date: endDateStr,
+    p_exclude_employees: filters.excludeEmployees ?? true,
+    p_supervisors: filters.supervisors === 'all' ? null : filters.supervisors,
+    p_sellers: filters.sellers === 'all' ? null : filters.sellers,
+    p_customer_groups: filters.customerGroups === 'all' ? null : filters.customerGroups,
+    p_regions: filters.regions === 'all' ? null : filters.regions,
+    p_clients: Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null,
+    p_search_term: filters.searchTerm || null,
+    p_analysis_mode: 'customerGroup',
+    p_show_defined_groups_only: true,
+  }), [filters, startDateStr, endDateStr]);
 
-  const aiContextData = useMemo(() => ({
-    topGroups: treemapData.slice(0, 5).map(d => ({ name: d.name, sales: d.size }))
-  }), [treemapData]);
+  // Memoize options to ensure referential stability
+  const options = useMemo(() => ({ 
+    enabled: !!startDateStr && !!endDateStr, 
+    defaultValue: [] 
+  }), [startDateStr, endDateStr]);
 
-  const { insight, loading: loadingAI, retry: retryAI } = useAIInsight('customer_group_analysis', aiContextData);
+  const { data: treemapData, loading: loadingTreemap, refetch } = useAnalyticalData(
+    'get_treemap_data', 
+    params, 
+    options
+  );
+
+  const { insight, loading: loadingAI, generateInsights } = useAIInsight('customer_group_analysis', treemapData);
 
   return (
     <>
       <Helmet>
         <title>Analítico Grupos de Clientes - Costa Lavos</title>
-        <meta name="description" content="Análise detalhada da performance por grupos de clientes." />
       </Helmet>
 
       <div className="space-y-8">
@@ -73,7 +65,7 @@ const AnaliticoGrupoClientes = () => {
           <p className="text-muted-foreground mt-1">Explore as vendas navegando através dos grupos de clientes, clientes, pedidos e produtos.</p>
         </div>
         
-        <AIInsight insight={insight} loading={loadingAI} onRegenerate={retryAI} />
+        <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
 
         <div className="grid grid-cols-1 gap-8">
            <ChartCard title="Distribuição de Vendas por Grupo de Cliente" height={400}>
@@ -82,12 +74,12 @@ const AnaliticoGrupoClientes = () => {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <TreeMapChart data={treemapData} dataKey="size" nameKey="name" />
+              <TreeMapChart data={treemapData || []} />
             )}
           </ChartCard>
 
           <ChartCard title="Explorador de Vendas por Grupo de Cliente" childClassName="p-0">
-            <CustomerGroupDrilldownExplorer />
+            <CustomerGroupDrilldownExplorer key={JSON.stringify(params)} />
           </ChartCard>
         </div>
       </div>

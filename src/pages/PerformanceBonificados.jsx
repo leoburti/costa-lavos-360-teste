@@ -1,21 +1,56 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { Award, TrendingUp } from 'lucide-react';
+import { Award, TrendingUp, Loader2 } from 'lucide-react';
 import MetricCard from '@/components/MetricCard';
 import ChartCard from '@/components/ChartCard';
 import AIInsight from '@/components/AIInsight';
 import BonificationDrilldownExplorer from '@/components/BonificationDrilldownExplorer';
 import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
 import { useAIInsight } from '@/hooks/useAIInsight';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const PerformanceBonificados = () => {
   const { filters } = useFilters();
-  const [loadingKpis, setLoadingKpis] = useState(true);
-  const [kpiData, setKpiData] = useState(null);
-  const { toast } = useToast();
+
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+  // Debug Logs
+  useEffect(() => {
+    console.log('[PerformanceBonificados] Filters:', filters);
+    console.log('[PerformanceBonificados] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
+
+  const params = useMemo(() => {
+    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
+    return {
+      p_start_date: startDateStr,
+      p_end_date: endDateStr,
+      p_exclude_employees: filters.excludeEmployees,
+      p_supervisors: filters.supervisors,
+      p_sellers: filters.sellers,
+      p_customer_groups: filters.customerGroups,
+      p_regions: filters.regions,
+      p_clients: selectedClients,
+      p_search_term: filters.searchTerm,
+      p_show_defined_groups_only: false,
+      p_group_by: 'supervisor', // Default for overall KPIs
+    };
+  }, [filters, startDateStr, endDateStr]);
+
+  const { data: kpiData, loading } = useAnalyticalData(
+    'get_bonification_performance',
+    params,
+    { 
+        enabled: !!startDateStr && !!endDateStr,
+        defaultValue: null
+    }
+  );
 
   const aiData = useMemo(() => {
     if (!kpiData) return null;
@@ -25,43 +60,6 @@ const PerformanceBonificados = () => {
   }, [kpiData]);
 
   const { insight, loading: loadingAI, generateInsights } = useAIInsight('bonification_performance', aiData);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!filters.startDate || !filters.endDate) return;
-      setLoadingKpis(true);
-      const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_bonification_performance', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
-        p_exclude_employees: filters.excludeEmployees,
-        p_supervisors: filters.supervisors,
-        p_sellers: filters.sellers,
-        p_customer_groups: filters.customerGroups,
-        p_regions: filters.regions,
-        p_clients: selectedClients,
-        p_search_term: filters.searchTerm,
-        p_show_defined_groups_only: false,
-        p_group_by: 'supervisor', // Default for overall KPIs
-      });
-
-      if (error) {
-        toast({ variant: "destructive", title: "Erro na Análise", description: error.message });
-        setKpiData(null);
-      } else {
-        setKpiData(data);
-      }
-      setLoadingKpis(false);
-    };
-    fetchData();
-  }, [filters, toast]);
-
-  useEffect(() => {
-    if(aiData) {
-      generateInsights();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiData]);
 
   const kpis = kpiData?.kpis || {};
 
@@ -79,10 +77,14 @@ const PerformanceBonificados = () => {
 
         <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <MetricCard title="Média de Bonificação" value={`${(kpis.averagePercentage || 0).toFixed(2)}%`} icon={Award} />
-          <MetricCard title="Maior Performance" value={`${(kpis.topPerformer?.value || 0).toFixed(2)}%`} icon={TrendingUp} subtitle={kpis.topPerformer?.name || 'N/A'} />
-        </div>
+        {loading ? (
+            <div className="flex items-center justify-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <MetricCard title="Média de Bonificação" value={`${(kpis.averagePercentage || 0).toFixed(2)}%`} icon={Award} />
+            <MetricCard title="Maior Performance" value={`${(kpis.topPerformer?.value || 0).toFixed(2)}%`} icon={TrendingUp} subtitle={kpis.topPerformer?.name || 'N/A'} />
+            </div>
+        )}
 
         <ChartCard title="Explorador de Performance" childClassName="p-0">
           <BonificationDrilldownExplorer />

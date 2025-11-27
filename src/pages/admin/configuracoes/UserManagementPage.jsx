@@ -1,175 +1,198 @@
-
-import React, { useEffect, useState } from 'react';
-import { Helmet } from 'react-helmet-async';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
-import { Search, UserPlus, MoreHorizontal, Loader2 } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Loader2, Search, Plus, Trash2, Edit } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import AddUserDialog from '@/components/settings/AddUserDialog';
+import EditUserDialog from '@/components/settings/EditUserDialog';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const UserManagementPage = () => {
+  const { hasPermission, userRole } = useAuth();
   const { toast } = useToast();
+  
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
-  useEffect(() => {
-    console.log('[UserManagementPage] Component mounted');
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
-    console.log('[UserManagementPage] Fetching users...');
     try {
-      // Fetch users from apoio_usuarios table
-      const { data, error } = await supabase
-        .from('apoio_usuarios')
-        .select('*')
-        .order('nome');
-
+      // Ensure we call the RPC correctly
+      const { data, error } = await supabase.rpc('get_all_users_with_roles');
+      
       if (error) throw error;
-
-      console.log('[UserManagementPage] Users fetched:', data?.length);
+      
       setUsers(data || []);
     } catch (error) {
-      console.error('[UserManagementPage] Error fetching users:', error);
+      console.error('Error fetching users:', error);
       toast({
-        variant: 'destructive',
-        title: 'Erro ao carregar usuários',
-        description: error.message,
+        title: "Erro",
+        description: "Falha ao carregar usuários. " + error.message,
+        variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const handleAddUser = () => {
-    toast({
-      title: 'Novo Usuário',
-      description: 'Funcionalidade de criação redirecionando para o formulário padrão.',
-    });
-    // Logic to redirect or open modal
-  };
+  useEffect(() => {
+    const abortController = new AbortController();
+    
+    if (hasPermission('configuracoes', 'view')) {
+        fetchUsers();
+    } else {
+        setLoading(false);
+    }
 
-  const filteredUsers = users.filter(user => 
-    user.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    return () => {
+        abortController.abort();
+    };
+  }, [fetchUsers, hasPermission]);
+
+  const filteredUsers = users.filter(u => 
+    u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  return (
-    <div className="p-6 space-y-6">
-      <Helmet>
-        <title>Gerenciamento de Usuários | Admin | Costa Lavos</title>
-      </Helmet>
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.')) return;
 
+    try {
+      const { error } = await supabase.rpc('delete_user_by_admin', { p_user_id: userId });
+      if (error) throw error;
+
+      toast({ title: "Sucesso", description: "Usuário excluído com sucesso." });
+      fetchUsers();
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao excluir usuário: " + error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  if (!hasPermission('configuracoes', 'view')) {
+    return <div className="p-8 text-center text-muted-foreground">Você não tem permissão para ver esta página.</div>;
+  }
+
+  return (
+    <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gerenciamento de Usuários</h1>
-          <p className="text-muted-foreground mt-1">
-            Administração centralizada de usuários do sistema.
-          </p>
+          <h2 className="text-2xl font-bold tracking-tight">Gestão de Usuários</h2>
+          <p className="text-muted-foreground">Gerencie contas, permissões e papéis de acesso.</p>
         </div>
-        <Button onClick={handleAddUser}>
-          <UserPlus className="mr-2 h-4 w-4" /> Adicionar Usuário
+        <Button onClick={() => setIsAddDialogOpen(true)} className="bg-brand-primary hover:bg-brand-primary/90">
+          <Plus className="mr-2 h-4 w-4" /> Novo Usuário
         </Button>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Usuários do Sistema</CardTitle>
-          <CardDescription>Lista completa de usuários com acesso ao painel administrativo e operacional.</CardDescription>
+        <CardHeader className="pb-2">
+          <div className="relative w-full md:max-w-sm">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome ou email..."
+              className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center mb-4">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar por nome ou email..." 
-                className="pl-8" 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
             </div>
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px]"></TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Departamento</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      <div className="flex justify-center items-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                        <span className="ml-2 text-muted-foreground">Carregando usuários...</span>
-                      </div>
-                    </TableCell>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Papel</TableHead>
+                    <TableHead>Acesso CRM</TableHead>
+                    <TableHead>Data Criação</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
-                ) : filteredUsers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      Nenhum usuário encontrado.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={user.avatar_url} alt={user.nome} />
-                          <AvatarFallback>{user.nome.substring(0, 2).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                      </TableCell>
-                      <TableCell className="font-medium">{user.nome}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={user.status === 'ativo' ? 'success' : 'secondary'}>
-                          {user.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{user.departamento || '-'}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Abrir menu</span>
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => toast({ title: "Editar", description: `Editando ${user.nome}` })}>
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => toast({ title: "Detalhes", description: `Vendo detalhes de ${user.nome}` })}>
-                              Ver Detalhes
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        Nenhum usuário encontrado.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : (
+                    filteredUsers.map((u) => (
+                      <TableRow key={u.user_id}>
+                        <TableCell className="font-medium">{u.full_name}</TableCell>
+                        <TableCell>{u.email}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={
+                            u.role === 'Admin' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 
+                            u.role.includes('Nivel 1') ? 'bg-purple-100 text-purple-800 hover:bg-purple-100' :
+                            'bg-blue-100 text-blue-800 hover:bg-blue-100'
+                          }>
+                            {u.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={u.can_access_crm ? "success" : "secondary"}>
+                            {u.can_access_crm ? "Sim" : "Não"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{new Date(u.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => setEditingUser(u)}>
+                              <Edit className="h-4 w-4 text-blue-500" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(u.user_id)}>
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <AddUserDialog 
+        isOpen={isAddDialogOpen} 
+        onClose={() => setIsAddDialogOpen(false)} 
+        onUserAdded={fetchUsers} 
+      />
+
+      {editingUser && (
+        <EditUserDialog
+          isOpen={!!editingUser}
+          onClose={() => setEditingUser(null)}
+          user={editingUser}
+          onUserUpdated={fetchUsers}
+        />
+      )}
     </div>
   );
 };

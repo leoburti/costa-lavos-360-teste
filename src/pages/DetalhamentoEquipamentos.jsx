@@ -1,116 +1,92 @@
+
 import React from 'react';
-import { Helmet } from 'react-helmet';
-import { motion } from 'framer-motion';
-import { Settings, CheckCircle, AlertCircle, XCircle, Package, Calendar } from 'lucide-react';
-import ChartCard from '@/components/ChartCard';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { Helmet } from 'react-helmet-async';
+import { format } from 'date-fns';
+import { Package } from 'lucide-react';
+
+import { useFilters } from '@/contexts/FilterContext';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatCurrency } from '@/lib/utils';
 
 const DetalhamentoEquipamentos = () => {
-  const equipamentos = [
-    { id: 'FT-001', tipo: 'Forno Turbo F-10', cliente: 'Padaria Central', status: 'Operacional', ultimaManutencao: '2025-07-15' },
-    { id: 'FV-002', tipo: 'Freezer V-500', cliente: 'Supermercado Bom Preço', status: 'Operacional', ultimaManutencao: '2025-08-01' },
-    { id: 'FE-003', tipo: 'Forno Elétrico E-5', cliente: 'Lanchonete Saborosa', status: 'Quebrado', ultimaManutencao: '2025-05-20' },
-    { id: 'FT-004', tipo: 'Forno Turbo F-10', cliente: 'Hotelaria Premium', status: 'Manutenção', ultimaManutencao: '2025-09-10' },
-    { id: 'FV-005', tipo: 'Freezer V-500', cliente: 'Rede Padarias Alfa', status: 'Operacional', ultimaManutencao: '2025-06-25' },
-  ];
+  const { filters } = useFilters();
+  const startDate = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : null;
+  const endDate = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : null;
 
-  const statusData = [
-    { name: 'Operacional', value: 200, color: '#059669' },
-    { name: 'Manutenção', value: 35, color: '#D97706' },
-    { name: 'Quebrado', value: 23, color: '#DC2626' }
-  ];
-
-  const getStatusInfo = (status) => {
-    switch (status) {
-      case 'Operacional': return { icon: CheckCircle, color: 'text-green-600' };
-      case 'Manutenção': return { icon: AlertCircle, color: 'text-orange-600' };
-      case 'Quebrado': return { icon: XCircle, color: 'text-red-600' };
-      default: return { icon: CheckCircle, color: 'text-gray-500' };
-    }
+  const params = {
+    p_start_date: startDate,
+    p_end_date: endDate,
+    p_exclude_employees: filters.excludeEmployees,
+    p_supervisors: filters.supervisors,
+    p_sellers: filters.sellers,
+    p_customer_groups: filters.customerGroups,
+    p_regions: filters.regions,
+    p_clients: filters.clients,
+    p_search_term: filters.searchTerm,
+    p_show_defined_groups_only: false
   };
 
+  const { data, loading } = useAnalyticalData('get_detailed_equipment_analysis', params, { enabled: !!startDate && !!endDate });
+
   return (
-    <>
+    <div className="space-y-6 animate-in fade-in duration-500">
       <Helmet>
-        <title>Detalhamento de Equipamentos - Colsta Lavos</title>
-        <meta name="description" content="Visão detalhada do status dos equipamentos em campo" />
+        <title>Detalhamento de Equipamentos | Costa Lavos</title>
       </Helmet>
 
-      <div className="space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-xl p-6 shadow-sm"
-        >
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Detalhamento de Equipamentos</h1>
-          <p className="text-gray-600">Status e informações de cada equipamento em comodato</p>
-        </motion.div>
-
-        {/* Status Geral */}
-        <ChartCard title="Status Geral dos Equipamentos">
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={statusData}
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {statusData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => [`${value} equipamentos`, '']} />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Lista de Equipamentos */}
-        <ChartCard title="Lista de Equipamentos">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-gray-500">
-              <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3">ID</th>
-                  <th scope="col" className="px-6 py-3">Tipo</th>
-                  <th scope="col" className="px-6 py-3">Cliente</th>
-                  <th scope="col" className="px-6 py-3">Status</th>
-                  <th scope="col" className="px-6 py-3">Última Manutenção</th>
-                </tr>
-              </thead>
-              <tbody>
-                {equipamentos.map((equip, index) => {
-                  const StatusIcon = getStatusInfo(equip.status).icon;
-                  const statusColor = getStatusInfo(equip.status).color;
-                  return (
-                    <motion.tr
-                      key={equip.id}
-                      className="bg-white border-b"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                    >
-                      <td className="px-6 py-4 font-medium text-gray-900">{equip.id}</td>
-                      <td className="px-6 py-4">{equip.tipo}</td>
-                      <td className="px-6 py-4">{equip.cliente}</td>
-                      <td className={`px-6 py-4 flex items-center space-x-2 ${statusColor}`}>
-                        <StatusIcon size={16} />
-                        <span>{equip.status}</span>
-                      </td>
-                      <td className="px-6 py-4">{new Date(equip.ultimaManutencao).toLocaleDateString()}</td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </ChartCard>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Detalhamento de Equipamentos</h1>
+        <p className="text-muted-foreground">Análise granular por tipo de equipamento movimentado.</p>
       </div>
-    </>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Itens Movimentados
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Equipamento</TableHead>
+                    <TableHead className="text-right">Qtd.</TableHead>
+                    <TableHead className="text-right">Valor Total</TableHead>
+                    <TableHead className="text-right">Clientes Distintos</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {!data || data.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">Nenhum registro encontrado.</TableCell>
+                    </TableRow>
+                  ) : (
+                    data.map((item, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{item.equipment_name}</TableCell>
+                        <TableCell className="text-right">{item.equipment_count}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.total_revenue)}</TableCell>
+                        <TableCell className="text-right">{item.client_count}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

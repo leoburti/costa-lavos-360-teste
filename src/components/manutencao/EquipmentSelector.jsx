@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { useEquipmentSearch } from '@/hooks/useEquipmentSearch';
 import EquipmentSearchInput from './EquipmentSearchInput';

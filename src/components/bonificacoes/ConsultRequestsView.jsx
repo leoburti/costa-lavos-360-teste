@@ -1,7 +1,6 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ChevronsUpDown, ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -20,6 +19,18 @@ const ConsultRequestsView = ({ setView }) => {
         loading, kpis, allBonifications, protheusHistory, fetchData 
     } = useConsultData();
 
+    // FIX: Stabilize fetchData to prevent infinite loops in child hooks
+    const fetchDataRef = useRef(fetchData);
+    useEffect(() => {
+        fetchDataRef.current = fetchData;
+    }, [fetchData]);
+
+    const stableFetchData = useCallback(() => {
+        if (fetchDataRef.current) {
+            fetchDataRef.current();
+        }
+    }, []);
+
     const {
         selectedRequest,
         openDetail,
@@ -30,7 +41,7 @@ const ConsultRequestsView = ({ setView }) => {
         handleApprovalAction,
         handleDelete,
         handleCloseDetail,
-    } = useRequestActions(fetchData);
+    } = useRequestActions(stableFetchData);
 
     const isApprover = userRole === 'Nivel 1' || userRole === 'Nivel 2';
     const [activeTab, setActiveTab] = useState(isApprover ? 'pendentes' : 'historico');
@@ -61,7 +72,7 @@ const ConsultRequestsView = ({ setView }) => {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
             </Button>
             
-            <ConsultKPIs kpis={kpis} loading={loading} onRefresh={fetchData} />
+            <ConsultKPIs kpis={kpis} loading={loading} onRefresh={stableFetchData} />
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className={`grid w-full ${tabGridCols}`}>

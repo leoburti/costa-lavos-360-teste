@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { Loader2, DollarSign, TrendingUp, TrendingDown, Info, Maximize2, Minimize2, User, Building2, Store } from 'lucide-react';
 import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
 import AIInsight from '@/components/AIInsight';
 import MetricCard from '@/components/MetricCard';
 import ChartCard from '@/components/ChartCard';
@@ -13,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { useAIInsight } from '@/hooks/useAIInsight';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const formatCurrency = (value) => {
   if (value === null || value === undefined || isNaN(value)) return 'N/A';
@@ -86,10 +87,42 @@ const PriceVariationDetails = ({ data }) => {
 
 const AnaliseValorUnitario = () => {
   const { filters } = useFilters();
-  const [loading, setLoading] = useState(true);
-  const [analysisData, setAnalysisData] = useState(null);
   const [showAllProducts, setShowAllProducts] = useState(false);
-  const { toast } = useToast();
+
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[AnaliseValorUnitario] Filters:', filters);
+    console.log('[AnaliseValorUnitario] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
+
+  const params = useMemo(() => {
+    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
+    return {
+      p_start_date: startDateStr,
+      p_end_date: endDateStr,
+      p_exclude_employees: filters.excludeEmployees,
+      p_supervisors: filters.supervisors,
+      p_sellers: filters.sellers,
+      p_customer_groups: filters.customerGroups,
+      p_regions: filters.regions,
+      p_clients: selectedClients,
+      p_search_term: filters.searchTerm,
+    };
+  }, [filters, startDateStr, endDateStr]);
+
+  const { data: analysisData, loading } = useAnalyticalData(
+    'get_price_analysis',
+    params,
+    { 
+        enabled: !!startDateStr && !!endDateStr,
+        defaultValue: null
+    }
+  );
 
   const aiContextData = useMemo(() => {
     if (!analysisData) return null;
@@ -100,41 +133,6 @@ const AnaliseValorUnitario = () => {
   }, [analysisData]);
 
   const { insight, loading: loadingAI, generateInsights } = useAIInsight('unit_value_analysis', aiContextData);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!filters.startDate || !filters.endDate) return;
-      setLoading(true);
-      const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_price_analysis', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
-        p_exclude_employees: filters.excludeEmployees,
-        p_supervisors: filters.supervisors,
-        p_sellers: filters.sellers,
-        p_customer_groups: filters.customerGroups,
-        p_regions: filters.regions,
-        p_clients: selectedClients,
-        p_search_term: filters.searchTerm,
-      });
-
-      if (error) {
-        toast({ variant: "destructive", title: "Erro na Análise de Preço", description: error.message });
-        setAnalysisData(null);
-      } else {
-        setAnalysisData(data);
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, [filters, toast]);
-
-  useEffect(() => {
-    if(aiContextData) {
-      generateInsights();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiContextData]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;

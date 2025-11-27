@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, MessageSquare, LineChart, BarChartHorizontal, Settings, X, Truck, Users, BarChart3, LogOut, KeyRound as UsersRound, GanttChartSquare, Bot, Users2, KeyRound, CalendarCheck, FileSignature, Route, ShieldCheck, Box, History, FilePieChart, Wrench, Briefcase, Gift, ListTodo, HeartHandshake as Handshake, Package, FileText, FilePlus, FileMinus, Repeat, Bell, FileQuestion, ClipboardList, CalendarDays, CalendarClock, CalendarX, AlertTriangle, MapPin, Compass, Database, PlugZap, LifeBuoy, RotateCcw, TrendingUp, Calendar, AlertCircle, Clock, CheckCircle, XCircle, Lock, Archive, Navigation, Loader2 } from 'lucide-react';
@@ -16,7 +15,7 @@ import {
 import ChangePasswordDialog from '@/components/ChangePasswordDialog';
 import LoadingSpinner from './LoadingSpinner';
 
-// Centralized menu definition with module IDs matching the DB config
+// Centralized menu definition
 export const allMenuItems = [
   { path: '/dashboard', id: 'dashboard_comercial', label: 'Dashboard Comercial', icon: LayoutGrid, moduleId: 'dashboard_comercial' },
   { path: '/ai-chat', id: 'senhor_lavos', label: 'Senhor Lavos', icon: MessageSquare, moduleId: 'senhor_lavos' },
@@ -194,7 +193,7 @@ const NavLink = ({ item, isSubItem = false, closeSidebar }) => {
         "flex items-center gap-3 rounded-md text-sm font-medium transition-colors duration-200",
         isSubItem ? "py-2 pl-11 pr-3" : "px-3 py-2",
         isActive
-            ? "bg-secondary text-secondary-foreground" // Use secondary for active background
+            ? "bg-secondary text-secondary-foreground"
             : "text-primary-foreground/70 hover:bg-white/10 hover:text-primary-foreground"
     );
 
@@ -206,20 +205,17 @@ const NavLink = ({ item, isSubItem = false, closeSidebar }) => {
     );
 };
 
-// Strictly filters based on the Module IDs returned by the RPC merge
 const filterMenuByPermissions = (menu, userContext) => {
     if (!userContext) {
+        // If context is missing (e.g. logout in progress), return empty
         return [];
     }
     
-    const { role, canAccessCrm, modulePermissions } = userContext;
+    const { role, modulePermissions } = userContext;
     const permissions = modulePermissions || {};
-    
-    // Strict Admin check - Case insensitive
-    const isUniversalAdmin = ['admin', 'nivel 1', 'nível 1'].includes(role?.toLowerCase());
+    const isUniversalAdmin = ['admin', 'nivel 1', 'nível 1', 'nivel 5'].includes(role?.toLowerCase());
 
     const filter = (items) => items.map(item => {
-        // 1. Universal Admin Override
         if (isUniversalAdmin) {
             if (item.subItems) {
                 const accessibleSubItems = filter(item.subItems);
@@ -228,54 +224,58 @@ const filterMenuByPermissions = (menu, userContext) => {
             return item;
         }
 
-        // 2. Explicit Module Check
         let hasModuleAccess = false;
-        
         if (!item.moduleId) {
-            // If item has no moduleId, it's considered public/shared unless restricted otherwise
             hasModuleAccess = true;
-        } else {
-            // Check precise permission key. MUST BE STRICT TRUE.
-            if (permissions[item.moduleId] === true) {
-                hasModuleAccess = true;
-            }
+        } else if (permissions[item.moduleId] === true || (Array.isArray(permissions[item.moduleId]) && permissions[item.moduleId].length > 0)) {
+            // Accept true boolean or non-empty array as access granted
+            hasModuleAccess = true;
         }
 
         if (!hasModuleAccess) {
             return null;
         }
 
-        // 3. Process Sub-items recursively
         if (item.subItems) {
             const accessibleSubItems = filter(item.subItems);
-            // Only show parent if it has at least one accessible child
             if (accessibleSubItems.length > 0) {
                 return { ...item, subItems: accessibleSubItems };
             }
-            // If no children are accessible, hide the parent
             return null;
         }
-        
         return item;
     }).filter(Boolean);
 
     return filter(menu);
 };
 
-
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     const location = useLocation();
     const { user, userContext, signOut, loading } = useAuth();
     const navigate = useNavigate();
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [menuReady, setMenuReady] = useState(false);
+
+    // Ensure we don't get stuck in loading state forever in Sidebar
+    useEffect(() => {
+        let timer;
+        if (loading) {
+            timer = setTimeout(() => {
+                setMenuReady(true); // Force menu to attempt rendering after 5s even if loading says true
+            }, 5000);
+        } else {
+            setMenuReady(true);
+        }
+        return () => clearTimeout(timer);
+    }, [loading]);
 
     const menuItems = useMemo(() => {
-        if (loading && !userContext) {
+        if ((loading && !menuReady) && !userContext) {
             return [];
         }
-        return filterMenuByPermissions(allMenuItems, userContext);
-    }, [userContext, loading]);
-
+        // If context is still missing after timeout, showing empty menu is better than infinite spinner
+        return filterMenuByPermissions(allMenuItems, userContext || {});
+    }, [userContext, loading, menuReady]);
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
@@ -285,7 +285,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     };
 
     const getActiveAccordionValues = () => {
-      if (loading && !userContext) return [];
       const activeValues = [];
       const checkItems = (items, parentId = '') => {
         items.forEach(item => {
@@ -315,10 +314,12 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                     <p className="text-xs text-primary-foreground/60">Dashboard Comercial</p>
                 </div>
             </div>
+            
             <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
-                {(loading && !userContext) ? (
-                    <div className="flex justify-center items-center h-full">
-                        <LoadingSpinner message="Carregando menu..." />
+                {loading && !menuReady && !userContext ? (
+                    <div className="flex flex-col justify-center items-center h-full opacity-50">
+                        <LoadingSpinner />
+                        <span className="text-xs mt-2">Carregando menu...</span>
                     </div>
                 ) : menuItems.length > 0 ? (
                     <Accordion type="multiple" defaultValue={getActiveAccordionValues()} className="w-full space-y-1">
@@ -331,7 +332,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                                     <AccordionItem key={item.id} value={item.id} className="border-none">
                                         <AccordionTrigger className={cn(
                                             "flex items-center justify-between w-full px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-white/10 text-primary-foreground/80 hover:text-primary-foreground hover:no-underline",
-                                            isActive && "bg-secondary text-secondary-foreground" // Use secondary for active background
+                                            isActive && "bg-secondary text-secondary-foreground"
                                         )}>
                                             <div className="flex items-center gap-3">
                                                 {Icon && <Icon size={20} />}
@@ -349,7 +350,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                                                             <AccordionItem key={subItem.id} value={`${item.id}-${subItem.id}`} className="border-none">
                                                                 <AccordionTrigger className={cn(
                                                                     "flex items-center justify-between w-full py-2 pl-4 pr-3 rounded-md text-sm font-medium transition-colors hover:bg-white/10 text-primary-foreground/70 hover:text-primary-foreground hover:no-underline",
-                                                                    isSubActive && "bg-secondary text-secondary-foreground" // Use secondary for active background
+                                                                    isSubActive && "bg-secondary text-secondary-foreground"
                                                                 )}>
                                                                     <div className="flex items-center gap-2">
                                                                         {SubIcon && <SubIcon size={18} />}
@@ -375,15 +376,20 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                         })}
                     </Accordion>
                 ) : (
-                    <div className="text-center text-primary-foreground/60 p-4">Nenhum item de menu disponível. Verifique suas permissões.</div>
+                    <div className="text-center text-primary-foreground/60 p-4 text-sm">
+                        <AlertCircle className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                        <p>Nenhum menu disponível.</p>
+                        <p className="text-xs mt-1">Verifique suas permissões ou a conexão.</p>
+                    </div>
                 )}
             </nav>
+
             <div className="p-4 mt-auto shrink-0 border-t border-white/10 space-y-2">
-                {user && userContext ? (
+                {user ? (
                     <>
                         <div className="min-w-0">
                             <p className="text-sm font-semibold truncate" title={user.email}>{userContext?.fullName || user.email}</p>
-                            <p className="text-xs text-primary-foreground/60">{userContext?.role}</p>
+                            <p className="text-xs text-primary-foreground/60">{userContext?.role || 'Carregando...'}</p>
                         </div>
                         <div className="flex items-center justify-end gap-1">
                             <TooltipProvider>
@@ -408,8 +414,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                         </div>
                     </>
                 ) : (
-                    <button className="w-full text-center text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors">
-                        O amor pelo pão nos conecta
+                    <button onClick={() => window.location.reload()} className="w-full text-center text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors flex items-center justify-center gap-2">
+                        <RotateCcw className="h-3 w-3" /> Recarregar
                     </button>
                 )}
             </div>

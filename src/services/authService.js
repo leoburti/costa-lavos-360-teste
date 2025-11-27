@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/customSupabaseClient';
 
 // Limpa a sessão do Supabase do localStorage

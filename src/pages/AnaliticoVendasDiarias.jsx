@@ -1,159 +1,147 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { AnimatePresence } from 'framer-motion';
+import { format, startOfMonth, endOfMonth, isValid } from 'date-fns';
 import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
-import { useDebounce } from '@/hooks/useDebounce';
-import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-
-import DailySalesTimeline from '@/components/DailySales/DailySalesTimeline';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
 import DailySalesKPIs from '@/components/DailySales/DailySalesKPIs';
-import DailySalesDayDetail from '@/components/DailySales/DailySalesDayDetail';
+import DailySalesTimeline from '@/components/DailySales/DailySalesTimeline';
+import DailySalesTabsExplorer from '@/components/DailySales/DailySalesTabsExplorer';
+import AIInsight from '@/components/AIInsight';
+import { useAIInsight } from '@/hooks/useAIInsight';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MousePointerClick } from 'lucide-react';
 
 const AnaliticoVendasDiarias = () => {
-  const { filters, loading: filtersLoading } = useFilters();
-  const debouncedFilters = useDebounce(filters, 500);
-  const [dailyData, setDailyData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [overviewData, setOverviewData] = useState(null);
-  const [overviewLoading, setOverviewLoading] = useState(true);
-  const { toast } = useToast();
+  const { filters } = useFilters();
+  
+  const [currentMonth, setCurrentMonth] = useState(() => {
+      const fromDate = filters.dateRange?.from ? new Date(filters.dateRange.from) : new Date();
+      return isValid(fromDate) ? startOfMonth(fromDate) : startOfMonth(new Date());
+  });
+
   const [selectedDay, setSelectedDay] = useState(null);
-  const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
 
-  const fetchOverviewData = useCallback(async (filtersForFetch) => {
-    setOverviewLoading(true);
-    try {
-      const selectedClients = filtersForFetch.clients ? filtersForFetch.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_overview_data_v2', {
-        p_start_date: filtersForFetch.startDate,
-        p_end_date: filtersForFetch.endDate,
-        p_previous_start_date: filtersForFetch.previousStartDate,
-        p_previous_end_date: filtersForFetch.previousEndDate,
-        p_exclude_employees: filtersForFetch.excludeEmployees,
-        p_supervisors: filtersForFetch.supervisors,
-        p_sellers: filtersForFetch.sellers,
-        p_customer_groups: filtersForFetch.customerGroups,
-        p_regions: filtersForFetch.regions,
-        p_clients: selectedClients,
-        p_search_term: filtersForFetch.searchTerm,
-        p_show_defined_groups_only: filtersForFetch.showDefinedGroupsOnly
-      });
+  const viewRange = useMemo(() => {
+      if (!isValid(currentMonth)) return { start: null, end: null };
+      return {
+          start: format(startOfMonth(currentMonth), 'yyyy-MM-dd'),
+          end: format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+      };
+  }, [currentMonth]);
 
-      if (error) throw error;
-      
-      // O RPC retorna 'totalRevenue' como sendo apenas Venda de Produtos (net_revenue)
-      // Recuperamos os valores base do KPI para realizar os cálculos corretos
-      const productSales = data.kpi.totalRevenue || 0;
-      const bonification = data.kpi.totalBonification || 0;
-      const equipment = data.kpi.totalEquipment || 0;
+  const params = useMemo(() => ({
+    p_start_date: viewRange.start,
+    p_end_date: viewRange.end,
+    p_exclude_employees: filters.excludeEmployees ?? true,
+    p_supervisors: filters.supervisors === 'all' ? null : filters.supervisors,
+    p_sellers: filters.sellers === 'all' ? null : filters.sellers,
+    p_customer_groups: filters.customerGroups === 'all' ? null : filters.customerGroups,
+    p_regions: filters.regions === 'all' ? null : filters.regions,
+    p_clients: Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null,
+    p_search_term: filters.searchTerm || null
+  }), [viewRange, filters]);
 
-      // Cálculo de Vendas Totais (Brutas) = Produtos + Bonificação + Equipamentos
-      const grossSales = productSales + bonification + equipment;
-      
-      // Cálculo de Vendas Líquidas = Vendas Totais - Bonificação - Equipamentos
-      // (Matematicamente igual a productSales, mas explicitando a lógica)
-      const netSales = grossSales - bonification - equipment;
-
-      setOverviewData({
-        ...data,
-        kpi: {
-          ...data.kpi,
-          totalRevenue: grossSales, // Atualiza para refletir o valor Bruto/Total no KPI "Vendas Totais"
-          netSales: netSales,       // Define explicitamente o valor Líquido para o KPI "Vendas Líquidas"
-        }
-      });
-    } catch (error) {
-      console.error("Error fetching overview data:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao buscar dados gerais",
-        description: `Não foi possível carregar os dados: ${error.message}`,
-      });
-      setOverviewData(null);
-    } finally {
-      setOverviewLoading(false);
+  const { data: dailyData, loading, refetch } = useAnalyticalData(
+    'get_daily_sales_data',
+    params,
+    { 
+        enabled: !!viewRange.start && !!viewRange.end,
+        defaultValue: []
     }
-  }, [toast]);
+  );
 
-  const fetchDailyDetails = useCallback(async (filtersForFetch, month) => {
-    setLoading(true);
-    const start = startOfMonth(month);
-    const end = endOfMonth(month);
-
-    try {
-      const selectedClients = filtersForFetch.clients ? filtersForFetch.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_daily_sales_data_v2', {
-        p_start_date: format(start, 'yyyy-MM-dd'),
-        p_end_date: format(end, 'yyyy-MM-dd'),
-        p_exclude_employees: filtersForFetch.excludeEmployees,
-        p_supervisors: filtersForFetch.supervisors,
-        p_sellers: filtersForFetch.sellers,
-        p_customer_groups: filtersForFetch.customerGroups,
-        p_regions: filtersForFetch.regions,
-        p_clients: selectedClients,
-        p_search_term: filtersForFetch.searchTerm,
-      });
-
-      if (error) throw error;
-      
-      setDailyData(data || []);
-      setSelectedDay(null);
-    } catch (error) {
-      console.error("Error fetching daily sales data:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao buscar detalhes diários",
-        description: `Não foi possível carregar os detalhes das vendas diárias: ${error.message}`,
-      });
-      setDailyData([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  // Combined effect to fetch data when filters or month change
   useEffect(() => {
-    if (!filtersLoading && debouncedFilters.startDate && debouncedFilters.endDate) {
-      fetchOverviewData(debouncedFilters);
-      fetchDailyDetails(debouncedFilters, currentMonth);
-    }
-  }, [debouncedFilters, currentMonth, filtersLoading, fetchOverviewData, fetchDailyDetails]);
+      if (selectedDay && dailyData) {
+          const updatedDay = dailyData.find(d => d.date === selectedDay.date);
+          if (updatedDay) {
+              setSelectedDay(updatedDay);
+          }
+      }
+  }, [dailyData, selectedDay]);
 
   const handleMonthChange = (newMonth) => {
-    setCurrentMonth(newMonth);
+      setCurrentMonth(newMonth);
+      setSelectedDay(null);
   };
-  
+
+  const handleDaySelect = (day) => {
+      if (selectedDay && selectedDay.date === day.date) {
+          setSelectedDay(null);
+      } else {
+          setSelectedDay(day);
+      }
+  };
+
+  const insightData = useMemo(() => {
+      if (!dailyData || dailyData.length === 0) return null;
+      return {
+          total_days: dailyData.length,
+          total_sales: dailyData.reduce((acc, d) => acc + (d.items?.reduce((sum, i) => sum + (i.totalValue || 0), 0) || 0), 0),
+          best_day: [...dailyData].sort((a,b) => {
+              const sumA = a.items?.reduce((sum, i) => sum + (i.totalValue || 0), 0) || 0;
+              const sumB = b.items?.reduce((sum, i) => sum + (i.totalValue || 0), 0) || 0;
+              return sumB - sumA;
+          })[0]
+      };
+  }, [dailyData]);
+
+  const { insight, loading: loadingAI, generateInsights } = useAIInsight('daily_sales_analysis', insightData);
+
   return (
     <>
       <Helmet>
-        <title>Vendas Diárias - Costa Lavos</title>
-        <meta name="description" content="Análise detalhada das vendas diárias." />
+        <title>Analítico Vendas Diárias - Costa Lavos</title>
+        <meta name="description" content="Análise detalhada das vendas diárias com calendário interativo e explorador de vendas" />
       </Helmet>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Analítico de Vendas Diárias</h1>
-          <p className="text-muted-foreground mt-1">Explore a performance de vendas dia a dia.</p>
+
+      <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+                <h1 className="text-3xl font-bold text-foreground tracking-tighter">Vendas Diárias</h1>
+                <p className="text-muted-foreground mt-1">Acompanhamento detalhado de vendas dia a dia com análise interativa.</p>
+            </div>
         </div>
-        
-        <DailySalesKPIs kpiData={overviewData?.kpi} />
-        
-        <DailySalesTimeline
-          dailyData={dailyData}
-          onDaySelect={setSelectedDay}
-          selectedDay={selectedDay}
-          currentMonth={currentMonth}
-          onMonthChange={handleMonthChange}
-          isLoading={loading || overviewLoading}
-        />
-        
-        <AnimatePresence>
-          {selectedDay && (
-            <DailySalesDayDetail selectedDay={selectedDay} />
-          )}
-        </AnimatePresence>
+
+        <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
+
+        <DailySalesKPIs data={dailyData} />
+
+        <div className="flex flex-col gap-8">
+            <div className="w-full">
+                <DailySalesTimeline 
+                    dailyData={dailyData} 
+                    currentMonth={currentMonth}
+                    onMonthChange={handleMonthChange}
+                    onDaySelect={handleDaySelect}
+                    selectedDay={selectedDay}
+                    isLoading={loading}
+                />
+            </div>
+            
+            <div className="w-full">
+                <AnimatePresence mode="wait">
+                    {selectedDay ? (
+                        <DailySalesTabsExplorer key={selectedDay.date} day={selectedDay} />
+                    ) : (
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="h-[300px] flex flex-col items-center justify-center bg-muted/10 border-2 border-dashed border-muted rounded-xl p-6 text-center"
+                        >
+                            <div className="bg-muted p-4 rounded-full mb-4">
+                                <MousePointerClick className="h-8 w-8 text-muted-foreground opacity-50" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-foreground">Nenhum dia selecionado</h3>
+                            <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                                Clique em um dia no calendário acima para carregar o explorador detalhado com abas de produtos, clientes, supervisores e mais.
+                            </p>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+        </div>
       </div>
     </>
   );

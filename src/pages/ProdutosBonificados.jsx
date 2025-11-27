@@ -1,168 +1,160 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Helmet } from 'react-helmet-async';
-import { motion } from 'framer-motion';
-import { Loader2, Gift, Building2, User, Store } from 'lucide-react';
+
+import React, { useEffect, useState, useMemo } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
-import AIInsight from '@/components/AIInsight';
-import ChartCard from '@/components/ChartCard';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
-import { useAIInsight } from '@/hooks/useAIInsight';
-
-const formatCurrency = (value) => value != null ? `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
-const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/A';
-
-const DrilldownLevel = ({ items, level = 0 }) => {
-  const hierarchy = [
-    { icon: Building2, label: 'Supervisor' },
-    { icon: User, label: 'Vendedor' },
-    { icon: Store, label: 'Cliente' },
-  ];
-
-  const currentLevel = hierarchy[level];
-
-  if (!items || items.length === 0) {
-    if (level === 0) {
-      return (
-        <div className="text-center py-16">
-          <Gift className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-semibold text-foreground">Nenhuma Bonificação</h3>
-          <p className="mt-1 text-muted-foreground">Não foram encontradas bonificações para os filtros selecionados.</p>
-        </div>
-      );
-    }
-    return null;
-  }
-  
-  return (
-    <Accordion type="multiple" className="w-full">
-      {items.map((item, index) => (
-        <AccordionItem value={`item-${level}-${index}`} key={index}>
-          <AccordionTrigger className="hover:no-underline p-2 rounded-lg hover:bg-muted transition-colors">
-            <div className="flex justify-between items-center w-full">
-              <div className="flex items-center gap-3 truncate">
-                <currentLevel.icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="font-semibold text-sm text-foreground text-left truncate">{item.name}</span>
-              </div>
-              <Badge variant="secondary" className="font-bold ml-2">{formatCurrency(item.totalBonification || item.total)}</Badge>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="p-0 pl-6">
-            {item.clients || item.sellers || item.detailedItems ? (
-              <div className="border-l-2 border-dashed border-border/50 pl-4">
-                 {item.sellers && <DrilldownLevel items={item.sellers} level={level + 1} />}
-                 {item.clients && <DrilldownLevel items={item.clients} level={level + 1} />}
-                 {item.detailedItems && (
-                     <Accordion type="multiple" className="w-full">
-                        {item.detailedItems.map((day, dayIndex) => (
-                          <AccordionItem value={`day-${dayIndex}`} key={dayIndex}>
-                            <AccordionTrigger className="hover:no-underline p-2 rounded-lg hover:bg-muted/50 text-xs">
-                              {day.date} - Total: {formatCurrency(day.total)}
-                            </AccordionTrigger>
-                            <AccordionContent className="p-2 pl-4">
-                              {day.items.map((prod, prodIndex) => (
-                                <div key={prodIndex} className="flex justify-between text-xs p-1.5 bg-background rounded">
-                                  <span>{prod.description}</span>
-                                  <span className="font-semibold">{formatCurrency(prod.value)}</span>
-                                </div>
-                              ))}
-                            </AccordionContent>
-                          </AccordionItem>
-                        ))}
-                     </Accordion>
-                 )}
-              </div>
-            ) : null}
-          </AccordionContent>
-        </AccordionItem>
-      ))}
-    </Accordion>
-  );
-};
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { formatCurrency } from '@/lib/utils';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { Gift, Award, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const ProdutosBonificados = () => {
   const { filters } = useFilters();
+  const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [bonificationData, setBonificationData] = useState(null);
-  const { toast } = useToast();
+  const [error, setError] = useState(null);
 
-  const aiData = useMemo(() => {
-    if (!bonificationData || bonificationData.length === 0) return null;
-    
-    const totalBonified = bonificationData.reduce((acc, supervisor) => acc + supervisor.total, 0);
-    
-    const summary = bonificationData.slice(0, 5).map(supervisor => ({
-      supervisorName: supervisor.name,
-      supervisorTotal: supervisor.total,
-      topSeller: supervisor.sellers?.[0]?.name,
-      topSellerTotal: supervisor.sellers?.[0]?.totalBonification,
-    }));
+  // Correct date access and formatting
+  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
+  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
-    return { totalBonified, summary };
-  }, [bonificationData]);
-
-  const { insight, loading: loadingAI, generateInsights } = useAIInsight('bonification_products', aiData);
+  // Debug Logs
+  useEffect(() => {
+    console.log('[ProdutosBonificados] Filters:', filters);
+    console.log('[ProdutosBonificados] Dates:', { startDateStr, endDateStr });
+  }, [filters, startDateStr, endDateStr]);
 
   useEffect(() => {
+    if (!startDateStr || !endDateStr) return;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const fetchData = async () => {
-      if (!filters.startDate || !filters.endDate) return;
       setLoading(true);
-      const selectedClients = Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null;
-      const { data, error } = await supabase.rpc('get_analytical_bonification', {
-        p_start_date: filters.startDate,
-        p_end_date: filters.endDate,
-        p_exclude_employees: filters.excludeEmployees,
-        p_supervisors: filters.supervisors,
-        p_sellers: filters.sellers,
-        p_customer_groups: filters.customerGroups,
-        p_regions: filters.regions,
-        p_clients: selectedClients,
-        p_search_term: filters.searchTerm,
-      });
+      setError(null);
+      try {
+        // Buscar apenas CFOs de Bonificação
+        let query = supabase
+          .from('bd-cl')
+          .select('Descricao, Total, "Nome Supervisor", Cfo')
+          .gte('DT Emissao', startDateStr)
+          .lte('DT Emissao', endDateStr)
+          .in('Cfo', ['5910', '6910']) // CFOs de Bonificação
+          .gt('Total', 0);
 
-      if (error) {
-        toast({ variant: "destructive", title: "Erro na Análise de Bonificação", description: error.message });
-        setBonificationData(null);
-      } else {
-        setBonificationData(data);
+        if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
+        
+        const { data, error: supabaseError } = await query.abortSignal(controller.signal);
+
+        if (supabaseError) throw supabaseError;
+        setRawData(data || []);
+
+      } catch (err) {
+        console.error("Erro Bonificacao:", err);
+        if (err.name === 'AbortError') setError("Timeout. Tente um período menor.");
+        else setError("Erro ao buscar dados de bonificação.");
+      } finally {
+        setLoading(false);
+        clearTimeout(timeoutId);
       }
-      setLoading(false);
     };
+
     fetchData();
-  }, [filters, toast]);
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [filters, startDateStr, endDateStr]);
 
-  useEffect(() => {
-    if(aiData) {
-      generateInsights();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiData]);
+  const { kpis, topProducts } = useMemo(() => {
+    if (!rawData.length) return { kpis: {}, topProducts: [] };
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
-  }
+    const products = {};
+    const supervisors = {};
+
+    rawData.forEach(row => {
+      const prodName = row.Descricao || 'Outros';
+      const supName = row['Nome Supervisor'] || 'N/D';
+      
+      if (!products[prodName]) products[prodName] = 0;
+      products[prodName] += row.Total;
+
+      if (!supervisors[supName]) supervisors[supName] = 0;
+      supervisors[supName] += row.Total;
+    });
+
+    const sortedProducts = Object.entries(products)
+      .map(([name, val]) => ({ product_name: name, total_bonified: val }))
+      .sort((a, b) => b.total_bonified - a.total_bonified)
+      .slice(0, 10);
+
+    const sortedSupervisors = Object.entries(supervisors).sort((a, b) => b[1] - a[1]);
+    
+    const kpis = {
+      mostBonifiedProduct: sortedProducts[0]?.product_name || 'N/A',
+      topSupervisor: sortedSupervisors[0] ? `${sortedSupervisors[0][0]} (${formatCurrency(sortedSupervisors[0][1])})` : 'N/A',
+      bottomSupervisor: sortedSupervisors.length > 0 ? `${sortedSupervisors[sortedSupervisors.length - 1][0]} (${formatCurrency(sortedSupervisors[sortedSupervisors.length - 1][1])})` : 'N/A'
+    };
+
+    return { kpis, topProducts: sortedProducts };
+  }, [rawData]);
+
+  if (loading && !rawData.length) return <div className="h-96 flex items-center justify-center"><LoadingSpinner message="Carregando bonificações..." /></div>;
+  if (error) return <Alert variant="destructive" className="m-6"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
 
   return (
-    <>
-      <Helmet>
-        <title>Produtos Bonificados - Costa Lavos</title>
-        <meta name="description" content="Análise detalhada de produtos bonificados por estrutura comercial." />
-      </Helmet>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tighter">Produtos Bonificados</h1>
-          <p className="text-muted-foreground mt-1">Análise detalhada de produtos bonificados por estrutura comercial.</p>
-        </div>
+    <div className="p-6 space-y-6 animate-in fade-in duration-500">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Produtos Bonificados</h1>
+        <p className="text-muted-foreground mt-1">Análise de investimento em bonificações (Consulta Direta)</p>
+      </div>
 
-        <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="border-l-4 border-purple-500">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div><p className="text-sm font-medium text-muted-foreground">Produto + Bonificado</p><h3 className="text-lg font-bold mt-1 line-clamp-2" title={kpis.mostBonifiedProduct}>{kpis.mostBonifiedProduct}</h3></div>
+              <Gift className="h-5 w-5 text-purple-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-blue-500">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div><p className="text-sm font-medium text-muted-foreground">Top Supervisor</p><h3 className="text-lg font-bold mt-1">{kpis.topSupervisor}</h3></div>
+              <Award className="h-5 w-5 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-green-500">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div><p className="text-sm font-medium text-muted-foreground">Menor Investimento</p><h3 className="text-lg font-bold mt-1">{kpis.bottomSupervisor}</h3></div>
+              <AlertTriangle className="h-5 w-5 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <ChartCard title="Bonificações por Estrutura Comercial" childClassName="p-2">
-          <DrilldownLevel items={bonificationData} />
-        </ChartCard>
-      </motion.div>
-    </>
+      <Card>
+        <CardHeader><CardTitle>Top 10 Produtos Bonificados (Valor)</CardTitle></CardHeader>
+        <CardContent className="h-[400px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={topProducts} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+              <XAxis type="number" tickFormatter={(val) => `R$${val/1000}k`} />
+              <YAxis dataKey="product_name" type="category" width={180} tick={{fontSize: 12}} />
+              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Bar dataKey="total_bonified" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={20} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

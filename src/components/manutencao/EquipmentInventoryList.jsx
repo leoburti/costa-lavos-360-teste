@@ -21,15 +21,19 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-const InventoryItemActions = ({ item, onStartMaintenance, refreshInventory }) => {
+const InventoryItemActions = React.memo(({ item, onStartMaintenance, refreshInventory }) => {
   const { toast } = useToast();
   const [maintenanceRecord, setMaintenanceRecord] = useState(item.maintenance || {});
 
   useEffect(() => {
-    setMaintenanceRecord(item.maintenance || {});
+    // Only update if data actually changed to avoid loop
+    if (JSON.stringify(item.maintenance || {}) !== JSON.stringify(maintenanceRecord)) {
+        setMaintenanceRecord(item.maintenance || {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.maintenance]);
 
-  const updateMaintenanceStatus = async (updateData) => {
+  const updateMaintenanceStatus = useCallback(async (updateData) => {
     try {
       let { data: existingMaint, error: findError } = await supabase
           .from('maintenance')
@@ -87,7 +91,7 @@ const InventoryItemActions = ({ item, onStartMaintenance, refreshInventory }) =>
       console.error(e);
       toast({ variant: 'destructive', title: 'Erro inesperado', description: e.message });
     }
-  };
+  }, [item, toast, refreshInventory]);
 
   return (
     <Dialog>
@@ -128,7 +132,7 @@ const InventoryItemActions = ({ item, onStartMaintenance, refreshInventory }) =>
         </DialogContent>
     </Dialog>
   );
-};
+});
 
 const EquipmentInventoryList = ({ onStartMaintenance }) => {
   const [loading, setLoading] = useState(true);
@@ -138,7 +142,6 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
   const [inventoryData, setInventoryData] = useState([]);
   const { toast } = useToast();
   
-  // Use refs to track mounting state and prevent updates on unmounted component
   const isMounted = useRef(true);
 
   useEffect(() => {
@@ -174,13 +177,12 @@ const EquipmentInventoryList = ({ onStartMaintenance }) => {
     } catch (error) {
       console.error("Error fetching inventory:", error);
       if (isMounted.current) {
-        // Only toast if we are still mounted and it's a real error
         toast({ variant: 'destructive', title: 'Erro ao carregar inventário', description: error.message });
       }
     } finally {
       if (isMounted.current) setLoading(false);
     }
-  }, [debouncedTerm]); // Removed toast dependency
+  }, [debouncedTerm]);
 
   const groupedInventory = useMemo(() => {
     const grouped = {};

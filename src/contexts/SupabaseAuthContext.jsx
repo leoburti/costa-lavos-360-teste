@@ -1,303 +1,271 @@
 
-import React, { createContext, useState, useEffect, useContext, useCallback, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { handleAuthError, logout, signIn as authSignInService } from '@/services/authService';
-import { useToast } from '@/components/ui/use-toast';
-import { queryClient } from '@/lib/queryClient';
 
-export const SupabaseAuthContext = createContext();
+const SupabaseAuthContext = createContext();
 
-export const SupabaseAuthProvider = ({ children }) => {
-  const [session, setSession] = useState(null);
+export function SupabaseAuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
   
-  const CACHE_KEY = 'costa_lavos_user_context';
+  // Permissions state
+  const [userRole, setUserRole] = useState(null);
+  const [userPermissions, setUserPermissions] = useState({});
+  const [canAccessCRM, setCanAccessCRM] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
-  // Initialize userContext from LocalStorage to prevent flickering/loss on refresh
-  const [userContext, setUserContext] = useState(() => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (!cached) return null;
-      const parsed = JSON.parse(cached);
-      return parsed;
-    } catch (error) {
-      console.error("Failed to parse user context from cache", error);
-      return null;
-    }
-  });
+  // Helper for delayed retry
+  const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  // Use a ref to track userContext to avoid dependency loops in useCallback
-  const userContextRef = useRef(userContext);
-  useEffect(() => {
-    userContextRef.current = userContext;
-  }, [userContext]);
-
-  const fetchingRef = useRef(false);
-
-  // Optimized fetchUserContext - Stable reference (no dependencies)
-  const fetchUserContext = useCallback(async (sessionUser) => {
-    if (!sessionUser) {
-      setUserContext(null);
-      localStorage.removeItem(CACHE_KEY);
-      return null;
+  // Fetch additional user details (Role, Permissions) with Retry Logic
+  const fetchUserDetails = useCallback(async (currentUser) => {
+    if (!currentUser) {
+      setUserRole(null);
+      setUserPermissions({});
+      setCanAccessCRM(false);
+      return;
     }
 
-    // Check cache using ref to avoid dependency loop
-    const currentContext = userContextRef.current;
-    if (currentContext && currentContext.id === sessionUser.id) {
-        const now = new Date().getTime();
-        const age = now - (currentContext.lastUpdated || 0);
-        // 5 minutes cache
-        if (age < 1000 * 60 * 5) {
-            return currentContext;
-        }
-    }
+    // Attempt to fetch for max 5 seconds or 3 tries
+    let attempt = 0;
+    const maxRetries = 3;
+    let success = false;
 
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-
-    try {
-      const { data, error } = await supabase.rpc('get_user_role', { p_user_id: sessionUser.id });
-
-      if (error) {
-        console.error('[AuthContext] RPC Error:', error);
-        // If RPC fails but we have a session, don't crash everything, just give basic role
-        console.warn('Falling back to default permissions due to RPC error');
-      }
-
-      // --- Fetch Apoio Internal Profile ---
-      let apoioId = null;
-      let apoioProfile = null;
+    while (attempt < maxRetries && !success) {
       try {
-          const { data: apoioData } = await supabase
-              .from('apoio_usuarios')
-              .select('id, nome, email, equipe_id, supervisor_id')
-              .eq('auth_id', sessionUser.id)
-              .maybeSingle();
-          
-          if (apoioData) {
-              apoioProfile = apoioData;
-              apoioId = apoioData.id;
+        // Use AbortController for database timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout per try
+
+        const { data: roleData, error: roleError } = await supabase
+          .from('user_roles')
+          .select('role, module_permissions, can_access_crm')
+          .eq('user_id', currentUser.id)
+          .single()
+          .abortSignal(controller.signal);
+
+        clearTimeout(timeoutId);
+
+        if (roleError) {
+          // PGRST116 = Row not found. This is not a connection error, just missing config.
+          // Treat as default user
+          if (roleError.code === 'PGRST116' || roleError.code === '406') {
+            console.warn('User has no specific role assigned. Assigning default.');
+            setUserRole('Vendedor');
+            setUserPermissions({});
+            setCanAccessCRM(false);
+            success = true;
+            return;
           }
-      } catch (apoioError) {
-          console.error("[AuthContext] Error fetching apoio profile:", apoioError);
-      }
-
-      let contextData;
-
-      if (data && data.length > 0) {
-        const profile = data[0];
-        const rawRole = profile.role || 'Sem Permissão';
-        const roleLower = rawRole.toLowerCase();
-        const isAdmin = ['admin', 'nivel 1', 'nível 1', 'nivel 5', 'nível 5', 'super admin'].includes(roleLower);
-        const isSupervisor = ['supervisor', 'nivel 3', 'nível 3', 'gerente'].includes(roleLower);
-        const isSeller = ['vendedor', 'seller', 'nivel 2', 'nível 2'].includes(roleLower);
-
-        let teamMembers = [];
-        if (isSupervisor && apoioId) {
-            try {
-                const { data: teamData } = await supabase
-                    .from('apoio_usuarios')
-                    .select('auth_id')
-                    .eq('supervisor_id', apoioId);
-                
-                if (teamData) {
-                    teamMembers = teamData.map(t => t.auth_id).filter(Boolean);
-                }
-            } catch (scopeError) {
-                console.error("[AuthContext] Error fetching team scope:", scopeError);
-            }
+          throw roleError;
         }
 
-        contextData = {
-          id: sessionUser.id,
-          email: sessionUser.email,
-          fullName: sessionUser.user_metadata?.full_name || 'Usuário',
-          role: rawRole,
-          canAccessCrm: profile.can_access_crm || false,
-          modulePermissions: profile.module_permissions || {},
-          supervisorName: profile.supervisor_name,
-          sellerName: profile.seller_name,
-          approvalRoles: profile.approval_roles || {},
-          vendorId: profile.vendor_id,
-          supervisorId: profile.supervisor_id,
-          teamMembers: teamMembers,
-          apoioId,
-          apoioProfile,
-          isSeller,
-          isSupervisor,
-          isAdmin, 
-          lastUpdated: new Date().getTime()
-        };
-      } else {
-        // Default Fallback for when get_user_role returns empty or fails
-        contextData = {
-            id: sessionUser.id,
-            email: sessionUser.email,
-            fullName: sessionUser.user_metadata?.full_name || 'Usuário',
-            role: 'Sem Permissão',
-            canAccessCrm: false,
-            modulePermissions: {},
-            supervisorName: null,
-            sellerName: null,
-            vendorId: null,
-            supervisorId: null,
-            teamMembers: [],
-            apoioId,
-            apoioProfile,
-            isSeller: false,
-            isSupervisor: false,
-            isAdmin: false,
-            approvalRoles: {},
-            lastUpdated: new Date().getTime()
-        };
+        if (roleData) {
+          setUserRole(roleData.role);
+          setUserPermissions(roleData.module_permissions || {});
+          setCanAccessCRM(roleData.can_access_crm || false);
+          success = true;
+        }
+      } catch (error) {
+        console.error(`Attempt ${attempt + 1} failed fetching user details:`, error);
+        attempt++;
+        if (attempt < maxRetries) await wait(1000); 
       }
-
-      setUserContext(contextData);
-      localStorage.setItem(CACHE_KEY, JSON.stringify(contextData));
-      return contextData;
-
-    } catch (error) {
-      console.error("[AuthContext] Fatal error in fetchUserContext:", error.message);
-      // Only clear if we have absolutely nothing
-      if (!userContextRef.current) {
-          // Don't logout immediately on fetch error to prevent loops, 
-          // just set context to null which might trigger re-login or error page naturally
-          setUserContext(null);
-          localStorage.removeItem(CACHE_KEY);
-      }
-      return null;
-    } finally {
-      fetchingRef.current = false;
     }
-  }, []); 
 
-  const forceRoleRefetch = useCallback(async () => {
-    if (user) {
-      setLoading(true);
-      fetchingRef.current = false;
-      await fetchUserContext(user);
-      setLoading(false);
+    if (!success) {
+      // FALLBACK: If all retries fail (e.g. offline), allow partial access instead of blocking
+      console.warn('All attempts to fetch user details failed. Using fallback permissions.');
+      setUserRole('Vendedor'); // Default safe role
+      setUserPermissions({});
+      setCanAccessCRM(false);
+      // Don't block UI with error, let them use what they can
     }
-  }, [user, fetchUserContext]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
-    const initializeAuth = async () => {
+    // 1. Check active session
+    const checkSession = async () => {
       try {
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         
-        if (error) {
-            handleAuthError(error);
-            if (mounted) setLoading(false);
-            return;
-        }
+        if (error) throw error;
 
         if (mounted) {
-          setSession(initialSession);
-          setUser(initialSession?.user ?? null);
-
-          if (initialSession?.user) {
-            // Wait for context fetch before finishing loading to prevent guard redirects
-            await fetchUserContext(initialSession.user);
-          } else {
-            setUserContext(null);
-            localStorage.removeItem(CACHE_KEY);
+          setSession(currentSession);
+          setUser(currentSession?.user ?? null);
+          
+          if (currentSession?.user) {
+            await fetchUserDetails(currentSession.user);
           }
         }
-      } catch (e) {
-        console.error("Auth initialization error", e);
-        handleAuthError(e);
+      } catch (error) {
+        console.error('Error checking session:', error);
       } finally {
         if (mounted) setLoading(false);
       }
     };
 
-    initializeAuth();
+    checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        if (!mounted) return;
-
-        if (event === 'TOKEN_REFRESHED') {
-            setSession(newSession);
-            return;
-        }
-
+    // 2. Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (mounted) {
         setSession(newSession);
-        const sessionUser = newSession?.user ?? null;
-        setUser(sessionUser);
+        setUser(newSession?.user ?? null);
         
-        if (sessionUser) {
-             // For SIGNED_IN, we should wait. For others, maybe not blocking.
-             if (event === 'SIGNED_IN' || !userContextRef.current) {
-                 // Keep loading true if we are fetching context for the first time in this flow
-                 if (!userContextRef.current) setLoading(true);
-                 
-                 await fetchUserContext(sessionUser);
-                 
-                 if (!userContextRef.current) setLoading(false);
-             }
-        } else if (event === 'SIGNED_OUT') {
-            setUserContext(null);
-            localStorage.removeItem(CACHE_KEY);
-            queryClient.clear();
-            setLoading(false);
+        if (newSession?.user) {
+          // We do NOT set loading=true here to avoid UI flashing, 
+          // we silently update permissions unless it's a LOGIN event
+          if (event === 'SIGNED_IN') {
+             setLoading(true);
+             await fetchUserDetails(newSession.user);
+             setLoading(false);
+          } else {
+             // Silent update for other events
+             fetchUserDetails(newSession.user);
+          }
         } else {
-            setLoading(false);
+          setUserRole(null);
+          setUserPermissions({});
+          setLoading(false);
         }
       }
-    );
+    });
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
-  
-  // Memoize value to prevent context consumers from re-rendering when nothing changes
-  const value = useMemo(() => ({
-    session,
-    user,
-    userContext,
-    userRole: userContext?.role,
-    loading,
-    signOut: async () => {
-        localStorage.removeItem(CACHE_KEY);
-        setUserContext(null);
-        queryClient.clear();
-        await logout();
-    },
-    signIn: async (email, password) => {
-        const { error } = await authSignInService(email, password);
-        if (error) {
-            toast({
-                title: 'Erro de Login',
-                description: 'E-mail ou senha inválidos. Por favor, tente novamente.',
-                variant: 'destructive'
-            })
-        }
-        return { error };
-    },
-    forceRoleRefetch,
-  }), [session, user, userContext, loading, forceRoleRefetch, toast]);
+  }, [fetchUserDetails]);
 
-  // Only show full screen loader if specifically loading AND no cache exists
-  if (loading && !session && !userContext) {
-    return <div className="flex h-screen w-full items-center justify-center bg-background"><LoadingSpinner message="Inicializando sistema..." /></div>;
-  }
+  // Global timeout safety: Ensure loading never sticks for more than 8 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading((currentLoading) => {
+        if (currentLoading) {
+          console.warn("Forcefully disabling loading state due to global timeout.");
+          return false;
+        }
+        return currentLoading;
+      });
+    }, 8000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Auth Actions
+  const signIn = useCallback(async (email, password) => {
+    return supabase.auth.signInWithPassword({ email, password });
+  }, []);
+
+  const signOut = useCallback(async () => {
+    setUserRole(null);
+    setUserPermissions({});
+    setUser(null);
+    setSession(null);
+    localStorage.clear(); // Clear local state on explicit logout
+    return supabase.auth.signOut();
+  }, []);
+
+  const resetPassword = useCallback(async (email) => {
+    return supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword) => {
+    return supabase.auth.updateUser({ password: newPassword });
+  }, []);
+
+  // Diagnostic Helper
+  const checkHealth = useCallback(async () => {
+    const results = {
+      auth: !!user,
+      database: false,
+      role: userRole,
+      latency: 0
+    };
+    
+    const start = performance.now();
+    try {
+      const { count, error } = await supabase.from('user_roles').select('*', { count: 'exact', head: true });
+      if (!error) results.database = true;
+    } catch (e) {
+      console.error("Health check failed", e);
+    }
+    results.latency = Math.round(performance.now() - start);
+    
+    return results;
+  }, [user, userRole]);
+
+  // Helper to check permissions
+  const hasPermission = useCallback((module, action) => {
+    if (!userRole) return false; 
+    const r = userRole.toLowerCase();
+    if (r === 'nivel 1' || r === 'admin' || r === 'nível 1' || r === 'nivel 5' || r === 'nível 5') return true; 
+    
+    if (!userPermissions) return false;
+    if (!userPermissions[module]) return false;
+    if (Array.isArray(userPermissions[module])) {
+        return userPermissions[module].includes('*') || userPermissions[module].includes(action);
+    }
+    return false;
+  }, [userRole, userPermissions]);
+
+  // Construct the userContext object expected by consumers (Sidebar, etc)
+  const userContext = useMemo(() => {
+    if (!user) return null;
+    return {
+        role: userRole,
+        permissions: userPermissions,
+        modulePermissions: userPermissions,
+        canAccessCrm: canAccessCRM,
+        fullName: user.user_metadata?.full_name || user.email?.split('@')[0],
+        email: user.email,
+        id: user.id
+    };
+  }, [user, userRole, userPermissions, canAccessCRM]);
+
+  const value = useMemo(() => ({
+    user,
+    session,
+    loading,
+    authError,
+    userRole,
+    userPermissions,
+    hasPermission,
+    signIn,
+    signOut,
+    resetPassword,
+    updatePassword,
+    checkHealth,
+    userContext 
+  }), [
+    user, 
+    session, 
+    loading, 
+    authError,
+    userRole, 
+    userPermissions, 
+    hasPermission, 
+    signIn, 
+    signOut, 
+    resetPassword, 
+    updatePassword,
+    checkHealth,
+    userContext
+  ]);
 
   return (
     <SupabaseAuthContext.Provider value={value}>
       {children}
     </SupabaseAuthContext.Provider>
   );
-};
+}
 
 export const useAuth = () => {
   const context = useContext(SupabaseAuthContext);
@@ -307,4 +275,5 @@ export const useAuth = () => {
   return context;
 };
 
+// Export alias for backward compatibility
 export const useSupabaseAuth = useAuth;

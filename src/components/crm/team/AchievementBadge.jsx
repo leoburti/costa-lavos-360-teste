@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Trophy, Star, Target, Medal, Crown, Zap } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';

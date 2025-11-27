@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -17,7 +16,7 @@ import {
 import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn, getDateRange } from "@/lib/utils";
+import { getDateRange } from "@/lib/utils";
 import { useFilters } from "@/contexts/FilterContext";
 
 const PeriodSelector = () => {
@@ -27,7 +26,6 @@ const PeriodSelector = () => {
 
   const handlePreset = (preset, labelText) => {
     const range = getDateRange(preset);
-    // Updating context triggers fetchData in DashboardPage via useEffect dependency
     setDateRange(range);
     setLabel(labelText);
     setIsOpen(false);

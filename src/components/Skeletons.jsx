@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -68,3 +67,12 @@ export const FormSkeleton = ({ fields = 4 }) => {
     </div>
   );
 };
+
+// Default export to satisfy any default imports
+const Skeletons = {
+  TableSkeleton,
+  DashboardSkeleton,
+  FormSkeleton
+};
+
+export default Skeletons;

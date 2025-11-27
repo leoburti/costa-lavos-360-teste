@@ -1,15 +1,47 @@
-import React from 'react';
+
+import React, { useMemo } from 'react';
 import MetricCard from '@/components/MetricCard';
 import { DollarSign, Gift, Wrench, Calendar, TrendingUp } from 'lucide-react';
 
-const DailySalesKPIs = ({ kpiData }) => {
-  const kpis = {
-    totalSales: kpiData?.totalRevenue || 0,
-    netSales: kpiData?.netSales || kpiData?.totalRevenue || 0, // Fallback to totalRevenue
-    totalBonification: kpiData?.totalBonification || 0,
-    totalEquipment: kpiData?.totalEquipment || 0,
-    activeDays: kpiData?.activeDays || 0,
-  };
+const DailySalesKPIs = ({ data = [] }) => {
+  const kpis = useMemo(() => {
+    let totalSales = 0;
+    let totalBonification = 0;
+    let totalEquipment = 0;
+    let activeDays = 0;
+
+    if (Array.isArray(data)) {
+        data.forEach(day => {
+            if (day && day.items && day.items.length > 0) {
+                let dayHasSales = false;
+                day.items.forEach(item => {
+                    const itemTotal = (item.totalValue || 0);
+                    const itemBonif = (item.bonification || 0);
+                    const itemEquip = (item.equipment || 0);
+                    
+                    if (itemTotal > 0 || itemBonif > 0 || itemEquip > 0) {
+                        dayHasSales = true;
+                    }
+
+                    totalSales += itemTotal;
+                    totalBonification += itemBonif;
+                    totalEquipment += itemEquip;
+                });
+                if (dayHasSales) activeDays++;
+            }
+        });
+    }
+
+    const netSales = totalSales - totalBonification - totalEquipment;
+
+    return {
+        totalSales,
+        netSales,
+        totalBonification,
+        totalEquipment,
+        activeDays
+    };
+  }, [data]);
 
   const formatCurrency = (value) => {
     return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -21,31 +53,31 @@ const DailySalesKPIs = ({ kpiData }) => {
         title="Vendas Totais"
         value={formatCurrency(kpis.totalSales)}
         icon={DollarSign}
-        subtitle="Soma de todas as vendas"
+        subtitle="Faturamento Bruto"
       />
       <MetricCard
         title="Vendas Líquidas"
         value={formatCurrency(kpis.netSales)}
         icon={TrendingUp}
-        subtitle="Vendas sem bonificação/equip."
+        subtitle="Excl. Bonif. e Equip."
       />
       <MetricCard
         title="Total Bonificado"
         value={formatCurrency(kpis.totalBonification)}
         icon={Gift}
-        subtitle="Valor total em bonificações"
+        subtitle="Valor em Bonificações"
       />
       <MetricCard
         title="Total Equipamentos"
         value={formatCurrency(kpis.totalEquipment)}
         icon={Wrench}
-        subtitle="Valor total em equipamentos"
+        subtitle="Movimentação de Equip."
       />
       <MetricCard
         title="Dias Ativos"
         value={kpis.activeDays.toString()}
         icon={Calendar}
-        subtitle="Dias com registro de vendas"
+        subtitle="Dias com Vendas"
       />
     </div>
   );

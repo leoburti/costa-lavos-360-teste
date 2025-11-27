@@ -1,4 +1,3 @@
-
 /**
  * Utility to aggressively prefetch critical application routes and components.
  * Uses dynamic imports to trigger the network request for chunks.
