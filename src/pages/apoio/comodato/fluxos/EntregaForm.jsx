@@ -12,7 +12,7 @@ import { Helmet } from 'react-helmet-async';
 import { getModelosEquipamentos, createEntregaComodatoLote, getClienteDetalhesComodato } from '@/services/apoioSyncService';
 import { Loader2, Plus, Trash2, Package, MapPin } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import ClientSearch from '@/components/ClientSearch'; // Corrected import
+import ClientSearch from '@/components/ClientSearch';
 import { useFormStatePersistence } from '@/hooks/useFormStatePersistence';
 import { PersistenceStatus } from '@/components/PersistenceStatus';
 

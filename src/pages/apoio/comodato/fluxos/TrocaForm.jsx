@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -10,7 +11,7 @@ import { Helmet } from 'react-helmet-async';
 import { getModelosEquipamentos, createTrocaComodatoLote, getClienteDetalhesComodato } from '@/services/apoioSyncService';
 import { Loader2, Plus, Trash2, RefreshCw, MapPin } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ClientSearch } from '@/components/ClientSearch';
+import ClientSearch from '@/components/ClientSearch';
 
 const TrocaForm = () => {
   const navigate = useNavigate();
