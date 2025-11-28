@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Map, Truck, User, Calendar, Anchor, ArrowRight, Loader2, AlertTriangle, List, CheckCircle } from 'lucide-react';
@@ -13,16 +14,17 @@ import { format } from 'date-fns';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
+
+const mockDrivers = [
+  { id: uuidv4(), nome: 'Carlos Silva (Exemplo)', veiculo: 'Caminhão VUC', capacidade_carga: 3000 },
+  { id: uuidv4(), nome: 'Mariana Costa (Exemplo)', veiculo: 'Fiorino', capacidade_carga: 650 },
+];
 
 const mockDeliveries = [
   { id: 'mock-1', endereco: 'Rua das Flores, 123 - Centro', prioridade: 'Alta', cliente_nome: 'Floricultura Florescer' },
   { id: 'mock-2', endereco: 'Avenida Principal, 456 - Bairro Norte', prioridade: 'Média', cliente_nome: 'Supermercado Central' },
   { id: 'mock-3', endereco: 'Travessa dos Pássaros, 789 - Vila Sul', prioridade: 'Baixa', cliente_nome: 'Padaria Pão Quente' },
-];
-
-const mockDrivers = [
-  { id: 'driver-1', nome: 'Carlos Silva', veiculo: 'Caminhão VUC', capacidade_carga: 3000 },
-  { id: 'driver-2', nome: 'Mariana Costa', veiculo: 'Fiorino', capacidade_carga: 650 },
 ];
 
 const SortableDeliveryItem = ({ delivery, index }) => {
@@ -51,22 +53,28 @@ const RouteOptimization = () => {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const { toast } = useToast();
 
-  const { data: drivers, loading: loadingDrivers } = useAnalyticalData(
-    'get_all_drivers_for_delivery_management', 
+  const { data: driversData, loading: loadingDrivers } = useAnalyticalData(
+    'rpc:get_all_drivers_for_delivery_management', 
     {},
     { defaultValue: [] }
   );
 
   const deliveryParams = useMemo(() => ({
-    p_delivery_date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null,
-    p_driver_id: selectedDriver
+    select: 'id, endereco, prioridade, cliente_nome',
+    filters: [
+        { column: 'data_entrega', operator: 'eq', value: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null },
+        { column: 'motorista_id', operator: 'eq', value: selectedDriver },
+        { column: 'status', operator: 'eq', value: 'pendente' }
+    ]
   }), [selectedDate, selectedDriver]);
 
+  const isValidUUID = selectedDriver ? uuidValidate(selectedDriver) : false;
+
   const { data: initialDeliveries, loading: loadingDeliveries, error: deliveriesError } = useAnalyticalData(
-    'get_deliveries_for_optimization',
+    'entregas_v2',
     deliveryParams,
     { 
-      enabled: !!selectedDriver && !!selectedDate,
+      enabled: !!selectedDriver && !!selectedDate && isValidUUID,
       defaultValue: []
     }
   );
@@ -91,9 +99,7 @@ const RouteOptimization = () => {
       description: 'Esta funcionalidade está em desenvolvimento e usará uma API externa para calcular a rota ideal.',
     });
     setIsOptimizing(true);
-    // Simula uma chamada de API de otimização
     setTimeout(() => {
-      // Lógica de otimização simples (mock): reordena por prioridade
       const sorted = [...deliveries].sort((a, b) => {
         const priority = { 'Alta': 3, 'Média': 2, 'Baixa': 1 };
         return (priority[b.prioridade] || 0) - (priority[a.prioridade] || 0);
@@ -116,10 +122,13 @@ const RouteOptimization = () => {
     }
   };
 
+  const availableDrivers = useMemo(() => {
+    return loadingDrivers ? [] : (driversData.length > 0 ? driversData : mockDrivers);
+  }, [driversData, loadingDrivers]);
+
   const currentDriver = useMemo(() => {
-      const allDrivers = [...drivers, ...mockDrivers];
-      return allDrivers.find(d => d.id === selectedDriver);
-  }, [drivers, selectedDriver]);
+      return availableDrivers.find(d => d.id === selectedDriver);
+  }, [availableDrivers, selectedDriver]);
 
   const renderContent = () => {
     if (loadingDeliveries && !deliveriesError) {
@@ -183,10 +192,6 @@ const RouteOptimization = () => {
     );
   };
 
-  const availableDrivers = useMemo(() => {
-    return loadingDrivers ? mockDrivers : drivers;
-  }, [drivers, loadingDrivers]);
-
   return (
     <>
       <Helmet>
@@ -218,7 +223,7 @@ const RouteOptimization = () => {
                     <SelectValue placeholder="Selecione um motorista" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(availableDrivers.length > 0 ? availableDrivers : mockDrivers).map(driver => (
+                    {availableDrivers.map(driver => (
                       <SelectItem key={driver.id} value={driver.id}>
                         {driver.nome}
                       </SelectItem>
@@ -230,7 +235,7 @@ const RouteOptimization = () => {
             {currentDriver && (
               <>
                  <InfoCard icon={Truck} title="Veículo" value={currentDriver.veiculo} />
-                 <InfoCard icon={Anchor} title="Capacidade" value={`${currentDriver.capacidade_carga} kg`} />
+                 <InfoCard icon={Anchor} title="Capacidade" value={`${currentDriver.capacidade_kg || currentDriver.capacidade_carga} kg`} />
               </>
             )}
           </CardContent>
@@ -287,8 +292,8 @@ const InfoCard = ({ icon: Icon, title, value }) => (
 const Badge = ({ variant, children }) => {
     const baseClasses = "px-2 py-0.5 text-xs font-semibold rounded-full";
     const variants = {
-        destructive: "bg-red-100 text-red-800",
-        secondary: "bg-gray-100 text-gray-800"
+        destructive: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+        secondary: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
     };
     return <span className={`${baseClasses} ${variants[variant]}`}>{children}</span>;
 }

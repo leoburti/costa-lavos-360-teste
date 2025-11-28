@@ -50,8 +50,11 @@ const rpcParamsMap = {
     get_dashboard_xray_data: ['p_start_date', 'p_end_date', 'p_supervisors', 'p_regions'],
 };
 
-export const useAnalyticalData = (rpcName, filters = {}, options = {}) => {
+export const useAnalyticalData = (queryIdentifier, filters = {}, options = {}) => {
   const { enabled = true, defaultValue = null } = options;
+  const isRpc = queryIdentifier.startsWith('rpc:');
+  const rpcName = isRpc ? queryIdentifier.substring(4) : null;
+  const tableName = isRpc ? null : queryIdentifier;
 
   const queryParams = useMemo(() => {
     const { dateRange, ...restFilters } = filters || {};
@@ -62,58 +65,85 @@ export const useAnalyticalData = (rpcName, filters = {}, options = {}) => {
     const allParams = {
       p_start_date: formatDateToAPI(dateRange?.from || defaultStart),
       p_end_date: formatDateToAPI(dateRange?.to || defaultEnd),
-      ...restFilters, // Inclui p_analysis_mode, p_show_defined_groups_only, etc.
+      ...restFilters,
     };
 
-    const validParamKeys = rpcParamsMap[rpcName];
-    if (!validParamKeys) {
-      console.warn(`[useAnalyticalData] RPC function "${rpcName}" não encontrada no rpcParamsMap. Todos os parâmetros serão enviados.`);
-      return allParams;
-    }
-
-    const finalParams = {};
-    for (const key of validParamKeys) {
-      // Renomeia chaves camelCase para snake_case se necessário
-      const snakeCaseKey = `p_${key.replace('p_', '').replace(/([A-Z])/g, '_$1').toLowerCase()}`;
-      const originalKey = key;
-      const camelCaseKey = key.replace(/_([a-z])/g, g => g[1].toUpperCase()).replace('p_', '');
-      const camelCaseWithP = `p_${camelCaseKey}`;
-
-      if (allParams.hasOwnProperty(originalKey)) {
-        finalParams[originalKey] = allParams[originalKey];
-      } else if (allParams.hasOwnProperty(camelCaseWithP)) {
-        finalParams[originalKey] = allParams[camelCaseWithP];
-      } else if (allParams.hasOwnProperty(camelCaseKey)) {
-         finalParams[originalKey] = allParams[camelCaseKey];
+    if (isRpc) {
+      const validParamKeys = rpcParamsMap[rpcName];
+      if (!validParamKeys) {
+        console.warn(`[useAnalyticalData] RPC function "${rpcName}" não encontrada no rpcParamsMap. Todos os parâmetros serão enviados.`);
+        return allParams;
       }
+
+      const finalParams = {};
+      for (const key of validParamKeys) {
+        const snakeCaseKey = `p_${key.replace('p_', '').replace(/([A-Z])/g, '_$1').toLowerCase()}`;
+        const originalKey = key;
+        const camelCaseKey = key.replace(/_([a-z])/g, g => g[1].toUpperCase()).replace('p_', '');
+        const camelCaseWithP = `p_${camelCaseKey}`;
+
+        if (allParams.hasOwnProperty(originalKey)) {
+          finalParams[originalKey] = allParams[originalKey];
+        } else if (allParams.hasOwnProperty(camelCaseWithP)) {
+          finalParams[originalKey] = allParams[camelCaseWithP];
+        } else if (allParams.hasOwnProperty(camelCaseKey)) {
+           finalParams[originalKey] = allParams[camelCaseKey];
+        }
+      }
+      return finalParams;
     }
     
-    return finalParams;
+    return allParams;
 
-  }, [filters, rpcName]);
+  }, [filters, queryIdentifier, isRpc, rpcName]);
   
-  const queryKey = [rpcName, queryParams];
+  const queryKey = [queryIdentifier, queryParams];
 
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey,
     queryFn: async () => {
-      const { data: result, error: rpcError } = await supabase.rpc(rpcName, queryParams);
-      
-      if (rpcError) {
-        console.error(`[useAnalyticalData] Erro ao chamar RPC ${rpcName}:`, {
-            message: rpcError.message,
-            details: rpcError.details,
-            code: rpcError.code,
-            params: queryParams,
-        });
-        throw new Error(rpcError.message || `Falha ao buscar dados de ${rpcName}`);
+      if (isRpc) {
+        const { data: result, error: rpcError } = await supabase.rpc(rpcName, queryParams);
+        
+        if (rpcError) {
+          console.error(`[useAnalyticalData] Erro ao chamar RPC ${rpcName}:`, {
+              message: rpcError.message,
+              details: rpcError.details,
+              code: rpcError.code,
+              params: queryParams,
+          });
+          throw new Error(rpcError.message || `Falha ao buscar dados de ${rpcName}`);
+        }
+        
+        if (rpcName === 'get_drilldown_data' && result && typeof result === 'object' && 'data' in result) {
+          return result; 
+        }
+        return result;
+      } else {
+        // Lógica de Query Direta
+        let query = supabase.from(tableName).select(queryParams.select || '*');
+        
+        if (queryParams.filters) {
+            queryParams.filters.forEach(filter => {
+                if (filter.value !== undefined && filter.value !== null) {
+                    query = query[filter.operator](filter.column, filter.value);
+                }
+            });
+        }
+        
+        const { data: result, error: queryError } = await query;
+
+        if (queryError) {
+          console.error(`[useAnalyticalData] Erro ao consultar tabela ${tableName}:`, {
+              message: queryError.message,
+              details: queryError.details,
+              code: queryError.code,
+              params: queryParams,
+          });
+          throw new Error(queryError.message || `Falha ao buscar dados de ${tableName}`);
+        }
+        return result;
       }
-      
-      if (rpcName === 'get_drilldown_data' && result && typeof result === 'object' && 'data' in result) {
-        return result; 
-      }
-      
-      return result;
     },
     enabled,
     staleTime: STALE_TIME,
