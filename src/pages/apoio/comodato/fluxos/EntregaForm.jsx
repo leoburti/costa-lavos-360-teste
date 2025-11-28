@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -11,7 +12,7 @@ import { Helmet } from 'react-helmet-async';
 import { getModelosEquipamentos, createEntregaComodatoLote, getClienteDetalhesComodato } from '@/services/apoioSyncService';
 import { Loader2, Plus, Trash2, Package, MapPin } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ClientSearch } from '@/components/ClientSearch';
+import ClientSearch from '@/components/ClientSearch'; // Corrected import
 import { useFormStatePersistence } from '@/hooks/useFormStatePersistence';
 import { PersistenceStatus } from '@/components/PersistenceStatus';
 
@@ -100,7 +101,7 @@ const EntregaForm = () => {
     setSubmitting(true);
     try {
       const result = await createEntregaComodatoLote(
-        "00000000-0000-0000-0000-000000000000", 
+        selectedCliente.id, 
         itensEntrega.map(i => ({ modelo_id: i.modelo_id, quantidade: i.quantidade })),
         urgencia,
         justificativa,
