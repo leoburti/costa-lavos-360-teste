@@ -1,16 +1,17 @@
+
 import { useState, useCallback } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 const useRequestActions = (onActionSuccess) => {
     const { toast } = useToast();
-    const { user, userRole, supabase, isSupabaseConfigured } = useAuth();
+    const { user, userContext, supabase, isSupabaseConfigured } = useAuth();
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [openDetail, setOpenDetail] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
 
-    const isApprover = userRole === 'Nivel 1' || userRole === 'Nivel 2';
+    const isApprover = userContext?.approval_roles?.bonification_approver;
 
     const handleOpenDetail = useCallback((request) => {
         setSelectedRequest(request);
@@ -29,7 +30,7 @@ const useRequestActions = (onActionSuccess) => {
             return;
         }
         if (!isApprover) {
-            toast({ variant: 'destructive', title: 'Ação não permitida' });
+            toast({ variant: 'destructive', title: 'Ação não permitida', description: 'Você não tem permissão para aprovar ou rejeitar.' });
             return;
         }
         if (!approve && !reason) {
@@ -46,13 +47,23 @@ const useRequestActions = (onActionSuccess) => {
                 .update({
                     status: newStatus,
                     approver_id: user.id,
-                    approver_name: user.user_metadata.full_name,
+                    approver_name: userContext.fullName,
                     approval_date: new Date().toISOString(),
                     rejection_reason: approve ? null : reason,
                 })
                 .eq('id', request.id);
 
             if (updateError) throw updateError;
+            
+            // Log action to audit table
+            await supabase.from('bonification_audit_log').insert({
+                request_id: request.id,
+                user_id: user.id,
+                user_name: userContext.fullName,
+                action: newStatus,
+                details: { reason: approve ? null : reason },
+            });
+
 
             toast({ title: `Solicitação ${newStatus.toLowerCase()} com sucesso!` });
             if (onActionSuccess) onActionSuccess();

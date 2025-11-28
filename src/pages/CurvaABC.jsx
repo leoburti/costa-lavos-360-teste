@@ -1,221 +1,253 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
 import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { formatCurrency, formatNumber } from '@/lib/utils';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
+import { PieChart, DollarSign, Users, Activity, AlertTriangle } from 'lucide-react';
+import { formatCurrency, formatNumber, formatPercentage } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertTriangle, Activity } from 'lucide-react';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend, Tooltip as RechartsTooltip } from 'recharts';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { motion } from 'framer-motion';
+
+import MetricCard from '@/components/MetricCard';
+import ChartCard from '@/components/ChartCard';
 
 const COLORS = {
-  'A+': '#15803d', // green-700
-  'A': '#22c55e',  // green-500
-  'B': '#eab308',  // yellow-500
-  'C': '#f97316',  // orange-500
-  'D': '#ef4444',  // red-500
-  'E': '#94a3b8'   // slate-400
+  'A+': '#10b981', // Emerald 500
+  'A': '#34d399',  // Emerald 400
+  'B': '#facc15',  // Yellow 400
+  'C': '#fb923c',  // Orange 400
+  'D': '#f87171',  // Red 400
+  'E': '#94a3b8',  // Slate 400
 };
 
-const CurvaABC = () => {
-  const { filters } = useFilters();
-  const [rawData, setRawData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+const getInitials = (name = '') => name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
-  // Correct date access and formatting
-  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
-  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
-  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+const ClientListItem = ({ client, totalRevenue, index }) => (
+  <motion.div
+    initial={{ opacity: 0, x: -10 }}
+    animate={{ opacity: 1, x: 0 }}
+    transition={{ duration: 0.3, delay: index * 0.05 }}
+    className="flex items-center justify-between p-2 rounded-lg hover:bg-muted"
+  >
+    <div className="flex items-center gap-3">
+      <Avatar className="h-8 w-8">
+        <AvatarFallback className="text-xs">{getInitials(client.name)}</AvatarFallback>
+      </Avatar>
+      <span className="text-sm font-medium truncate" title={client.name}>{client.name}</span>
+    </div>
+    <div className="text-right">
+      <p className="text-sm font-semibold">{formatCurrency(client.revenue)}</p>
+      <p className="text-xs text-muted-foreground">{formatPercentage((client.revenue / totalRevenue) * 100)}</p>
+    </div>
+  </motion.div>
+);
 
-  // Debug Logs
-  useEffect(() => {
-    console.log('[CurvaABC] Filters:', filters);
-    console.log('[CurvaABC] Dates:', { startDateStr, endDateStr });
-  }, [filters, startDateStr, endDateStr]);
+const CurveCard = ({ title, clients, totalRevenue, totalCategoryRevenue, color, icon: Icon }) => {
+  if (!clients || clients.length === 0) return null;
+  const percentageOfTotal = (totalCategoryRevenue / totalRevenue) * 100;
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="bg-card rounded-xl border flex flex-col"
+    >
+      <div className="p-4 border-b flex items-center justify-between" style={{ borderLeft: `4px solid ${color}` }}>
+        <div className="flex items-center gap-3">
+          <Icon className="h-5 w-5" style={{ color }} />
+          <h3 className="text-lg font-semibold">{title}</h3>
+        </div>
+        <div className="text-right">
+          <p className="font-bold">{formatCurrency(totalCategoryRevenue)}</p>
+          <p className="text-sm text-muted-foreground">{formatPercentage(percentageOfTotal)} da receita</p>
+        </div>
+      </div>
+      <ScrollArea className="flex-grow h-72">
+        <div className="p-4 space-y-1">
+          {clients.map((client, index) => (
+            <ClientListItem key={client.name} client={client} totalRevenue={totalRevenue} index={index} />
+          ))}
+        </div>
+      </ScrollArea>
+    </motion.div>
+  );
+};
 
-  useEffect(() => {
-    if (!startDateStr || !endDateStr) return;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        let query = supabase
-          .from('bd-cl')
-          .select('Cliente, Nome, "N Fantasia", Total, Cfo')
-          .gte('DT Emissao', startDateStr)
-          .lte('DT Emissao', endDateStr)
-          .gt('Total', 0);
-
-        if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
-        if (filters.sellers?.length > 0) query = query.in('Nome Vendedor', filters.sellers);
-        
-        const { data, error: supabaseError } = await query.abortSignal(controller.signal);
-
-        if (supabaseError) throw supabaseError;
-        setRawData(data || []);
-
-      } catch (err) {
-        console.error("Erro CurvaABC:", err);
-        if (err.name === 'AbortError') setError("Tempo limite excedido. Reduza o período.");
-        else setError("Erro ao calcular Curva ABC.");
-      } finally {
-        setLoading(false);
-        clearTimeout(timeoutId);
-      }
-    };
-
-    fetchData();
-    return () => {
-      controller.abort();
-      clearTimeout(timeoutId);
-    };
-  }, [filters, startDateStr, endDateStr]);
+const ABCAnalysisPage = () => {
+  const { filters, isReady } = useFilters();
+  const { data, loading, error } = useAnalyticalData('get_abc_analysis', filters, { enabled: isReady });
 
   const analysis = useMemo(() => {
-    if (!rawData.length) return {};
+    if (!data || Object.keys(data).length === 0) return {
+      kpis: {},
+      chartData: [],
+      curves: [],
+    };
 
-    const clientTotals = {};
-    let grandTotal = 0;
+    const grandTotal = Object.values(data).reduce((acc, curve) => acc + curve.total_revenue, 0);
+    const totalClients = Object.values(data).reduce((acc, curve) => acc + curve.client_count, 0);
 
-    rawData.forEach(row => {
-      if (['5910', '6910', '5908', '6551', '6908', '5551'].includes(String(row.Cfo))) return;
-      
-      const id = row.Cliente;
-      if (!clientTotals[id]) {
-        clientTotals[id] = {
-          name: row['N Fantasia'] || row.Nome || `Client ${id}`,
-          revenue: 0
-        };
-      }
-      clientTotals[id].revenue += row.Total;
-      grandTotal += row.Total;
-    });
+    const kpis = {
+      totalRevenue: grandTotal,
+      totalClients: totalClients,
+      classA: Object.entries(data)
+        .filter(([key]) => key.startsWith('A'))
+        .reduce((acc, [, curve]) => acc + curve.percentage_of_total, 0),
+      classB: data['B']?.percentage_of_total || 0,
+      classC: data['C']?.percentage_of_total || 0,
+    };
 
-    const grouped = { 'A+': [], 'A': [], 'B': [], 'C': [], 'D': [], 'E': [] };
-    const kpis = { 'A+': 0, 'A': 0, 'B': 0, 'C': 0, 'D': 0, 'E': 0 };
-    const revenues = { 'A+': 0, 'A': 0, 'B': 0, 'C': 0, 'D': 0, 'E': 0 };
-
-    Object.values(clientTotals).forEach(client => {
-      let category = 'E';
-      if (client.revenue > 40000) category = 'A+';
-      else if (client.revenue > 25000) category = 'A';
-      else if (client.revenue > 15000) category = 'B';
-      else if (client.revenue > 8000) category = 'C';
-      else if (client.revenue > 4000) category = 'D';
-
-      grouped[category].push(client);
-      kpis[category]++;
-      revenues[category] += client.revenue;
-    });
-
-    // Sort clients within groups
-    Object.keys(grouped).forEach(key => {
-      grouped[key] = grouped[key].sort((a, b) => b.revenue - a.revenue);
-    });
-
-    const chartData = Object.entries(revenues)
+    const chartData = Object.entries(data)
       .map(([key, value]) => ({
         name: `Classe ${key}`,
-        value: value,
-        count: kpis[key],
-        key
+        value: value.total_revenue,
+        key: key,
       }))
-      .filter(item => item.value > 0)
-      .sort((a, b) => b.value - a.value);
+      .sort((a,b) => b.value - a.value);
 
-    return { grouped, revenues, kpis, chartData, grandTotal };
-  }, [rawData]);
+    const curves = ['A+', 'A', 'B', 'C', 'D', 'E'].map(key => ({
+      key,
+      title: `Classe ${key}`,
+      data: data[key],
+      color: COLORS[key],
+    })).filter(c => c.data);
 
-  if (loading && !rawData.length) return <div className="h-96 flex items-center justify-center"><LoadingSpinner message="Calculando ABC..." /></div>;
+    return { kpis, chartData, curves, grandTotal };
 
-  if (error) return <Alert variant="destructive" className="m-6"><AlertTriangle className="h-4 w-4"/><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
+  }, [data]);
+  
+  if (error) {
+    return (
+      <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+        <Alert variant="destructive" className="mt-8">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Erro ao Carregar Análise</AlertTitle>
+          <AlertDescription>
+            Não foi possível carregar os dados da Curva ABC. Tente ajustar os filtros ou recarregar a página. <br/>
+            <small>Detalhes: {error.message}</small>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Curva ABC Projetada</h1>
-          <p className="text-muted-foreground mt-1">
-            Classificação baseada em receita (Consulta Direta)
-          </p>
+    <div className="flex flex-col h-full bg-slate-50/50">
+      <Helmet>
+        <title>Análise Curva ABC - Costa Lavos</title>
+        <meta name="description" content="Análise da Curva ABC para classificação de clientes com base na receita." />
+      </Helmet>
+
+      <header className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md p-6">
+        <div className="container mx-auto">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-lg">
+              <PieChart className="h-8 w-8" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Curva ABC de Clientes</h1>
+              <p className="text-blue-100 mt-1">Classificação de clientes por relevância de faturamento no período.</p>
+            </div>
+          </div>
         </div>
-        {loading && <Activity className="h-5 w-5 animate-spin text-blue-600" />}
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Distribuição de Receita</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={analysis.chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {analysis.chartData?.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[entry.key] || '#ccc'} />
-                  ))}
-                </Pie>
-                <RechartsTooltip formatter={(value) => formatCurrency(value)} />
-                <Legend verticalAlign="bottom" />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <main className="flex-grow container mx-auto p-6 space-y-6">
+        {/* FilterBar removed as per user request */}
 
-        <div className="lg:col-span-2 space-y-6">
-          {['A+', 'A', 'B', 'C', 'D', 'E'].map(cls => {
-            if (!analysis.kpis || analysis.kpis[cls] === 0) return null;
-            const percentage = analysis.grandTotal > 0 ? (analysis.revenues[cls] / analysis.grandTotal * 100) : 0;
+        {loading ? (
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+           </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <MetricCard title="Receita Total" value={formatCurrency(analysis.kpis.totalRevenue)} icon={DollarSign} />
+            <MetricCard title="Total de Clientes" value={formatNumber(analysis.kpis.totalClients)} icon={Users} />
+            <MetricCard title="% Receita Classe A" value={formatPercentage(analysis.kpis.classA)} icon={Activity} />
+            <MetricCard title="% Receita Classe B" value={formatPercentage(analysis.kpis.classB)} icon={Activity} />
+            <MetricCard title="% Receita Classe C" value={formatPercentage(analysis.kpis.classC)} icon={Activity} />
+          </div>
+        )}
 
-            return (
-              <Card key={cls}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <Badge style={{ backgroundColor: COLORS[cls] }} className="text-white border-none">Classe {cls}</Badge>
-                      <span className="text-base font-normal text-muted-foreground">
-                        {formatNumber(analysis.kpis[cls])} clientes ({formatNumber(percentage)}% da receita)
-                      </span>
-                    </CardTitle>
-                    <span className="font-bold text-lg">{formatCurrency(analysis.revenues[cls])}</span>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-48">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {analysis.grouped[cls]?.slice(0, 100).map((client, idx) => ( // Limit to 100 to prevent lag
-                        <div key={idx} className="flex justify-between items-center p-2 rounded bg-slate-50 text-sm border border-slate-100">
-                          <span className="font-medium truncate max-w-[200px]" title={client.name}>{client.name}</span>
-                          <span className="text-muted-foreground">{formatCurrency(client.revenue)}</span>
-                        </div>
-                      ))}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-1">
+                {loading ? (
+                    <Skeleton className="h-[400px] w-full"/>
+                ) : (
+                    <ChartCard title="Distribuição de Receita por Classe" height={400}>
+                         <ResponsiveContainer width="100%" height="100%">
+                            <RechartsPie>
+                                <Pie 
+                                  data={analysis.chartData} 
+                                  dataKey="value" 
+                                  nameKey="name" 
+                                  cx="50%" 
+                                  cy="50%" 
+                                  innerRadius={80} 
+                                  outerRadius={120} 
+                                  paddingAngle={3}
+                                  labelLine={false}
+                                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                                      const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                                      const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+                                      const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+                                      return (
+                                        <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" className="text-xs font-bold">
+                                          {`${(percent * 100).toFixed(0)}%`}
+                                        </text>
+                                      );
+                                    }}
+                                >
+                                {analysis.chartData?.map((entry) => (
+                                    <Cell key={entry.name} fill={COLORS[entry.key]} />
+                                ))}
+                                </Pie>
+                                <RechartsTooltip formatter={(value) => formatCurrency(value)} />
+                                <Legend iconSize={10} />
+                            </RechartsPie>
+                        </ResponsiveContainer>
+                    </ChartCard>
+                )}
+            </div>
+            <div className="lg:col-span-2 space-y-4">
+                {loading ? (
+                    <>
+                        <Skeleton className="h-80 w-full" />
+                        <Skeleton className="h-80 w-full" />
+                    </>
+                ) : (
+                    analysis.curves.map(curve => (
+                      <CurveCard 
+                        key={curve.key} 
+                        title={curve.title} 
+                        clients={curve.data.clients}
+                        totalRevenue={analysis.grandTotal}
+                        totalCategoryRevenue={curve.data.total_curve_revenue}
+                        color={curve.color}
+                        icon={Activity}
+                      />
+                    ))
+                )}
+                {!loading && analysis.curves.length === 0 && (
+                    <div className="text-center py-10 bg-card rounded-lg border">
+                        <p className="text-muted-foreground">Nenhum dado encontrado para os filtros selecionados.</p>
                     </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            );
-          })}
+                )}
+            </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
 
-export default CurvaABC;
+export default ABCAnalysisPage;

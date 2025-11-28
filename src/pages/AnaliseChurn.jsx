@@ -1,138 +1,171 @@
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { format } from 'date-fns';
-import { 
-  UserMinus, 
-  TrendingDown, 
-  AlertTriangle, 
-  Users, 
-  ArrowDownRight 
-} from 'lucide-react';
-
+import { motion } from 'framer-motion';
+import { Users, DollarSign, Activity, AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useFilters } from '@/contexts/FilterContext';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import KPICard from '@/components/supervisor/KPICard';
+import MetricCard from '@/components/MetricCard';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import LoadingSpinner from '@/components/LoadingSpinner';
 import { Badge } from '@/components/ui/badge';
-import { formatCurrency } from '@/lib/utils';
+import AIInsight from '@/components/AIInsight';
 
-const AnaliseChurn = () => {
-  const { filters } = useFilters();
+const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/A';
+const formatCurrency = (value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  // This RPC calculates churn based on 'last sale date' relative to DB max date
-  // It does NOT accept start/end date parameters.
-  const params = {
-    p_exclude_employees: filters.excludeEmployees,
-    p_supervisors: filters.supervisors,
-    p_sellers: filters.sellers,
-    p_customer_groups: filters.customerGroups,
-    p_regions: filters.regions,
-    p_clients: filters.clients,
-    p_search_term: filters.searchTerm
+const ChurnPhaseCard = ({ phase, data, loading, onClientSelect }) => {
+  const phaseConfig = {
+    phase1: { title: 'Ativos (Últimos 30 dias)', icon: Activity, color: 'text-emerald-500' },
+    phase2: { title: 'Risco (31-60 dias)', icon: AlertTriangle, color: 'text-yellow-500' },
+    phase3: { title: 'Risco Elevado (61-90 dias)', icon: TrendingDown, color: 'text-orange-500' },
+    phase4: { title: 'Crítico (>90 dias)', icon: TrendingUp, color: 'text-red-500' },
   };
 
-  const { data, loading } = useAnalyticalData('get_churn_analysis_data_v3', params);
+  const currentPhase = phaseConfig[phase];
+  const count = data?.kpis?.[`${phase}Count`] || 0;
+  const loss = data?.kpis?.[`${phase}Loss`] || 0;
+  const clients = data?.[phase] || [];
 
-  const kpis = data?.kpis || {};
-  const phase1 = data?.phase1 || [];
-  const phase2 = data?.phase2 || [];
-  const phase3 = data?.phase3 || [];
-  const phase4 = data?.phase4 || [];
-
-  const totalRiskRevenue = (kpis.phase1Loss || 0) + (kpis.phase2Loss || 0) + (kpis.phase3Loss || 0) + (kpis.phase4Loss || 0);
-  const totalRiskClients = (kpis.phase1Count || 0) + (kpis.phase2Count || 0) + (kpis.phase3Count || 0) + (kpis.phase4Count || 0);
-
-  const ClientList = ({ clients, title, color }) => (
-    <Card className="border-slate-200">
-      <CardHeader className="pb-3">
-        <CardTitle className={`text-sm font-bold uppercase tracking-wider ${color}`}>{title}</CardTitle>
-        <CardDescription>{clients.length} clientes</CardDescription>
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-base font-medium flex items-center gap-2">
+          <currentPhase.icon className={`h-5 w-5 ${currentPhase.color}`} />
+          {currentPhase.title}
+        </CardTitle>
+        <Badge variant={count > 0 ? "destructive" : "secondary"}>{count}</Badge>
       </CardHeader>
-      <CardContent className="max-h-[300px] overflow-y-auto space-y-2">
-        {clients.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nenhum cliente nesta fase.</p>
-        ) : (
-          clients.map((c, i) => (
-            <div key={i} className="flex justify-between items-center p-2 bg-slate-50 rounded text-sm">
-              <div className="truncate flex-1 pr-2">
-                <p className="font-medium text-slate-700 truncate">{c.client_name}</p>
-                <p className="text-[10px] text-slate-500">{c.days_since_last_purchase} dias sem compra</p>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-slate-700">{formatCurrency(c.monthly_revenue_loss)}</p>
-                <p className="text-[10px] text-slate-400">Perda Mensal Est.</p>
-              </div>
-            </div>
-          ))
+      <CardContent>
+        <div className="text-2xl font-bold">{formatCurrency(loss)}</div>
+        <p className="text-xs text-muted-foreground">Perda de receita mensal potencial</p>
+        {clients.length > 0 && (
+          <Accordion type="single" collapsible className="w-full mt-4">
+            <AccordionItem value="clients">
+              <AccordionTrigger>Ver Clientes</AccordionTrigger>
+              <AccordionContent>
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+                  {clients.map((client, index) => (
+                    <div key={index} className="text-sm p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => onClientSelect(client)}>
+                      <p className="font-semibold">{client.client_name}</p>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Última Compra: {formatDate(client.last_purchase_date)}</span>
+                        <span className="font-bold">{formatCurrency(client.monthly_revenue_loss)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         )}
       </CardContent>
     </Card>
   );
+};
+
+const AnaliseChurn = ({ isTab = false }) => {
+  const { filters } = useFilters();
+  
+  const dateRange = useMemo(() => filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }, [filters.dateRange]);
+  
+  const params = useMemo(() => {
+    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
+    return {
+      p_start_date: dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : null,
+      p_end_date: dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : null,
+      p_exclude_employees: filters.excludeEmployees,
+      p_supervisors: filters.supervisors,
+      p_sellers: filters.sellers,
+      p_customer_groups: filters.customerGroups,
+      p_regions: filters.regions,
+      p_clients: selectedClients,
+      p_search_term: filters.searchTerm,
+    };
+  }, [filters, dateRange]);
+
+  const { data, loading, error } = useAnalyticalData('get_churn_analysis_data_v3', params, { enabled: !!params.p_start_date && !!params.p_end_date });
+
+  const totalClientsInRisk = (data?.kpis?.phase2Count || 0) + (data?.kpis?.phase3Count || 0) + (data?.kpis?.phase4Count || 0);
+  const totalPotentialLoss = (data?.kpis?.phase2Loss || 0) + (data?.kpis?.phase3Loss || 0) + (data?.kpis?.phase4Loss || 0);
+
+  const handleClientSelect = (client) => {
+    // This could open a dialog with more client details in the future
+    console.log("Selected client:", client);
+  };
+  
+  const pageContent = (
+    <div className="space-y-6">
+      {!isTab && (
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Análise de Churn</h1>
+          <p className="text-muted-foreground">Identifique clientes em risco de inatividade e a perda potencial de receita.</p>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center items-center h-96">
+          <LoadingSpinner message="Analisando dados de churn..." />
+        </div>
+      ) : error ? (
+        <div className="text-red-500 text-center">Erro ao carregar dados: {error.message}</div>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <MetricCard 
+              title="Total de Clientes em Risco"
+              value={totalClientsInRisk.toString()}
+              icon={Users}
+              subtitle="Clientes que não compram há mais de 30 dias."
+            />
+            <MetricCard 
+              title="Perda de Receita Potencial Total"
+              value={formatCurrency(totalPotentialLoss)}
+              icon={DollarSign}
+              subtitle="Soma da receita mensal perdida com clientes em risco."
+            />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+            <ChurnPhaseCard phase="phase1" data={data} loading={loading} onClientSelect={handleClientSelect} />
+            <ChurnPhaseCard phase="phase2" data={data} loading={loading} onClientSelect={handleClientSelect} />
+            <ChurnPhaseCard phase="phase3" data={data} loading={loading} onClientSelect={handleClientSelect} />
+            <ChurnPhaseCard phase="phase4" data={data} loading={loading} onClientSelect={handleClientSelect} />
+          </div>
+          
+          <AIInsight 
+            context="Análise de Churn"
+            data={data}
+            question="Com base nos dados de churn, quais são os 3 principais insights e ações recomendadas para reter clientes em risco?"
+          />
+
+        </>
+      ) : (
+        <div className="text-center py-12">Nenhum dado encontrado para os filtros selecionados.</div>
+      )}
+    </div>
+  );
+
+  if (isTab) {
+    return pageContent;
+  }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <>
       <Helmet>
-        <title>Análise de Churn | Costa Lavos</title>
+        <title>Análise de Churn - Costa Lavos</title>
       </Helmet>
-
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Análise de Risco & Churn</h1>
-        <p className="text-muted-foreground">Monitoramento de inatividade e risco de perda de carteira.</p>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {loading ? (
-          [...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)
-        ) : (
-          <>
-            <KPICard 
-              title="Receita em Risco (Total)" 
-              value={formatCurrency(totalRiskRevenue)} 
-              icon={TrendingDown} 
-              color="rose"
-              subValue="Soma da média mensal de todos clientes em risco"
-            />
-            <KPICard 
-              title="Clientes em Risco" 
-              value={totalRiskClients} 
-              icon={UserMinus} 
-              color="amber" 
-            />
-            <KPICard 
-              title="Fase Crítica (>90 dias)" 
-              value={kpis.phase4Count} 
-              subValue={formatCurrency(kpis.phase4Loss)}
-              icon={AlertTriangle} 
-              color="red" 
-            />
-            <KPICard 
-              title="Risco Inicial (30-60 dias)" 
-              value={kpis.phase2Count} 
-              subValue={formatCurrency(kpis.phase2Loss)}
-              icon={ArrowDownRight} 
-              color="blue" 
-            />
-          </>
-        )}
-      </div>
-
-      {/* Phases */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {loading ? (
-           [...Array(4)].map((_, i) => <Skeleton key={i} className="h-[350px]" />)
-        ) : (
-          <>
-            <ClientList clients={phase1} title="Alerta (0-30 Dias)" color="text-blue-600" />
-            <ClientList clients={phase2} title="Risco (31-60 Dias)" color="text-amber-600" />
-            <ClientList clients={phase3} title="Alto Risco (61-90 Dias)" color="text-orange-600" />
-            <ClientList clients={phase4} title="Crítico (>90 Dias)" color="text-red-600" />
-          </>
-        )}
-      </div>
-    </div>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="p-4 sm:p-6"
+      >
+        {pageContent}
+      </motion.div>
+    </>
   );
 };
 

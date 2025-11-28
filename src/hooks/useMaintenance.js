@@ -1,5 +1,4 @@
-
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 
 export const useMaintenance = () => {
@@ -10,8 +9,12 @@ export const useMaintenance = () => {
     startTime: null
   });
   const [loading, setLoading] = useState(true);
+  const isLoadedOnce = useRef(false);
 
   const fetchStatus = useCallback(async () => {
+    if (!isLoadedOnce.current) {
+      setLoading(true);
+    }
     try {
       const { data, error } = await supabase.rpc('get_maintenance_status');
       if (error) throw error;
@@ -27,20 +30,21 @@ export const useMaintenance = () => {
     } catch (err) {
       console.error('Error checking maintenance status:', err);
     } finally {
-      setLoading(false);
+      if (!isLoadedOnce.current) {
+        setLoading(false);
+        isLoadedOnce.current = true;
+      }
     }
   }, []);
 
   useEffect(() => {
     fetchStatus();
 
-    // Subscribe to changes for realtime updates
     const channel = supabase
       .channel('maintenance_updates')
       .on('postgres_changes', 
         { event: 'INSERT', schema: 'public', table: 'system_maintenance' }, 
         (payload) => {
-          // Update local state immediately on change
           const newData = payload.new;
           setMaintenanceStatus({
             isActive: newData.is_active,

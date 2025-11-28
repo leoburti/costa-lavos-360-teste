@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useDataScope } from '@/hooks/useDataScope';
-import { Loader2, PlusCircle, User, RefreshCw, ShieldCheck, Edit, FileSignature, Printer, Award, FileText, Box } from 'lucide-react';
+import { Loader2, PlusCircle, User, RefreshCw, ShieldCheck, Edit, FileSignature, Printer, Award, FileText, Box, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
@@ -24,6 +23,7 @@ import ComodatoContract from '@/components/crm/ComodatoContract';
 import SupplyContract from '@/components/crm/SupplyContract';
 import { useReactToPrint } from 'react-to-print';
 import { getContactBreadVolume } from '@/services/crmService';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // dnd-kit imports
 import {
@@ -65,7 +65,6 @@ const AddDealDialog = ({ onDealAdded, stages, contacts }) => {
 
     const handleContactChange = async (id) => {
         setContactId(id);
-        // Auto-fetch bread volume
         const selectedContact = contacts.find(c => c.id === id);
         if (selectedContact) {
             const searchName = selectedContact.fantasy_name || selectedContact.corporate_name;
@@ -305,11 +304,29 @@ const PipelineColumn = ({ stage, deals, onDetailsClick }) => {
     );
 };
 
+const PipelineSkeleton = () => (
+    <div className="flex gap-6 p-6 h-full items-start min-w-max">
+        {[1, 2, 3, 4].map(i => (
+            <div key={i} className="w-[320px] shrink-0 h-full flex flex-col space-y-4 p-2">
+                <Skeleton className="h-8 w-3/4" />
+                <Skeleton className="h-5 w-1/2" />
+                <div className="p-2 space-y-3 flex-1 bg-muted/10 rounded-xl">
+                    <Skeleton className="h-28 w-full" />
+                    <Skeleton className="h-28 w-full" />
+                    <Skeleton className="h-28 w-full" />
+                </div>
+            </div>
+        ))}
+    </div>
+);
+
+
 const Pipeline = () => {
     const [stages, setStages] = useState([]);
     const [deals, setDeals] = useState([]);
     const [contacts, setContacts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const { toast } = useToast();
     const { user } = useAuth();
     const { applyScope } = useDataScope();
@@ -338,39 +355,54 @@ const Pipeline = () => {
 
     const fetchData = useCallback(async (showLoading = true) => {
         if (showLoading) setLoading(true);
-        
-        let dealsQuery = supabase.from('crm_deals').select('*, crm_contacts!inner(*)');
-        let contactsQuery = supabase.from('crm_contacts').select('id, fantasy_name, corporate_name').order('fantasy_name', { ascending: true });
+        setError(null);
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), 30000); // 30-second timeout
 
-        dealsQuery = applyScope(dealsQuery, 'owner_id');
-        contactsQuery = applyScope(contactsQuery, 'owner_id');
+        try {
+            let dealsQuery = supabase.from('crm_deals').select('*, crm_contacts!inner(*)');
+            let contactsQuery = supabase.from('crm_contacts').select('id, fantasy_name, corporate_name').order('fantasy_name', { ascending: true });
 
-        const [stagesRes, dealsRes, contactsRes] = await Promise.all([
-            supabase.from('crm_stages').select('*').order('order', { ascending: true }),
-            dealsQuery,
-            contactsQuery
-        ]);
+            dealsQuery = applyScope(dealsQuery, 'owner_id').abortSignal(abortController.signal);
+            contactsQuery = applyScope(contactsQuery, 'owner_id').abortSignal(abortController.signal);
 
-        if (stagesRes.error) toast({ variant: 'destructive', title: 'Erro', description: stagesRes.error.message });
-        else setStages(stagesRes.data);
+            const [stagesRes, dealsRes, contactsRes] = await Promise.all([
+                supabase.from('crm_stages').select('*').order('order', { ascending: true }).abortSignal(abortController.signal),
+                dealsQuery,
+                contactsQuery
+            ]);
 
-        if (dealsRes.error) toast({ variant: 'destructive', title: 'Erro', description: dealsRes.error.message });
-        else {
+            if (stagesRes.error) throw stagesRes.error;
+            setStages(stagesRes.data);
+
+            if (dealsRes.error) throw dealsRes.error;
             const dealsData = dealsRes.data || [];
-            const ownerIds = [...new Set(dealsData.map(d => d.owner_id).filter(Boolean))];
-            if (ownerIds.length > 0) {
-                const { data: ownersData } = await supabase.from('users_view').select('id, raw_user_meta_data').in('id', ownerIds);
-                const ownersMap = new Map(ownersData?.map(o => [o.id, o]));
-                setDeals(dealsData.map(deal => ({ ...deal, owner: ownersMap.get(deal.owner_id) || null })));
+            
+            if (dealsData.length > 0) {
+              const ownerIds = [...new Set(dealsData.map(d => d.owner_id).filter(Boolean))];
+              if (ownerIds.length > 0) {
+                  const { data: ownersData, error: ownerError } = await supabase.from('users_view').select('id, raw_user_meta_data').in('id', ownerIds).abortSignal(abortController.signal);
+                  if (ownerError) throw ownerError;
+                  const ownersMap = new Map(ownersData?.map(o => [o.id, o]));
+                  setDeals(dealsData.map(deal => ({ ...deal, owner: ownersMap.get(deal.owner_id) || null })));
+              } else {
+                  setDeals(dealsData);
+              }
             } else {
-                setDeals(dealsData);
+                setDeals([]);
             }
+
+            if (contactsRes.error) throw contactsRes.error;
+            setContacts(contactsRes.data);
+            
+        } catch (err) {
+            console.error("Error fetching pipeline data:", err);
+            setError(err.message);
+            toast({ variant: 'destructive', title: 'Falha ao carregar dados', description: `Não foi possível buscar os dados do pipeline. ${err.message}` });
+        } finally {
+            clearTimeout(timeoutId);
+            if (showLoading) setLoading(false);
         }
-        
-        if (contactsRes.error) toast({ variant: 'destructive', title: 'Erro', description: contactsRes.error.message });
-        else setContacts(contactsRes.data);
-        
-        if (showLoading) setLoading(false);
     }, [toast, applyScope]);
 
     useEffect(() => {
@@ -430,17 +462,14 @@ const Pipeline = () => {
 
         const activeId = active.id;
         const overId = over.id;
-        const activeDeal = deals.find(d => d.id === activeId); // From original state before drag
+        const activeDeal = deals.find(d => d.id === activeId);
         const overStage = stages.find(s => s.id === overId);
         const overDeal = deals.find(d => d.id === overId);
 
-        let newStageId = activeDeal.stage_id; // Default to current if something goes wrong
+        let newStageId = activeDeal.stage_id;
         if (overStage) newStageId = overStage.id;
         else if (overDeal) newStageId = overDeal.stage_id;
 
-        // --- VALIDATION LOGIC ---
-        const currentStageObj = stages.find(s => s.id === activeDeal.stage_id); 
-        
         const qualStage = stages.find(s => s.name.toLowerCase().includes('qualificação'));
         const targetStageObj = stages.find(s => s.id === newStageId);
 
@@ -456,7 +485,6 @@ const Pipeline = () => {
             if (missing.length > 0) {
                 setMissingFields(missing);
                 setMissingFieldsModalOpen(true);
-                // Revert Move
                 fetchData(false);
                 return;
             }
@@ -472,7 +500,6 @@ const Pipeline = () => {
             }
         }
 
-        // Persist
         try {
              const { error } = await supabase.from('crm_deals').update({ stage_id: newStageId }).eq('id', activeId);
              if (error) throw error;
@@ -542,10 +569,6 @@ const Pipeline = () => {
         }
     };
 
-    if (loading) {
-        return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-    }
-
     return (
         <>
         <Helmet>
@@ -587,35 +610,49 @@ const Pipeline = () => {
             </div>
 
             <div className="flex-1 overflow-hidden">
-                <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCorners}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                >
-                    <ScrollArea className="w-full h-full">
-                        <div className="flex gap-6 p-6 h-full items-start min-w-max">
-                        {stages.map(stage => (
-                            <div key={stage.id} className="h-full rounded-2xl bg-white/50 dark:bg-black/20 backdrop-blur-lg border border-white/70 dark:border-white/10 shadow-sm">
-                                <PipelineColumn 
-                                    stage={stage} 
-                                    deals={dealsByStage[stage.id] || []}
-                                    onDetailsClick={handleOpenDetails}
-                                />
+                {loading ? (
+                    <PipelineSkeleton />
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                        <AlertTriangle className="h-16 w-16 text-destructive mb-4" />
+                        <h2 className="text-2xl font-semibold text-destructive">Falha ao Carregar o Pipeline</h2>
+                        <p className="text-muted-foreground mt-2 max-w-md">Não foi possível buscar os dados. Verifique sua conexão com a internet ou tente novamente mais tarde.</p>
+                        <p className="text-xs text-muted-foreground/50 mt-4">{error}</p>
+                        <Button onClick={() => fetchData(true)} className="mt-6">
+                            <RefreshCw className="mr-2 h-4 w-4" /> Tentar Novamente
+                        </Button>
+                    </div>
+                ) : (
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCorners}
+                        onDragStart={handleDragStart}
+                        onDragOver={handleDragOver}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <ScrollArea className="w-full h-full">
+                            <div className="flex gap-6 p-6 h-full items-start min-w-max">
+                            {stages.map(stage => (
+                                <div key={stage.id} className="h-full rounded-2xl bg-white/50 dark:bg-black/20 backdrop-blur-lg border border-white/70 dark:border-white/10 shadow-sm">
+                                    <PipelineColumn 
+                                        stage={stage} 
+                                        deals={dealsByStage[stage.id] || []}
+                                        onDetailsClick={handleOpenDetails}
+                                    />
+                                </div>
+                            ))}
                             </div>
-                        ))}
-                        </div>
-                        <ScrollBar orientation="horizontal" />
-                    </ScrollArea>
-                    <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
-                        {activeDragDeal ? (
-                            <div className="w-[280px]">
-                                <DealCard deal={activeDragDeal} isQualificationStage={false} dragOverlay />
-                            </div>
-                        ) : null}
-                    </DragOverlay>
-                </DndContext>
+                            <ScrollBar orientation="horizontal" />
+                        </ScrollArea>
+                        <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
+                            {activeDragDeal ? (
+                                <div className="w-[280px]">
+                                    <DealCard deal={activeDragDeal} isQualificationStage={false} dragOverlay />
+                                </div>
+                            ) : null}
+                        </DragOverlay>
+                    </DndContext>
+                )}
             </div>
         </div>
 

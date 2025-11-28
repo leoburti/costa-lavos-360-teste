@@ -1,4 +1,3 @@
-
 # Análise Profunda: Painel do Supervisor (Visão Diretor Comercial)
 
 Este documento detalha a investigação dos dados disponíveis no Supabase, as RPCs (Remote Procedure Calls) existentes e propõe uma arquitetura de dados para transformar a página `AnaliticoSupervisor.jsx` em uma ferramenta de decisão estratégica de alta performance.

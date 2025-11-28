@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import MetricCard from '@/components/MetricCard';
 import { DollarSign, Gift, Wrench, Calendar, TrendingUp } from 'lucide-react';

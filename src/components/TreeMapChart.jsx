@@ -1,88 +1,98 @@
-import React from 'react';
-import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
+import React, { useMemo } from 'react';
+import { ResponsiveContainer, Treemap, Tooltip as RechartsTooltip } from 'recharts';
 import { motion } from 'framer-motion';
-
-const COLORS = ['#F43F5E', '#F97316', '#F59E0B', '#EAB308', '#84CC16', '#22C55E', '#10B981', '#14B8A6', '#06B6D4', '#0EA5E9', '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7', '#D946EF', '#EC4899'];
-
-const CustomizedContent = ({ root, depth, x, y, width, height, index, colors, name, value }) => {
-  if (!root || !root.value) return null;
-  
-  return (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        style={{
-          fill: depth < 2 ? colors[index % colors.length] : 'none',
-          stroke: 'hsl(var(--card))',
-          strokeWidth: 2 / (depth + 1e-10),
-          strokeOpacity: 1 / (depth + 1e-10),
-        }}
-        rx="2"
-      />
-      {depth === 1 && width > 60 && height > 30 ? (
-        <text x={x + width / 2} y={y + height / 2 + 7} textAnchor="middle" fill="#fff" fontSize={14} className="font-bold pointer-events-none">
-          {name}
-        </text>
-      ) : null}
-      {depth === 1 && width > 90 && height > 50 ? (
-         <text x={x + 6} y={y + 20} fill="#fff" fontSize={12} fillOpacity={0.8} className="pointer-events-none">
-            {`${((value / root.value) * 100).toFixed(0)}%`}
-          </text>
-      ) : null}
-    </g>
-  );
-};
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import { formatCurrency, formatLargeNumberCompact } from '@/lib/utils';
 
 const CustomTooltip = ({ active, payload }) => {
   if (active && payload && payload.length) {
-    const { name, value, root } = payload[0].payload;
-    if (!root || !root.value) return null;
-    const percentage = root.value > 0 ? (value / root.value * 100).toFixed(2) : 0;
-    const formattedValue = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+    const data = payload[0].payload;
     return (
-      <div className="bg-card/80 backdrop-blur-sm border p-3 rounded-md shadow-lg text-sm">
-        <p className="font-bold text-base">{name}</p>
-        <p className="text-foreground">Vendas: {formattedValue}</p>
-        <p className="text-muted-foreground">Participação: {percentage}%</p>
+      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-slate-200 dark:border-slate-800">
+        <p className="font-bold text-sm text-slate-800 dark:text-slate-200">{data.name}</p>
+        <p className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{formatCurrency(data.size)}</p>
       </div>
     );
   }
   return null;
 };
 
-
-const TreeMapChart = ({ data }) => {
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex items-center justify-center w-full h-full text-muted-foreground">
-        Nenhum dado para exibir.
-      </div>
-    );
-  }
+const CustomizedContent = React.memo(({ root, depth, x, y, width, height, index, colors, name, size }) => {
   return (
-    <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="w-full h-full"
+    <motion.g
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5, delay: index * 0.05 }}
     >
-      <ResponsiveContainer width="100%" height={400}>
-        <Treemap
-          data={data}
-          dataKey="size"
-          ratio={4 / 3}
-          stroke="hsl(var(--card))"
-          fill="hsl(var(--primary))"
-          content={<CustomizedContent colors={COLORS} />}
-        >
-          <Tooltip content={<CustomTooltip />} />
-        </Treemap>
-      </ResponsiveContainer>
-    </motion.div>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{
+          fill: colors[index % colors.length],
+          stroke: '#fff',
+          strokeWidth: 2,
+        }}
+      />
+      {width > 80 && height > 40 && (
+        <foreignObject x={x + 4} y={y + 4} width={width - 8} height={height - 8}>
+            <div className="text-white font-semibold text-xs overflow-hidden text-ellipsis whitespace-nowrap">
+              {name}
+            </div>
+            <div className="text-white font-bold text-sm">
+              {formatLargeNumberCompact(size)}
+            </div>
+        </foreignObject>
+      )}
+    </motion.g>
+  );
+});
+
+const TreeMapChart = ({ data: externalData, title, description }) => {
+  const COLORS = useMemo(() => [
+    '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7',
+    '#10b981', '#22c55e', '#84cc16',
+    '#f97316', '#ef4444', '#ec4899', '#d946ef'
+  ], []);
+
+  const chartData = useMemo(() => {
+    if (!externalData) return [];
+    return externalData
+      .filter(item => item && item.name && typeof item.size === 'number')
+      .map(item => ({ ...item, name: String(item.name) }));
+  }, [externalData]);
+
+  return (
+    <Card className="h-full shadow-sm border-slate-200/60">
+      <CardHeader>
+        <CardTitle className="text-lg font-semibold text-slate-800">{title}</CardTitle>
+        {description && <CardDescription className="text-sm">{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="h-[400px]">
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <Treemap
+              data={chartData}
+              dataKey="size"
+              ratio={4 / 3}
+              stroke="#fff"
+              fill="#8884d8"
+              content={<CustomizedContent colors={COLORS} />}
+            >
+              <RechartsTooltip content={<CustomTooltip />} />
+            </Treemap>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-full text-slate-500">
+            Nenhum dado para exibir.
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 
-export default TreeMapChart;
+export default React.memo(TreeMapChart);

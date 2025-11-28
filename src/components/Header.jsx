@@ -28,9 +28,20 @@ const Header = ({ setSidebarOpen }) => {
   const location = useLocation();
 
   useEffect(() => {
-    updateFilters({ searchTerm: debouncedSearchTerm });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only update if different to avoid loop
+    if (filters.searchTerm !== debouncedSearchTerm) {
+      updateFilters({ searchTerm: debouncedSearchTerm });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchTerm]);
+  
+  useEffect(() => {
+    // Sync changes from global context back to local state
+    if (filters.searchTerm !== searchTerm) {
+      setSearchTerm(filters.searchTerm || '');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.searchTerm]);
 
   const handleLogout = async () => {
     await signOut();

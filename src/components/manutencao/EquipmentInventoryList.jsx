@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { searchEquipmentInventory } from '@/services/apoioSyncService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';

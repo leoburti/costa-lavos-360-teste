@@ -5,7 +5,7 @@ import { useDataScope } from '@/hooks/useDataScope';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Search, Plus, Users, User, Mail, Phone, Building2, Loader2 } from 'lucide-react';
 import ContactForm from '@/components/crm/ContactForm';
@@ -113,6 +113,9 @@ const Contacts = () => {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{selectedContact ? 'Editar Contato' : 'Novo Contato'}</DialogTitle>
+              <DialogDescription>
+                Preencha os campos abaixo para {selectedContact ? 'atualizar o' : 'criar um novo'} contato.
+              </DialogDescription>
             </DialogHeader>
             <ContactForm contactData={selectedContact} onSaveSuccess={handleSuccess} />
           </DialogContent>

@@ -73,10 +73,10 @@ export const getEquipamentosByCliente = async (clienteFantasia) => {
   console.log(`Buscando equipamentos para o cliente: ${clienteFantasia}`);
   
   const { data, error } = await supabase
-    .from('equipamentos_apoio')
-    .select('id, chave_id, fantasia, equipamento, status, localizacao')
-    .eq('fantasia', clienteFantasia)
-    .order('equipamento', { ascending: true });
+    .from('bd_cl_inv')
+    .select('Chave_ID, Codigo, Loja, Fantasia, Equipamento, QTD, Data_Venda, AA3_CHAPA, STAT')
+    .eq('Fantasia', clienteFantasia)
+    .order('Equipamento', { ascending: true });
 
   if (error) {
     console.error('Erro ao buscar equipamentos:', error);

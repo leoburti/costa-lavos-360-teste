@@ -1,174 +1,142 @@
-
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useClientEquipments } from '@/hooks/useClientEquipments';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import ClientSearch from '@/components/ClientSearch'; // Updated import
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { HardHat, ServerCrash, PackageSearch } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { formatCurrency } from '@/lib/utils';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Package, MapPin, CheckCircle2, AlertCircle } from 'lucide-react';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+
+const EquipmentsTable = ({ data, loading, error }) => {
+  if (loading) {
+    return (
+      <div className="space-y-2 mt-4">
+        {[...Array(5)].map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center py-10 px-4 bg-muted/50 rounded-lg">
+        <ServerCrash className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-lg font-semibold text-destructive">Erro ao carregar equipamentos</p>
+        <p className="text-sm text-muted-foreground max-w-sm">{error.message || String(error)}</p>
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center py-10 px-4 bg-muted/50 rounded-lg">
+        <PackageSearch className="h-12 w-12 text-muted-foreground mb-4" />
+        <p className="text-lg font-semibold text-foreground">Nenhum equipamento encontrado</p>
+        <p className="text-sm text-muted-foreground">Este cliente não possui equipamentos registrados.</p>
+      </div>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Nome</TableHead>
+          <TableHead>Modelo</TableHead>
+          <TableHead>Série</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Data de Instalação</TableHead>
+          <TableHead>Fonte</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.map((equip) => (
+          <TableRow key={equip.id}>
+            <TableCell>{equip.nome}</TableCell>
+            <TableCell>{equip.modelo}</TableCell>
+            <TableCell>{equip.serie}</TableCell>
+            <TableCell>
+              <Badge variant={equip.status === 'Ativo' || equip.status === 'instalado' ? 'default' : 'secondary'}>
+                {equip.status}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              {equip.data_instalacao ? format(parseISO(equip.data_instalacao), 'dd/MM/yyyy') : 'N/A'}
+            </TableCell>
+            <TableCell>
+              <Badge variant={equip.source === 'erp' ? 'outline' : 'default'} className="capitalize">
+                {equip.source}
+              </Badge>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
 
 const EquipamentosEmCampo = () => {
   const { filters } = useFilters();
-  const [rawData, setRawData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(null);
 
-  // Correct date access and formatting
-  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
-  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
-  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
-
-  // Debug Logs
-  useEffect(() => {
-    console.log('[EquipamentosEmCampo] Filters:', filters);
-    console.log('[EquipamentosEmCampo] Dates:', { startDateStr, endDateStr });
-  }, [filters, startDateStr, endDateStr]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        // Para equipamentos em campo, consultamos o inventário (bd_cl_inv)
-        // Note: Inventário geralmente é um snapshot atual, mas podemos filtrar por data de venda/instalação se necessário.
-        // Aqui vamos filtrar por Data_Venda para respeitar o período, assumindo que é a data de instalação.
-        
-        let query = supabase
-          .from('bd_cl_inv')
-          .select('*')
-          .gte('Data_Venda', startDateStr)
-          .lte('Data_Venda', endDateStr);
-
-        if (filters.supervisors?.length > 0) query = query.in('Nome_Supervisor', filters.supervisors);
-        if (filters.sellers?.length > 0) query = query.in('Nome_Vendedor', filters.sellers);
-        if (filters.regions?.length > 0) query = query.in('REGIAO', filters.regions);
-        if (filters.customerGroups?.length > 0) query = query.in('REDE', filters.customerGroups);
-        
-        const { data, error: supabaseError } = await query;
-
-        if (supabaseError) throw supabaseError;
-        setRawData(data || []);
-
-      } catch (err) {
-        console.error("Erro Inventário:", err);
-        setError("Erro ao carregar inventário de equipamentos.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [filters, startDateStr, endDateStr]);
-
-  const stats = useMemo(() => {
-    if (!rawData.length) return { total: 0, active: 0, maintenance: 0, byType: {} };
-    
-    const byType = {};
-    let total = 0;
-    let active = 0;
-    let maintenance = 0;
-
-    rawData.forEach(item => {
-      total++;
-      const status = item.AA3_STATUS || 'Ativo';
-      if (status === 'Ativo' || status === 'Instalado') active++;
-      else maintenance++;
-
-      const type = item.Equipamento || 'Outros';
-      byType[type] = (byType[type] || 0) + 1;
-    });
-
-    return { total, active, maintenance, byType };
-  }, [rawData]);
+  const clientParams = useMemo(() => ({
+    ...filters,
+    p_cliente_id: selectedClient ? `${selectedClient.cliente_id}-${selectedClient.loja}` : null,
+  }), [filters, selectedClient]);
+  
+  const { data, loading, error } = useClientEquipments(clientParams.p_cliente_id);
 
   return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Equipamentos em Campo</h1>
-        <p className="text-muted-foreground mt-1">Visão do inventário instalado no período selecionado.</p>
+    <>
+      <Helmet>
+        <title>Equipamentos em Campo - Costa Lavos</title>
+      </Helmet>
+      <div className="space-y-6 p-4 md:p-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+            <div className="mb-4 md:mb-0">
+                <h1 className="text-3xl font-bold tracking-tight">Equipamentos em Campo</h1>
+                <p className="text-muted-foreground">Consulte os equipamentos instalados por cliente.</p>
+            </div>
+        </div>
+
+        <Card>
+            <CardHeader>
+              <CardTitle>Filtro por Cliente</CardTitle>
+              <CardDescription>Busque e selecione um cliente para visualizar a lista de equipamentos vinculados a ele.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="max-w-md">
+                <ClientSearch 
+                  selectedValue={selectedClient}
+                  onSelect={setSelectedClient} 
+                  placeholder="Selecione um cliente..."
+                />
+              </div>
+            </CardContent>
+        </Card>
+        
+        {selectedClient && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <HardHat className="mr-2 h-5 w-5" />
+                Equipamentos de: <span className="ml-2 font-semibold text-primary">{selectedClient.nome_fantasia || selectedClient.razao_social}</span>
+              </CardTitle>
+              <CardDescription>
+                Lista de todos os equipamentos (ERP e locais) associados ao cliente selecionado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <EquipmentsTable data={data} loading={loading} error={error} />
+            </CardContent>
+          </Card>
+        )}
       </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>Erro</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="p-3 rounded-full bg-slate-100 text-slate-600"><Package className="h-6 w-6" /></div>
-            <div><p className="text-sm font-medium text-muted-foreground">Total Instalado</p><h3 className="text-2xl font-bold">{stats.total}</h3></div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="p-3 rounded-full bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-6 w-6" /></div>
-            <div><p className="text-sm font-medium text-muted-foreground">Ativos/Operacionais</p><h3 className="text-2xl font-bold">{stats.active}</h3></div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6 flex items-center gap-4">
-            <div className="p-3 rounded-full bg-amber-100 text-amber-600"><AlertCircle className="h-6 w-6" /></div>
-            <div><p className="text-sm font-medium text-muted-foreground">Outros Status</p><h3 className="text-2xl font-bold">{stats.maintenance}</h3></div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Detalhamento por Cliente</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="h-64 flex items-center justify-center"><LoadingSpinner /></div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Equipamento</TableHead>
-                  <TableHead>Série / Chapa</TableHead>
-                  <TableHead>Data Instalação</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Localização</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rawData.slice(0, 100).map((item, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="font-medium">
-                      <div className="flex flex-col">
-                        <span>{item.Fantasia}</span>
-                        <span className="text-xs text-muted-foreground">{item.Loja_texto}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{item.Equipamento}</TableCell>
-                    <TableCell>{item.AA3_CHAPA || 'N/D'}</TableCell>
-                    <TableCell>{item.Data_Venda ? new Date(item.Data_Venda).toLocaleDateString('pt-BR') : '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant={item.AA3_STATUS === 'Ativo' ? 'default' : 'secondary'}>
-                        {item.AA3_STATUS || 'Instalado'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3 text-muted-foreground" />
-                        {item.REGIAO || 'N/D'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {rawData.length === 0 && <TableRow><TableCell colSpan={6} className="text-center h-24 text-muted-foreground">Nenhum equipamento encontrado no período.</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    </>
   );
 };
 

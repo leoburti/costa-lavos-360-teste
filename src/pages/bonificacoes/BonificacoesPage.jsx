@@ -1,29 +1,25 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, lazy, Suspense } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { useDataScope } from '@/hooks/useDataScope';
-import ConsultRequestsView from '@/components/bonificacoes/ConsultRequestsView';
-import NewRequestView from '@/components/bonificacoes/NewRequestView';
-import { Gift, ListPlus, FileSearch } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import LoadingSpinner from '@/components/LoadingSpinner';
+import { Gift, ListPlus, FileSearch, BarChart2 } from 'lucide-react';
+
+// Lazy load the components
+const ConsultRequestsView = lazy(() => import('@/components/bonificacoes/ConsultRequestsView'));
+const NewRequestView = lazy(() => import('@/components/bonificacoes/NewRequestView'));
+const AnaliseBonificacaoPage = lazy(() => import('@/pages/bonificacoes/AnaliseBonificacaoPage'));
 
 const BonificacoesPage = () => {
   const [activeTab, setActiveTab] = useState('nova-solicitacao');
-  const { userContext, loading } = useAuth();
-  const { isRestricted } = useDataScope();
-  
-  // View state for internal navigation within sub-components
-  const [view, setView] = useState('initial');
+  const { userContext, loading: authLoading } = useAuth();
 
-  // Safety check for authentication loading state
-  if (loading) {
+  if (authLoading) {
     return <div className="flex h-full w-full items-center justify-center"><LoadingSpinner message="Carregando módulo de bonificações..." /></div>;
   }
 
-  // Safety check for user context (double check even if Guard should catch it)
   if (!userContext) {
     return (
         <div className="p-6">
@@ -35,8 +31,10 @@ const BonificacoesPage = () => {
     );
   }
 
+  const canAnalyze = userContext.role === 'Nivel 1' || userContext.role === 'Nivel 2' || userContext.role === 'Nivel 3' || userContext.role === 'Supervisor';
+
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-500">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-500">
       <Helmet>
         <title>Bonificações | Costa Lavos 360°</title>
       </Helmet>
@@ -48,39 +46,41 @@ const BonificacoesPage = () => {
             Gestão de Bonificações
           </h1>
           <p className="text-muted-foreground mt-1">
-            {isRestricted 
-                ? "Gerencie suas solicitações de bonificação e acompanhe aprovações."
-                : "Central completa de controle, aprovação e histórico de bonificações."
-            }
+            Crie, consulte e analise solicitações de bonificação.
           </p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full md:w-[600px] grid-cols-2 bg-white border shadow-sm p-1 rounded-lg">
+        <TabsList className="grid w-full md:w-auto grid-cols-2 md:grid-cols-3 bg-white border shadow-sm p-1 rounded-lg">
           <TabsTrigger value="nova-solicitacao" className="data-[state=active]:bg-pink-50 data-[state=active]:text-pink-700 flex items-center gap-2 transition-all">
             <ListPlus className="h-4 w-4" /> Nova Solicitação
           </TabsTrigger>
           <TabsTrigger value="consultar" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 flex items-center gap-2 transition-all">
             <FileSearch className="h-4 w-4" /> Consultar / Aprovar
           </TabsTrigger>
+          {canAnalyze && (
+            <TabsTrigger value="analise" className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 flex items-center gap-2 transition-all">
+              <BarChart2 className="h-4 w-4" /> Análise de Bonificação
+            </TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="nova-solicitacao" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
-          <Card className="border-t-4 border-t-pink-500 shadow-md">
-            <CardHeader>
-              <CardTitle>Nova Bonificação</CardTitle>
-              <CardDescription>Preencha os dados para criar uma nova solicitação de bonificação.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <NewRequestView onSuccess={() => setActiveTab('consultar')} />
-            </CardContent>
-          </Card>
-        </TabsContent>
+        <Suspense fallback={<LoadingSpinner message="Carregando visualização..." />}>
+          <TabsContent value="nova-solicitacao" className="focus-visible:outline-none focus-visible:ring-0">
+            <NewRequestView onSuccess={() => setActiveTab('consultar')} />
+          </TabsContent>
 
-        <TabsContent value="consultar" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
-           <ConsultRequestsView setView={setView} />
-        </TabsContent>
+          <TabsContent value="consultar" className="focus-visible:outline-none focus-visible:ring-0">
+             <ConsultRequestsView />
+          </TabsContent>
+          
+          {canAnalyze && (
+            <TabsContent value="analise" className="focus-visible:outline-none focus-visible:ring-0">
+              <AnaliseBonificacaoPage />
+            </TabsContent>
+          )}
+        </Suspense>
       </Tabs>
     </div>
   );

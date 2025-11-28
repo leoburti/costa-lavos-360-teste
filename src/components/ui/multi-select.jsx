@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,6 +16,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function MultiSelect({
   label,
@@ -69,30 +72,32 @@ export function MultiSelect({
             {loading ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[336px] p-0">
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
           <Command {...props}>
             <CommandInput placeholder="Buscar..." />
-            <CommandList>
-              <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
-              <CommandGroup>
-                {options.map((option) => (
-                  <CommandItem
-                    key={option.value}
-                    value={option.value}
-                    onSelect={() => handleSelect(option.value)}
-                    className="cursor-pointer"
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        selected && selected.includes(option.value) ? 'opacity-100' : 'opacity-0'
-                      )}
-                    />
-                    {option.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
+            <ScrollArea className="max-h-60">
+                <CommandList>
+                <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
+                <CommandGroup>
+                    {options.map((option) => (
+                    <CommandItem
+                        key={option.value}
+                        value={option.value}
+                        onSelect={() => handleSelect(option.value)}
+                        className="cursor-pointer"
+                    >
+                        <Check
+                        className={cn(
+                            'mr-2 h-4 w-4',
+                            selected && selected.includes(option.value) ? 'opacity-100' : 'opacity-0'
+                        )}
+                        />
+                        {option.label}
+                    </CommandItem>
+                    ))}
+                </CommandGroup>
+                </CommandList>
+            </ScrollArea>
           </Command>
         </PopoverContent>
       </Popover>

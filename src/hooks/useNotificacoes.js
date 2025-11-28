@@ -1,122 +1,128 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 export const useNotificacoes = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const fetchNotificacoes = useCallback(async (filtros = {}) => {
-    if (!user) return [];
+  const fetchNotificacoes = useCallback(async (userId, filters) => {
     setLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase.rpc('get_notificacoes_filtradas', {
-        p_usuario_id: user.id,
-        p_tipo: filtros.tipo || null,
-        p_status: filtros.status || null,
-        p_arquivada: filtros.arquivada || false,
-        p_busca: filtros.busca || null
+      const { data, error: rpcError } = await supabase.rpc('get_notificacoes_filtradas', {
+        p_usuario_id: userId,
+        p_tipo: filters?.tipo || null,
+        p_status: filters?.status || null,
+        p_arquivada: filters?.arquivada || false,
+        p_busca: filters?.busca || null,
       });
-      if (error) throw error;
+
+      if (rpcError) throw rpcError;
       return data;
-    } catch (error) {
-      console.error('Erro ao buscar notificações:', error);
-      toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao carregar notificações.' });
+    } catch (err) {
+      console.error('Erro ao buscar notificações:', err);
+      setError(err.message);
+      toast({
+        variant: "destructive",
+        title: "Erro ao carregar notificações",
+        description: err.message,
+      });
       return [];
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
-
-  const marcarComoLida = useCallback(async (id) => {
-    try {
-      const { error } = await supabase.rpc('marcar_notificacao_lida', { p_notificacao_id: id });
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível marcar como lida.' });
-      return false;
-    }
   }, [toast]);
 
-  const marcarTodasComoLidas = useCallback(async () => {
-    if (!user) return;
+  const fetchNotificacoesNaoLidas = useCallback(async (userId) => {
     try {
-      const { error } = await supabase.rpc('marcar_todas_notificacoes_lidas', { p_usuario_id: user.id });
-      if (error) throw error;
-      toast({ title: 'Sucesso', description: 'Todas as notificações marcadas como lidas.' });
-      return true;
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao atualizar notificações.' });
-      return false;
-    }
-  }, [user, toast]);
-
-  const arquivar = useCallback(async (id) => {
-    try {
-      const { error } = await supabase.rpc('arquivar_notificacao', { p_id: id });
-      if (error) throw error;
-      toast({ title: 'Arquivada', description: 'Notificação arquivada com sucesso.' });
-      return true;
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao arquivar.' });
-      return false;
-    }
-  }, [toast]);
-
-  const desarquivar = useCallback(async (id) => {
-    try {
-      const { error } = await supabase.rpc('desarquivar_notificacao', { p_id: id });
-      if (error) throw error;
-      toast({ title: 'Desarquivada', description: 'Notificação restaurada.' });
-      return true;
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao desarquivar.' });
-      return false;
-    }
-  }, [toast]);
-
-  const fetchPreferencias = useCallback(async () => {
-    if (!user) return null;
-    try {
-      const { data, error } = await supabase.rpc('get_notificacao_preferencias', { p_usuario_id: user.id });
-      if (error) throw error;
-      return data && data.length > 0 ? data[0] : null;
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
-  }, [user]);
-
-  const updatePreferencias = useCallback(async (prefs) => {
-    if (!user) return;
-    try {
-      const { error } = await supabase.rpc('update_notificacao_preferencias', {
-        p_usuario_id: user.id,
-        p_email: prefs.email_enabled,
-        p_push: prefs.push_enabled,
-        p_sms: prefs.sms_enabled,
-        p_tipos: prefs.tipos_config
+      const { data, error: rpcError } = await supabase.rpc('get_notificacoes_filtradas', {
+        p_usuario_id: userId,
+        p_status: 'nao_lida',
+        p_arquivada: false,
+        p_tipo: null,
+        p_busca: null,
       });
-      if (error) throw error;
-      toast({ title: 'Sucesso', description: 'Preferências atualizadas.' });
-      return true;
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao salvar preferências.' });
-      return false;
+
+      if (rpcError) throw rpcError;
+      return data;
+    } catch (err) {
+      console.error('Erro ao buscar notificações não lidas:', err);
+      // Silencioso para não incomodar o usuário com toasts no bell
+      return [];
     }
-  }, [user, toast]);
+  }, []);
+
+  const marcarComoLida = useCallback(async (notificationId) => {
+    try {
+      const { error: rpcError } = await supabase.rpc('marcar_notificacao_lida', { p_notificacao_id: notificationId });
+      if (rpcError) throw rpcError;
+    } catch (err) {
+      console.error('Erro ao marcar como lida:', err);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível marcar a notificação como lida.",
+      });
+    }
+  }, [toast]);
+
+  const marcarTodasComoLidas = useCallback(async (userId) => {
+    try {
+      const { error: rpcError } = await supabase.rpc('marcar_todas_notificacoes_lidas', { p_usuario_id: userId });
+      if (rpcError) throw rpcError;
+      toast({
+        title: "Sucesso",
+        description: "Todas as notificações foram marcadas como lidas.",
+      });
+    } catch (err) {
+      console.error('Erro ao marcar todas como lidas:', err);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível marcar todas as notificações como lidas.",
+      });
+    }
+  }, [toast]);
+
+  const arquivarNotificacao = useCallback(async (notificationId, arquivar = true) => {
+    const rpc_name = arquivar ? 'arquivar_notificacao' : 'desarquivar_notificacao';
+    try {
+      const { error: rpcError } = await supabase.rpc(rpc_name, { p_id: notificationId });
+      if (rpcError) throw rpcError;
+      toast({
+        title: "Sucesso",
+        description: `Notificação ${arquivar ? 'arquivada' : 'desarquivada'} com sucesso.`,
+      });
+    } catch (err) {
+      console.error(`Erro ao ${arquivar ? 'arquivar' : 'desarquivar'} notificação:`, err);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: `Não foi possível ${arquivar ? 'arquivar' : 'desarquivar'} a notificação.`,
+      });
+    }
+  }, [toast]);
+  
+  const deleteNotificacao = async (id) => {
+    // This is a placeholder as we should probably archive instead of delete
+    // but implementing as requested.
+    console.warn("Deletar notificação ainda não implementado no backend.");
+    toast({
+        title: "Funcionalidade em desenvolvimento",
+        description: "A exclusão de notificações será implementada em breve.",
+    });
+  };
 
   return {
     loading,
+    error,
     fetchNotificacoes,
+    fetchNotificacoesNaoLidas,
     marcarComoLida,
     marcarTodasComoLidas,
-    arquivar,
-    desarquivar,
-    fetchPreferencias,
-    updatePreferencias
+    arquivarNotificacao,
+    deleteNotificacao
   };
 };

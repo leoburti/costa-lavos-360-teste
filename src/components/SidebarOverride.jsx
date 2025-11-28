@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -5,29 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  ChevronDown,
-  LayoutDashboard,
-  MessageSquare,
-  BarChart2,
-  Users,
-  MapPin,
-  TrendingUp,
-  Gift,
-  Wrench,
-  Briefcase,
-  CheckSquare,
-  Truck,
-  FileText,
-  LifeBuoy,
-  Calendar,
-  Settings,
-  Shield,
-  Link as LinkIcon,
-  HeartHandshake
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard, MessageSquare, BarChart2, Users, MapPin, TrendingUp, Gift, Wrench, Briefcase, CheckSquare, Truck, FileText, LifeBuoy, Calendar, Settings, Shield, Link as LinkIcon, HeartHandshake, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import {
   DropdownMenu,
@@ -48,12 +27,13 @@ import {
 
 // Define menu structure locally to ensure stability and no external dependency breakage
 const allMenuItems = [
-  { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { id: 'ai-chat', label: 'AI Chat', path: '/ai-chat', icon: MessageSquare },
+  { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, moduleId: 'dashboard_comercial' },
+  { id: 'ai-chat', label: 'AI Chat', path: '/ai-chat', icon: MessageSquare, moduleId: 'senhor_lavos' },
   {
     id: 'analitico',
     label: 'Analítico',
     icon: BarChart2,
+    moduleId: 'analytics',
     subItems: [
       { id: 'analitico-supervisor', label: 'Supervisor', path: '/analitico-supervisor', icon: Users },
       { id: 'analitico-vendedor', label: 'Vendedor', path: '/analitico-vendedor', icon: Users },
@@ -67,24 +47,20 @@ const allMenuItems = [
     id: 'comercial',
     label: 'Comercial',
     icon: TrendingUp,
+    moduleId: 'commercial-analysis',
     subItems: [
       { id: 'vendas-diarias', label: 'Vendas Diárias', path: '/analitico-vendas-diarias', icon: BarChart2 },
-      { id: 'churn', label: 'Análise Churn', path: '/analise-churn', icon: BarChart2 },
+      { id: 'analise-preditiva', label: 'Análise Preditiva de Vendas', path: '/analise-preditiva-vendas', icon: Zap },
       { id: 'curva-abc', label: 'Curva ABC', path: '/curva-abc', icon: BarChart2 },
-      { id: 'rfm', label: 'Cálculo RFM', path: '/calculo-rfm', icon: BarChart2 },
-      { id: 'tendencia', label: 'Tendência', path: '/tendencia-vendas', icon: TrendingUp },
       { id: 'valor-unitario', label: 'Valor Unitário', path: '/analise-valor-unitario', icon: BarChart2 },
-      { id: 'baixo-desempenho', label: 'Baixo Desempenho', path: '/baixo-desempenho', icon: TrendingUp },
-      { id: 'fidelidade', label: 'Fidelidade', path: '/analise-fidelidade', icon: Users },
-      { id: 'bonificados', label: 'Bonificados', path: '/produtos-bonificados', icon: Gift },
-      { id: 'performance-bonificados', label: 'Performance Bonif.', path: '/performance-bonificados', icon: BarChart2 },
-      { id: 'analitico-bonificados', label: 'Analítico Bonif.', path: '/analitico-bonificados', icon: BarChart2 },
+      { id: 'analise-desempenho-fidelidade', label: 'Desempenho e Fidelidade', path: '/analise-desempenho-fidelidade', icon: TrendingUp },
     ]
   },
   {
     id: 'equipamentos',
     label: 'Equipamentos',
     icon: Wrench,
+    moduleId: 'commercial-analysis',
     subItems: [
       { id: 'movimentacao', label: 'Movimentação', path: '/movimentacao-equipamentos', icon: TrendingUp },
       { id: 'por-cliente', label: 'Por Cliente', path: '/analitico-equipamentos-cliente', icon: BarChart2 },
@@ -96,17 +72,19 @@ const allMenuItems = [
     id: 'gestao',
     label: 'Gestão',
     icon: Briefcase,
+    moduleId: 'managerial-analysis',
     subItems: [
       { id: 'raio-x-supervisor', label: 'Raio-X Supervisor', path: '/raio-x-supervisor', icon: Users },
       { id: 'raio-x-vendedor', label: 'Raio-X Vendedor', path: '/raio-x-vendedor', icon: Users },
     ]
   },
-  { id: 'bonificacoes', label: 'Bonificações', path: '/bonificacoes', icon: Gift },
-  { id: 'tarefas', label: 'Tarefas', path: '/tarefas', icon: CheckSquare },
+  { id: 'bonificacoes', label: 'Bonificações', path: '/bonificacoes', icon: Gift, moduleId: 'bonificacoes' },
+  { id: 'tarefas', label: 'Tarefas', path: '/tarefas', icon: CheckSquare, moduleId: 'tarefas' },
   {
     id: 'delivery',
     label: 'Entregas',
     icon: Truck,
+    moduleId: 'delivery',
     subItems: [
       { id: 'delivery-dash', label: 'Dashboard', path: '/admin/delivery-management', icon: LayoutDashboard },
       { id: 'delivery-list', label: 'Entregas', path: '/admin/delivery-management/deliveries', icon: Truck },
@@ -124,6 +102,7 @@ const allMenuItems = [
     label: 'CRM',
     icon: Users,
     crmRequired: true,
+    moduleId: 'crm',
     subItems: [
       { id: 'crm-pipeline', label: 'Pipeline', path: '/crm/pipeline', icon: TrendingUp },
       { id: 'crm-relationship', label: 'Relacionamento', path: '/crm/relationship', icon: HeartHandshake },
@@ -138,6 +117,7 @@ const allMenuItems = [
     id: 'apoio',
     label: 'Apoio',
     icon: LifeBuoy,
+    moduleId: 'apoio',
     subItems: [
       { id: 'apoio-chamados', label: 'Chamados', path: '/admin/apoio/chamados', icon: MessageSquare },
       { id: 'apoio-comodato', label: 'Comodato', path: '/admin/apoio/comodato', icon: FileText },
@@ -151,6 +131,7 @@ const allMenuItems = [
     id: 'configuracoes',
     label: 'Configurações',
     icon: Settings,
+    moduleId: 'configuracoes',
     subItems: [
       { id: 'conf-perfil', label: 'Perfil', path: '/configuracoes/perfil', icon: Users },
       { id: 'conf-equipe', label: 'Gestão de Equipe', path: '/configuracoes/gestao-equipe', icon: Users },
@@ -183,7 +164,8 @@ const filterMenuByPermissions = (menu, userContext) => {
             return item;
         }
 
-        const moduleMatch = !item.moduleId || modulePermissions?.[item.moduleId];
+        const moduleMatch = !item.moduleId || (modulePermissions && modulePermissions[item.moduleId]);
+
         // IMPORTANT: If canAccessCrm is undefined, assume false to be safe
         const crmAccessMatch = !item.crmRequired || (canAccessCrm === true);
 
@@ -274,11 +256,11 @@ const SidebarItem = ({ item, isCollapsed, isActive, depth = 0, openGroups, toggl
                 </CollapsibleTrigger>
                 <CollapsibleContent className="pl-4 space-y-1 overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
                     {item.subItems.map((subItem) => (
-                        <SidebarItem 
-                            key={subItem.id} 
-                            item={subItem} 
-                            isCollapsed={isCollapsed} 
-                            isActive={false} 
+                        <SidebarItem
+                            key={subItem.id}
+                            item={subItem}
+                            isCollapsed={isCollapsed}
+                            isActive={false}
                             depth={depth + 1}
                             openGroups={openGroups}
                             toggleGroup={toggleGroup}
@@ -349,7 +331,7 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
     }, [userContext, loading]);
 
     const toggleGroup = (id) => {
-        setOpenGroups(prev => 
+        setOpenGroups(prev =>
             prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]
         );
     };
@@ -374,15 +356,15 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
     const SidebarContent = () => (
         <div className="flex flex-col h-full bg-[#6B2C2C] text-white border-r border-[#7D3E3E]">
             <div className={cn(
-                "flex items-center h-16 px-4 border-b border-[#7D3E3E] transition-all duration-300 shrink-0", 
+                "flex items-center h-16 px-4 border-b border-[#7D3E3E] transition-all duration-300 shrink-0",
                 isCollapsed ? "justify-center" : "justify-between"
             )}>
                 {!isCollapsed ? (
                     <div className="flex items-center gap-3 overflow-hidden">
-                        <img 
-                            src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png" 
-                            alt="Logo" 
-                            className="h-8 w-auto object-contain" 
+                        <img
+                            src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png"
+                            alt="Logo"
+                            className="h-8 w-auto object-contain"
                         />
                         <div className="flex flex-col">
                             <span className="font-bold text-white text-sm leading-tight whitespace-nowrap">Costa Lavos</span>
@@ -390,13 +372,13 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
                         </div>
                     </div>
                 ) : (
-                    <img 
-                        src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png" 
-                        alt="Logo" 
-                        className="h-8 w-auto object-contain" 
+                    <img
+                        src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png"
+                        alt="Logo"
+                        className="h-8 w-auto object-contain"
                     />
                 )}
-                
+
                 <Button
                     variant="ghost"
                     size="icon"
@@ -410,9 +392,9 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
             <ScrollArea className="flex-1 py-4">
                 <div className="px-2 space-y-1">
                     {menuItems.map((item) => (
-                        <SidebarItem 
-                            key={item.id} 
-                            item={item} 
+                        <SidebarItem
+                            key={item.id}
+                            item={item}
                             isCollapsed={isCollapsed}
                             isActive={isGroupActive(item)}
                             openGroups={openGroups}

@@ -119,55 +119,73 @@ const CustomerGroupDrilldownExplorer = () => {
   const containerRef = useRef(null);
 
   const fetchDrilldownData = useCallback(async (level, parentKeys) => {
-    const bodyPayload = {
-      p_start_date: filters.startDate,
-      p_end_date: filters.endDate,
-      p_exclude_employees: filters.excludeEmployees,
-      p_supervisors: filters.supervisors,
-      p_sellers: filters.sellers,
-      p_customer_groups: filters.customerGroups,
-      p_regions: filters.regions,
-      p_clients: filters.clients, // Correctly formatted array of strings from context
-      p_search_term: filters.searchTerm,
-      p_drilldown_level: level,
-      p_parent_keys: parentKeys
-    };
+    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null; 
+    const { data, error } = await supabase.functions.invoke('get-customer-group-drilldown-data', {
+      body: {
+        p_start_date: filters.startDate,
+        p_end_date: filters.endDate,
+        p_exclude_employees: filters.excludeEmployees,
+        p_supervisors: filters.supervisors,
+        p_sellers: filters.sellers,
+        p_customer_groups: filters.customerGroups,
+        p_regions: filters.regions,
+        p_clients: selectedClients,
+        p_search_term: filters.searchTerm,
+        p_drilldown_level: level,
+        p_parent_keys: parentKeys
+      }
+    });
 
-    const { data, error } = await supabase.rpc('get_customer_group_drilldown_data', bodyPayload);
-
-    if (error) {
-      toast({ variant: "destructive", title: `Erro ao detalhar`, description: error.message });
+    if (error || (data && data.error)) {
+      const errorMessage = error ? error.message : data.error;
+      toast({ variant: "destructive", title: `Erro ao detalhar`, description: errorMessage });
       return [];
     }
-    
-    if (data.error) {
-      toast({ variant: "destructive", title: `Erro na função do banco`, description: data.error });
-      return [];
+
+    if (data && data.debug && level === 2) {
+        console.log("----- DEBUG INFO -----");
+        console.log("count_records_before_level_filter:", data.debug.count_records_before_level_filter);
+        console.log("count_records_after_level_filter:", data.debug.count_records_after_level_filter);
+        console.log("----------------------");
     }
-    
-    return Array.isArray(data) ? data : [];
+
+    return (data && Array.isArray(data.data)) ? data.data : [];
   }, [filters, toast]);
 
   useEffect(() => {
     const fetchTopLevel = async () => {
-      if (!filters.startDate || !filters.endDate) return;
       setLoading(true);
-      const topLevelData = await fetchDrilldownData(1, []);
-      if (topLevelData) {
+      const selectedClients = filters.clients ? filters.clients.map(c => c.name) : null;
+      const { data, error } = await supabase.rpc('get_treemap_data', {
+        p_start_date: filters.startDate,
+        p_end_date: filters.endDate,
+        p_exclude_employees: filters.excludeEmployees,
+        p_supervisors: filters.supervisors,
+        p_sellers: filters.sellers,
+        p_customer_groups: filters.customerGroups,
+        p_regions: filters.regions,
+        p_clients: selectedClients,
+        p_search_term: filters.searchTerm,
+        p_analysis_mode: 'customerGroup',
+        p_show_defined_groups_only: true,
+      });
+
+      if (error) {
+        toast({ variant: "destructive", title: "Erro ao buscar grupos de clientes", description: error.message });
+        setPanels([]);
+      } else {
         setPanels([{
           title: panelTitles[0],
-          items: topLevelData,
+          items: data.map(d => ({ key: d.name, name: d.name, value: d.size })),
           selectedKey: null,
           isLoading: false,
         }]);
-      } else {
-        setPanels([]);
       }
       setLoading(false);
     };
 
     fetchTopLevel();
-  }, [fetchDrilldownData, filters.startDate, filters.endDate]);
+  }, [filters, toast]);
 
   const handleSelect = useCallback(async (panelIndex, item) => {
     const currentPanel = panels[panelIndex];
@@ -184,7 +202,7 @@ const CustomerGroupDrilldownExplorer = () => {
         return selectedItem ? selectedItem.key : null;
     }).filter(Boolean);
 
-    if (nextLevel > panelTitles.length) {
+    if (nextLevel > panelTitles.length) { // Products are fetched as the last level.
         setPanels(newPanels);
         setProductDetails({ isLoading: true, data: [] });
         const productData = await fetchDrilldownData(nextLevel, parentKeys);
@@ -192,29 +210,27 @@ const CustomerGroupDrilldownExplorer = () => {
         return;
     }
 
-    if (nextLevel > panelTitles.length + 1) {
-        return;
+    setPanels([...newPanels, { title: panelTitles[panelIndex + 1], items: [], selectedKey: null, isLoading: true }]);
+
+    const childrenData = await fetchDrilldownData(nextLevel, parentKeys);
+
+    if (nextLevel === 5) { // It's product data
+        setProductDetails({ isLoading: false, data: childrenData });
+        setPanels(newPanels); // No new panel for products
+    } else {
+        setPanels(prevPanels => {
+          const updatedPanels = [...prevPanels];
+          const targetPanelIndex = panelIndex + 1;
+          if (updatedPanels[targetPanelIndex]) {
+            updatedPanels[targetPanelIndex] = {
+              ...updatedPanels[targetPanelIndex],
+              items: childrenData,
+              isLoading: false,
+            };
+          }
+          return updatedPanels;
+        });
     }
-    
-    if (panelIndex + 1 < panelTitles.length) {
-      setPanels([...newPanels, { title: panelTitles[panelIndex + 1], items: [], selectedKey: null, isLoading: true }]);
-
-      const childrenData = await fetchDrilldownData(nextLevel, parentKeys);
-
-      setPanels(prevPanels => {
-        const updatedPanels = [...prevPanels];
-        const targetPanelIndex = panelIndex + 1;
-        if (updatedPanels[targetPanelIndex]) {
-          updatedPanels[targetPanelIndex] = {
-            ...updatedPanels[targetPanelIndex],
-            items: childrenData,
-            isLoading: false,
-          };
-        }
-        return updatedPanels;
-      });
-    }
-
   }, [panels, fetchDrilldownData]);
 
   useEffect(() => {
@@ -230,36 +246,23 @@ const CustomerGroupDrilldownExplorer = () => {
 
   const handleBreadcrumbClick = (index) => {
     const newPanels = panels.slice(0, index + 1);
-    newPanels[index] = { ...newPanels[index], selectedKey: null };
     setPanels(newPanels);
     setProductDetails({ isLoading: false, data: [] });
   };
 
   const handleHomeClick = () => {
-    const fetchTopLevel = async () => {
-      if (!filters.startDate || !filters.endDate) return;
-      setLoading(true);
-      const topLevelData = await fetchDrilldownData(1, []);
-       if (topLevelData) {
-        setPanels([{
-          title: panelTitles[0],
-          items: topLevelData,
-          selectedKey: null,
-          isLoading: false,
-        }]);
-      } else {
-        setPanels([]);
-      }
-      setProductDetails({ isLoading: false, data: [] });
-      setLoading(false);
-    };
-    fetchTopLevel();
+    const firstPanel = panels[0];
+    if (firstPanel) {
+      setPanels([{ ...firstPanel, selectedKey: null }]);
+    }
+    setProductDetails({ isLoading: false, data: [] });
   };
-  
-  const showProductDetails = panels.length === 4 && panels[3].selectedKey;
+
+  const lastPanel = panels[panels.length - 1];
+  const showProductDetails = lastPanel && lastPanel.selectedKey && panels.length === 4;
 
   if (loading) {
-    return <div className="flex items-center justify-center h-[600px]"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    return <div className="flex items-center justify-center h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
   return (

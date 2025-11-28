@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useNotificacoes } from '@/hooks/useNotificacoes';
@@ -37,6 +37,7 @@ const getNotificationIcon = (type) => {
 
 const NotificacoesBell = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const { fetchNotificacoesNaoLidas, marcarTodasComoLidas, marcarComoLida, deleteNotificacao, loading } = useNotificacoes();
   const [unreadNotifications, setUnreadNotifications] = useState([]);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
@@ -45,17 +46,31 @@ const NotificacoesBell = () => {
 
   const loadNotifications = useCallback(async () => {
     if (user?.id) {
-      const notifications = await fetchNotificacoesNaoLidas(user.id);
-      setUnreadNotifications(notifications || []);
-      setTotalUnreadCount(notifications?.length || 0);
+      const { data, error } = await supabase.rpc('get_notificacoes_filtradas', {
+        p_usuario_id: user.id,
+        p_status: 'nao_lida',
+        p_arquivada: false
+      });
+
+      if (error) {
+        console.error("Error fetching unread notifications:", error.message);
+        toast({
+            variant: "destructive",
+            title: "Erro ao buscar notificações",
+            description: "Não foi possível carregar as notificações não lidas.",
+        });
+        return;
+      }
+      
+      setUnreadNotifications(data || []);
+      setTotalUnreadCount(data?.length || 0);
     }
-  }, [user, fetchNotificacoesNaoLidas]);
+  }, [user, toast]);
 
   useEffect(() => {
     if (!user) return;
     loadNotifications();
 
-    // Realtime subscription
     const channel = supabase.channel('public:apoio_notificacoes')
       .on('postgres_changes', { 
         event: 'INSERT', 
@@ -63,7 +78,6 @@ const NotificacoesBell = () => {
         table: 'apoio_notificacoes', 
         filter: `usuario_id=eq.${user.id}` 
       }, (payload) => {
-        // Trigger browser notification if supported and permitted
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification(payload.new.titulo, { body: payload.new.mensagem });
         }

@@ -18,7 +18,7 @@ import {
 import { searchClientesComodato } from '@/services/apoioSyncService';
 import { useDebounce } from '@/hooks/useDebounce';
 
-export function ClientSearch({ onSelect, selectedValue, placeholder = "Buscar cliente..." }) {
+function ClientSearch({ onSelect, onClientSelect, selectedValue, placeholder = "Buscar cliente..." }) {
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [clients, setClients] = useState([]);
@@ -26,6 +26,11 @@ export function ClientSearch({ onSelect, selectedValue, placeholder = "Buscar cl
   const debouncedSearch = useDebounce(searchTerm, 300);
 
   useEffect(() => {
+    if (!debouncedSearch) {
+      setClients([]);
+      return;
+    }
+    
     const fetchClients = async () => {
       setLoading(true);
       try {
@@ -43,12 +48,15 @@ export function ClientSearch({ onSelect, selectedValue, placeholder = "Buscar cl
   }, [debouncedSearch]);
 
   const handleSelect = (client) => {
-    onSelect(client);
+    const selectHandler = onSelect || onClientSelect;
+    if (typeof selectHandler === 'function') {
+      selectHandler(client);
+    }
     setOpen(false);
   };
 
   const selectedClientLabel = selectedValue 
-    ? (clients.find(c => c.cliente_id === selectedValue.cliente_id && c.loja === selectedValue.loja)?.nome_fantasia || selectedValue.label)
+    ? (clients.find(c => c.cliente_id === selectedValue.cliente_id && c.loja === selectedValue.loja)?.nome_fantasia || selectedValue.label || selectedValue.name || placeholder)
     : placeholder;
 
   return (
@@ -60,7 +68,7 @@ export function ClientSearch({ onSelect, selectedValue, placeholder = "Buscar cl
           aria-expanded={open}
           className="w-full justify-between"
         >
-          {selectedClientLabel}
+          <span className="truncate">{selectedClientLabel}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -77,14 +85,14 @@ export function ClientSearch({ onSelect, selectedValue, placeholder = "Buscar cl
                     <Loader2 className="h-4 w-4 animate-spin mr-2" /> Buscando...
                 </div>
             )}
-            {!loading && clients.length === 0 && (
+            {!loading && clients.length === 0 && searchTerm && (
                 <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
             )}
             <CommandGroup>
               {clients.map((client) => (
                 <CommandItem
                   key={`${client.cliente_id}-${client.loja}`}
-                  value={`${client.cliente_id}-${client.loja}`}
+                  value={`${client.cliente_id}-${client.loja}-${client.nome_fantasia}`}
                   onSelect={() => handleSelect(client)}
                 >
                   <Check
@@ -93,9 +101,9 @@ export function ClientSearch({ onSelect, selectedValue, placeholder = "Buscar cl
                       selectedValue?.cliente_id === client.cliente_id && selectedValue?.loja === client.loja ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <div className="flex flex-col">
-                    <span className="font-medium">{client.nome_fantasia || client.razao_social}</span>
-                    <span className="text-xs text-muted-foreground">
+                  <div className="flex flex-col overflow-hidden">
+                    <span className="font-medium truncate">{client.nome_fantasia || client.razao_social}</span>
+                    <span className="text-xs text-muted-foreground truncate">
                         {client.razao_social} - {client.cliente_id}/{client.loja}
                     </span>
                   </div>
@@ -108,3 +116,5 @@ export function ClientSearch({ onSelect, selectedValue, placeholder = "Buscar cl
     </Popover>
   );
 }
+
+export default ClientSearch;

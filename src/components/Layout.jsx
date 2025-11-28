@@ -29,8 +29,6 @@ const Layout = () => {
     '/calculo-rfm',
     '/tendencia-vendas',
     '/baixo-desempenho',
-    '/produtos-bonificados',
-    '/performance-bonificados',
     '/movimentacao-equipamentos',
     '/equipamentos-em-campo',
     '/raio-x'

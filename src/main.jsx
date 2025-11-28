@@ -1,3 +1,4 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -9,11 +10,13 @@ import App from './App';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <BrowserRouter>
-    <QueryClientProvider client={queryClient}>
-      <MsalProvider instance={msalInstance}>
-        <App />
-      </MsalProvider>
-    </QueryClientProvider>
-  </BrowserRouter>
+  <>
+    <BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <MsalProvider instance={msalInstance}>
+          <App />
+        </MsalProvider>
+      </QueryClientProvider>
+    </BrowserRouter>
+  </>
 );

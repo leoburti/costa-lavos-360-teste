@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, ChevronRight, Building2, User, Users, Store, Home } from 'lucide-react';
@@ -17,7 +16,7 @@ const formatCurrency = (value) => {
 };
 
 const formatPercentage = (value) => {
-    if (typeof value !== 'number') return '0.00%';
+    if (typeof value !== 'number' || !isFinite(value)) return '0.00%';
     return `${value.toFixed(2)}%`;
 }
 

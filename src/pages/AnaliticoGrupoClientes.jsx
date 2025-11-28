@@ -1,89 +1,62 @@
-
-import React, { useMemo, useEffect } from 'react';
+import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import ChartCard from '@/components/ChartCard';
-import AIInsight from '@/components/AIInsight';
-import CustomerGroupDrilldownExplorer from '@/components/CustomerGroupDrilldownExplorer';
-import TreeMapChart from '@/components/TreeMapChart';
+import { Users, Layers } from 'lucide-react';
+
 import { useFilters } from '@/contexts/FilterContext';
-import { useAIInsight } from '@/hooks/useAIInsight';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
-import { Loader2 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isValid } from 'date-fns';
+import { Skeleton } from '@/components/ui/skeleton';
+import TreeMapChart from '@/components/TreeMapChart';
+import CustomerGroupDrilldownExplorer from '@/components/CustomerGroupDrilldownExplorer';
 
 const AnaliticoGrupoClientes = () => {
   const { filters } = useFilters();
 
-  // Safe date extraction
-  const dateRange = useMemo(() => {
-      const now = new Date();
-      const from = filters.dateRange?.from && isValid(new Date(filters.dateRange.from)) ? new Date(filters.dateRange.from) : startOfMonth(now);
-      const to = filters.dateRange?.to && isValid(new Date(filters.dateRange.to)) ? new Date(filters.dateRange.to) : endOfMonth(now);
-      return { from, to };
-  }, [filters.dateRange]);
-
-  const startDateStr = format(dateRange.from, 'yyyy-MM-dd');
-  const endDateStr = format(dateRange.to, 'yyyy-MM-dd');
-
-  const params = useMemo(() => ({
-    p_start_date: startDateStr,
-    p_end_date: endDateStr,
-    p_exclude_employees: filters.excludeEmployees ?? true,
-    p_supervisors: filters.supervisors === 'all' ? null : filters.supervisors,
-    p_sellers: filters.sellers === 'all' ? null : filters.sellers,
-    p_customer_groups: filters.customerGroups === 'all' ? null : filters.customerGroups,
-    p_regions: filters.regions === 'all' ? null : filters.regions,
-    p_clients: Array.isArray(filters.clients) ? filters.clients.map(c => c.value) : null,
-    p_search_term: filters.searchTerm || null,
-    p_analysis_mode: 'customerGroup',
-    p_show_defined_groups_only: true,
-  }), [filters, startDateStr, endDateStr]);
-
-  // Memoize options to ensure referential stability
-  const options = useMemo(() => ({ 
-    enabled: !!startDateStr && !!endDateStr, 
-    defaultValue: [] 
-  }), [startDateStr, endDateStr]);
-
-  const { data: treemapData, loading: loadingTreemap, refetch } = useAnalyticalData(
-    'get_treemap_data', 
-    params, 
-    options
+  const { data: treemapData, loading: treemapLoading } = useAnalyticalData(
+    'get_treemap_data',
+    {
+      ...filters,
+      analysisMode: 'customerGroup',
+      showDefinedGroupsOnly: true, // Specific to this page
+    }
   );
 
-  const { insight, loading: loadingAI, generateInsights } = useAIInsight('customer_group_analysis', treemapData);
-
   return (
-    <>
+    <div className="space-y-6 animate-in fade-in duration-500">
       <Helmet>
-        <title>Analítico Grupos de Clientes - Costa Lavos</title>
+        <title>Analítico por Grupo de Clientes | Costa Lavos</title>
       </Helmet>
 
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tighter">Analítico por Grupos de Clientes</h1>
-          <p className="text-muted-foreground mt-1">Explore as vendas navegando através dos grupos de clientes, clientes, pedidos e produtos.</p>
+      <div className="flex items-center gap-3">
+        <div className="bg-purple-100 p-3 rounded-full">
+          <Users className="h-6 w-6 text-purple-600" />
         </div>
-        
-        <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
-
-        <div className="grid grid-cols-1 gap-8">
-           <ChartCard title="Distribuição de Vendas por Grupo de Cliente" height={400}>
-            {loadingTreemap ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : (
-              <TreeMapChart data={treemapData || []} />
-            )}
-          </ChartCard>
-
-          <ChartCard title="Explorador de Vendas por Grupo de Cliente" childClassName="p-0">
-            <CustomerGroupDrilldownExplorer key={JSON.stringify(params)} />
-          </ChartCard>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Analítico por Grupo de Clientes</h1>
+          <p className="text-muted-foreground">Desempenho de vendas por agrupamento de clientes.</p>
         </div>
       </div>
-    </>
+
+      <div className="grid grid-cols-1 gap-6">
+        {treemapLoading ? (
+            <Skeleton className="h-[485px] w-full" />
+        ) : (
+            <TreeMapChart 
+                title="Hierarquia de Vendas por Grupo de Clientes"
+                description="Visão geral do faturamento por grupo. Passe o mouse para detalhes."
+                data={treemapData} 
+            />
+        )}
+      </div>
+
+      <div>
+        <h2 className="text-xl font-bold tracking-tight text-slate-800 mb-4 flex items-center gap-2">
+            <Layers className="h-5 w-5 text-indigo-500" />
+            Explorador de Vendas por Grupo
+        </h2>
+        <CustomerGroupDrilldownExplorer filters={filters} />
+      </div>
+
+    </div>
   );
 };
 

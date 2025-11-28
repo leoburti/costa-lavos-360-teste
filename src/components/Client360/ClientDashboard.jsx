@@ -17,6 +17,7 @@ import { ptBR } from 'date-fns/locale';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Pie, Cell } from 'recharts';
 import MetricCard from '@/components/MetricCard';
 import { formatCurrency } from '@/lib/utils';
+import PageSkeleton from '@/components/PageSkeleton';
 
 // --- Helper Functions ---
 const getStatusColor = (status) => {
@@ -606,7 +607,6 @@ const ContactsTab = ({ client, crm }) => (
             </div>
           </div>
 
-          {/* CRM Contacts */}
           {crm?.contacts?.map((contact) => (
              <div key={contact.id} className="flex items-start gap-4 p-4 border rounded-lg bg-card">
                 <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-full">
@@ -667,6 +667,11 @@ const DocumentsTab = ({ documents }) => (
 // --- Main Component ---
 
 export default function Client360Dashboard({ data }) {
+  if (!data) {
+    // If for some reason the component is rendered without data, show a skeleton.
+    return <PageSkeleton />;
+  }
+
   const { basicInfo, commercial, support, inventory, crm, documents } = data;
 
   const handleExport = () => {

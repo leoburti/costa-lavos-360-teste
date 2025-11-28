@@ -1,9 +1,9 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { useNotifications } from '@/contexts/NotificationContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,28 +15,35 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useFormStatePersistence } from '@/hooks/useFormStatePersistence';
 import { PersistenceStatus } from '@/components/PersistenceStatus';
+import { MultiSelect } from '@/components/ui/multi-select';
 
 const formatCurrency = (value) => {
     if (typeof value !== 'number') return 'R$ 0,00';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-const NewRequestView = ({ setView, onSuccess }) => {
+const bonificationReasons = [
+    { value: 'Comercial', label: 'Comercial' },
+    { value: 'Equipamento', label: 'Equipamento' },
+    { value: 'Institucional', label: 'Institucional' },
+    { value: 'Logística', label: 'Logística' },
+    { value: 'Marketing', label: 'Marketing' },
+];
+
+const NewRequestView = ({ onSuccess }) => {
     const { toast } = useToast();
     const { user } = useAuth();
-    const { addNotification } = useNotifications();
-
-    // Persistence Hook
+    
     const { formData, handleChange, status, lastSaved, clearDraft } = useFormStatePersistence('bonificacao_new_request', {
         selectedClient: null,
         selectedProducts: [],
         clientSupervisor: '',
         clientSeller: '',
-        monthlyLimit: 0
+        monthlyLimit: 0,
+        motivos: [],
     });
 
-    // Use formData for controlled inputs
-    const { selectedClient, selectedProducts, clientSupervisor, clientSeller, monthlyLimit } = formData;
+    const { selectedClient, selectedProducts, clientSupervisor, clientSeller, monthlyLimit, motivos } = formData;
 
     const [clients, setClients] = useState([]);
     const [loadingClients, setLoadingClients] = useState(true);
@@ -87,8 +94,6 @@ const NewRequestView = ({ setView, onSuccess }) => {
     }, [toast]);
     
     const handleClientSelect = async (client) => {
-        // Update multiple fields manually or via handleChange individually
-        // Better to update all related fields
         let newMonthlyLimit = 0;
         try {
             const { data: settingsData } = await supabase.from('bonification_settings').select('monthly_limit_percentage').eq('id', 1).single();
@@ -111,9 +116,6 @@ const NewRequestView = ({ setView, onSuccess }) => {
             newMonthlyLimit = 0;
         }
 
-        // Bulk update simulation using multiple handleChange (or could add bulk method to hook)
-        // Since hook uses setFormData(prev => ...), sequential calls work but trigger multiple saves.
-        // Better to do:
         handleChange('selectedClient', client);
         handleChange('clientSupervisor', client.supervisor);
         handleChange('clientSeller', client.seller);
@@ -171,8 +173,8 @@ const NewRequestView = ({ setView, onSuccess }) => {
 
 
     const handleSubmit = async () => {
-        if (!selectedClient || selectedProducts.length === 0) {
-            toast({ variant: 'destructive', title: 'Campos obrigatórios', description: 'Selecione um cliente e ao menos um produto.' });
+        if (!selectedClient || selectedProducts.length === 0 || motivos.length === 0) {
+            toast({ variant: 'destructive', title: 'Campos obrigatórios', description: 'Selecione um motivo, um cliente e ao menos um produto.' });
             return;
         }
 
@@ -196,6 +198,7 @@ const NewRequestView = ({ setView, onSuccess }) => {
                     seller_name: clientSeller,
                     products_json: productsToSubmit,
                     total_amount: totalBonification,
+                    motivos: motivos,
                 });
 
             if (requestError) throw requestError;
@@ -205,10 +208,6 @@ const NewRequestView = ({ setView, onSuccess }) => {
             clearDraft(); // Clear storage
 
             if (onSuccess) onSuccess();
-            else if (setView) setView('consult');
-            else {
-                handleClearClient();
-            }
 
         } catch (error) {
             console.error('[DEBUG] Error inserting bonification request:', error);
@@ -220,21 +219,25 @@ const NewRequestView = ({ setView, onSuccess }) => {
 
     return (
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
-            {setView && (
-                <Button variant="ghost" onClick={() => setView('initial')} className="mb-4">
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Voltar
-                </Button>
-            )}
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <div>
                         <CardTitle>Nova Solicitação de Bonificação</CardTitle>
-                        <CardDescription>Selecione um cliente para iniciar a solicitação.</CardDescription>
+                        <CardDescription>Preencha os motivos e selecione um cliente para iniciar.</CardDescription>
                     </div>
                     <PersistenceStatus status={status} lastSaved={lastSaved} />
                 </CardHeader>
                 <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                        <MultiSelect
+                            label="Motivo(s) da Bonificação"
+                            options={bonificationReasons}
+                            selected={motivos}
+                            onChange={(newMotivos) => handleChange('motivos', newMotivos)}
+                            placeholder="Selecione um ou mais motivos"
+                        />
+                    </div>
+
                     {!selectedClient ? (
                         <div className="space-y-2">
                              <Label htmlFor="client-search">Buscar Cliente</Label>
@@ -243,17 +246,20 @@ const NewRequestView = ({ setView, onSuccess }) => {
                                 placeholder="Digite o nome fantasia..." 
                                 value={clientSearchTerm}
                                 onChange={e => setClientSearchTerm(e.target.value)}
+                                disabled={motivos.length === 0}
                              />
+                             {motivos.length === 0 && <p className="text-xs text-muted-foreground">Selecione um motivo para habilitar a busca de clientes.</p>}
                              <ScrollArea className="h-72 border rounded-md mt-2">
-                                {loadingClients ? (
+                                {loadingClients && motivos.length > 0 ? (
                                     <div className="flex items-center justify-center h-full"><Loader2 className="h-6 w-6 animate-spin"/></div>
-                                ) : (
+                                ) : filteredClients.length > 0 && motivos.length > 0 ? (
                                     filteredClients.map(client => (
                                         <div key={client.value} onClick={() => handleClientSelect(client)} className="p-2 hover:bg-muted cursor-pointer text-sm">
                                             {client.label}
                                         </div>
                                     ))
-                                )}
+                                ) : <div className="p-4 text-center text-sm text-muted-foreground">Nenhum cliente para exibir.</div>
+                                }
                              </ScrollArea>
                         </div>
                     ) : (

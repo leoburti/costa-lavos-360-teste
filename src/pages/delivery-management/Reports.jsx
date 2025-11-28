@@ -20,6 +20,7 @@ import ProtocolDetailReport from '@/components/delivery/ProtocolDetailReport';
 import SyntheticReport from '@/components/delivery/SyntheticReport';
 import BoxBalanceReport from '@/components/delivery/BoxBalanceReport';
 import { Badge } from '@/components/ui/badge';
+import { useFilters } from '@/contexts/FilterContext';
 
 // Tab 1: Individual Protocols
 const IndividualProtocolsTab = () => {
@@ -67,32 +68,44 @@ const IndividualProtocolsTab = () => {
     const handleDateSelect = (selectedDate) => {
         setDate(selectedDate);
     }
+    
+    // Callback to be passed to useReactToPrint
+    const onAfterPrint = useCallback(() => {
+        setPrintingProtocol(null);
+        setIsDownloading(false);
+        toast({ title: "Sucesso", description: "PDF gerado e pronto para download." });
+    }, [toast]);
 
-    const handleDownloadPDF = async (protocol) => {
+    const onPrintError = useCallback(() => {
+        setPrintingProtocol(null);
+        setIsDownloading(false);
+        toast({ variant: 'destructive', title: "Erro", description: "Falha ao gerar o PDF." });
+    }, [toast]);
+
+    const handleDownloadPDF = (protocol) => {
         if (isDownloading) return;
-        
         setIsDownloading(true);
         setPrintingProtocol(protocol);
-
-        // Wait for state update and rendering of hidden component
-        setTimeout(async () => {
-            try {
-                if (reportRef.current) {
-                    const filename = `Protocolo_${protocol.venda_num_docto || 'Entrega'}_${format(new Date(), 'ddMMyyyy')}.pdf`;
-                    await generatePDF(reportRef.current, filename);
-                    toast({ title: "Sucesso", description: "PDF baixado com sucesso!" });
-                } else {
-                    throw new Error("Elemento do relatório não encontrado.");
-                }
-            } catch (error) {
-                console.error(error);
-                toast({ variant: 'destructive', title: "Erro", description: "Falha ao gerar o PDF. Tente novamente." });
-            } finally {
-                setIsDownloading(false);
-                setPrintingProtocol(null);
-            }
-        }, 1000); // Give 1s for images to load in the hidden DOM
     };
+
+    useEffect(() => {
+        if (printingProtocol && reportRef.current && isDownloading) {
+            // Trigger print now that the state is updated and component rendered
+            const generateAndDownload = async () => {
+                try {
+                    const filename = `Protocolo_${printingProtocol.venda_num_docto || 'Entrega'}_${format(new Date(), 'ddMMyyyy')}.pdf`;
+                    await generatePDF(reportRef.current, filename);
+                    onAfterPrint();
+                } catch (error) {
+                    console.error("PDF Generation Error:", error);
+                    onPrintError();
+                }
+            };
+            // Use timeout to ensure images are loaded
+            setTimeout(generateAndDownload, 1000);
+        }
+    }, [printingProtocol, isDownloading, onAfterPrint, onPrintError]);
+
 
     const filteredProtocols = useMemo(() => {
         if (!debouncedSearchTerm) return protocols;
@@ -206,7 +219,7 @@ const IndividualProtocolsTab = () => {
             
             {/* Hidden Report Component for Generation */}
             <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', width: '210mm' }}>
-                <ProtocolDetailReport ref={reportRef} protocol={printingProtocol} />
+                {printingProtocol && <ProtocolDetailReport ref={reportRef} protocol={printingProtocol} />}
             </div>
         </div>
     );
@@ -215,7 +228,7 @@ const IndividualProtocolsTab = () => {
 
 // Tab 2: Synthetic Report
 const SyntheticReportTab = () => {
-    const [dateRange, setDateRange] = useState({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) });
+    const { filters } = useFilters();
     const [reportData, setReportData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
@@ -223,14 +236,14 @@ const SyntheticReportTab = () => {
     const { toast } = useToast();
 
     const generateReport = useCallback(async () => {
-        if (!dateRange?.from || !dateRange?.to) {
+        if (!filters.dateRange?.from || !filters.dateRange?.to) {
             toast({ variant: 'destructive', title: 'Período inválido.' });
             return;
         }
         setLoading(true);
         try {
-             const startDate = startOfDay(dateRange.from).toISOString();
-            const endDate = endOfDay(dateRange.to).toISOString();
+             const startDate = startOfDay(filters.dateRange.from).toISOString();
+            const endDate = endOfDay(filters.dateRange.to).toISOString();
 
             const { data, error } = await supabase
                 .from('entregas')
@@ -258,7 +271,7 @@ const SyntheticReportTab = () => {
         } finally {
             setLoading(false);
         }
-    }, [dateRange, toast]);
+    }, [filters.dateRange, toast]);
 
     const handleDownloadPDF = async () => {
         if (isDownloading || !reportData) return;
@@ -329,7 +342,7 @@ const SyntheticReportTab = () => {
             )}
              {/* Hidden container for generation */}
              <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', width: '210mm' }}>
-                <SyntheticReport ref={reportRef} data={reportData} dateRange={dateRange} />
+                <SyntheticReport ref={reportRef} data={reportData} dateRange={filters.dateRange} />
             </div>
         </div>
     );

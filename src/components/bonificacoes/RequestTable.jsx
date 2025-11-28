@@ -1,7 +1,9 @@
+
 import React from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Loader2, Trash2, ShieldAlert, ChevronsUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -32,26 +34,20 @@ const RequestTable = ({ requests, loading, title, description, onOpenDetail, onD
     const protheusHeaders = [
         { key: "document_number", label: "Num. Dcto." },
         { key: "client_name", label: "Cliente" },
-        { key: "loja", label: "Loja" },
         { key: "total_amount", label: "Valor" },
         { key: "request_date", label: "Data" },
-        { key: "mes", label: "Mês" },
-        { key: "ano", label: "Ano" },
         { key: "status", label: "Status" },
-        { key: "percentual", label: "Percentual" },
-        { key: "user_full_name", label: "Solicitante" },
+        { key: "motivos", label: "Motivos" },
+        { key: "seller_name", label: "Vendedor" },
     ];
 
     const defaultHeaders = [
         { key: "client_name", label: "Cliente" },
-        { key: "loja", label: "Loja" },
         { key: "total_amount", label: "Valor" },
         { key: "request_date", label: "Data" },
-        { key: "mes", label: "Mês" },
-        { key: "ano", label: "Ano" },
         { key: "status", label: "Status" },
-        { key: "percentual", label: "Percentual" },
-        { key: "user_full_name", label: "Solicitante" },
+        { key: "motivos", label: "Motivos" },
+        { key: "seller_name", label: "Vendedor" },
     ];
     
     const headers = isProtheus ? protheusHeaders : defaultHeaders;
@@ -72,7 +68,7 @@ const RequestTable = ({ requests, loading, title, description, onOpenDetail, onD
                                         {h.label}
                                     </SortableHeader>
                                 ))}
-                                <TableHead>Ações</TableHead>
+                                <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -84,15 +80,19 @@ const RequestTable = ({ requests, loading, title, description, onOpenDetail, onD
                                 requests.map(req => (
                                     <TableRow key={req.id}>
                                         {isProtheus && <TableCell>{req.document_number}</TableCell>}
-                                        <TableCell>{req.client_name}</TableCell>
-                                        <TableCell>{req.loja}</TableCell>
+                                        <TableCell className="font-medium">{req.client_name}</TableCell>
                                         <TableCell>{formatCurrency(req.total_amount)}</TableCell>
                                         <TableCell>{formatDate(req.request_date, 'dd/MM/yyyy HH:mm')}</TableCell>
-                                        <TableCell>{req.mes}</TableCell>
-                                        <TableCell>{req.ano}</TableCell>
                                         <TableCell><BonificationStatusBadge status={req.status} /></TableCell>
-                                        <TableCell>{formatPercentage(req.percentual)}</TableCell>
-                                        <TableCell>{req.user_full_name}</TableCell>
+                                        <TableCell>
+                                            <div className="flex flex-wrap gap-1">
+                                                {(req.motivos && req.motivos.length > 0) 
+                                                    ? req.motivos.map(motivo => <Badge key={motivo} variant="secondary">{motivo}</Badge>) 
+                                                    : <span className="text-xs text-muted-foreground">N/A</span>
+                                                }
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{req.seller_name}</TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end items-center gap-2">
                                                 <Button variant="ghost" size="sm" onClick={() => onOpenDetail && onOpenDetail(req)}>Ver Detalhes</Button>

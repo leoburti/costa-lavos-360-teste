@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, User, ShoppingCart, Wrench, Calendar, MapPin, HardHat } from 'lucide-react';
 import { exportToPDF } from '@/utils/geoExportUtils';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+
+const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
 // Sub-components for tabs
 const InfoTab = ({ client, commercial }) => (
@@ -101,24 +103,33 @@ const InfoTab = ({ client, commercial }) => (
 const SalesTab = ({ commercial }) => {
   if (!commercial) return <div className="p-8 text-center text-muted-foreground">Sem dados de vendas.</div>;
 
-  const salesData = commercial.sales_last_3_months?.map(s => ({
-    name: format(new Date(s.month + '-01'), 'MMM/yy', { locale: ptBR }),
-    valor: s.revenue
-  })) || [];
+  const salesEvolutionData = commercial.sales_last_3_months?.map(s => {
+    const date = new Date(s.month + '-02'); // Use day 2 to avoid timezone issues
+    if (!isValid(date)) return null;
+    return {
+      name: format(date, 'MMM/yy', { locale: ptBR }),
+      Vendas: s.revenue,
+      Bonificação: s.bonification || 0, // Assuming bonification data might come here
+    }
+  }).filter(Boolean) || [];
 
+  const topProductsData = commercial.top_10_products_12m || [];
+
+  const ticketMedio = commercial.total_orders > 0 ? commercial.total_revenue / commercial.total_orders : 0;
+  
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-6">
-            <p className="text-sm font-medium text-muted-foreground">Total Vendas (12 meses)</p>
-            <p className="text-2xl font-bold">R$ {commercial.total_revenue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p className="text-sm font-medium text-muted-foreground">Total Vendas (12m)</p>
+            <p className="text-2xl font-bold">{formatCurrency(commercial.total_revenue)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-muted-foreground">Total Bonificado</p>
-            <p className="text-2xl font-bold">R$ {commercial.total_bonification?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p className="text-2xl font-bold">{formatCurrency(commercial.total_bonification)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -127,30 +138,63 @@ const SalesTab = ({ commercial }) => {
             <p className="text-2xl font-bold">{commercial.total_orders}</p>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-sm font-medium text-muted-foreground">Ticket Médio</p>
+            <p className="text-2xl font-bold">{formatCurrency(ticketMedio)}</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Evolução de Vendas</CardTitle>
-        </CardHeader>
-        <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={salesData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip formatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`} />
-              <Bar dataKey="valor" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Receita" />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Evolução de Vendas e Bonificações</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            {salesEvolutionData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={salesEvolutionData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={(value) => `R$${(value/1000).toFixed(1)}k`} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Legend />
+                  <Bar dataKey="Vendas" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Bonificação" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground">Nenhum dado de evolução encontrado.</div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Top 10 Produtos (12 Meses)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {topProductsData.length > 0 ? (
+              <div className="space-y-4">
+                {topProductsData.map((product, index) => (
+                  <div key={index} className="flex justify-between items-center">
+                    <span className="text-sm truncate">{product.product_name}</span>
+                    <span className="text-sm font-semibold">{formatCurrency(product.total_revenue)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[268px] text-muted-foreground">Nenhum produto encontrado.</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
 
 const SupportTab = ({ support }) => {
-  if (!support?.found || support.chamados.length === 0) return <div className="p-8 text-center text-muted-foreground">Nenhum chamado encontrado.</div>;
+  if (!support?.found || !support.chamados || support.chamados.length === 0) return <div className="p-8 text-center text-muted-foreground">Nenhum chamado encontrado.</div>;
 
   return (
     <div className="space-y-6">
@@ -207,13 +251,13 @@ const SupportTab = ({ support }) => {
 
 const EquipmentTab = ({ inventory, support }) => {
   const comodatoEquipments = support?.equipamentos || [];
-  const hasData = inventory.length > 0 || comodatoEquipments.length > 0;
+  const hasData = (inventory && inventory.length > 0) || comodatoEquipments.length > 0;
 
   if (!hasData) return <div className="p-8 text-center text-muted-foreground">Nenhum equipamento encontrado.</div>;
 
   return (
     <div className="space-y-6">
-      {inventory.length > 0 && (
+      {inventory && inventory.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Inventário (Vendas)</CardTitle>
@@ -267,7 +311,7 @@ const EquipmentTab = ({ inventory, support }) => {
 };
 
 const AgendaTab = ({ support }) => {
-  if (!support?.found || support.agenda.length === 0) return <div className="p-8 text-center text-muted-foreground">Nenhum agendamento encontrado.</div>;
+  if (!support?.found || !support.agenda || support.agenda.length === 0) return <div className="p-8 text-center text-muted-foreground">Nenhum agendamento encontrado.</div>;
 
   return (
     <Card>
@@ -300,7 +344,7 @@ const AgendaTab = ({ support }) => {
 };
 
 const GeoTab = ({ support }) => {
-  if (!support?.found || support.geolocalizacao.length === 0) return <div className="p-8 text-center text-muted-foreground">Nenhum registro de geolocalização.</div>;
+  if (!support?.found || !support.geolocalizacao || support.geolocalizacao.length === 0) return <div className="p-8 text-center text-muted-foreground">Nenhum registro de geolocalização.</div>;
 
   return (
     <Card>
@@ -337,13 +381,13 @@ export default function Client360Dashboard({ data }) {
     exportToPDF(`Visao360_${basicInfo.nome_fantasia || basicInfo.nome}`, ['Seção', 'Detalhes'], [
       ['Cliente', basicInfo.nome],
       ['CNPJ', basicInfo.cnpj || '-'],
-      ['Vendas (12m)', commercial ? `R$ ${commercial.total_revenue}` : '-'],
+      ['Vendas (12m)', commercial ? formatCurrency(commercial.total_revenue) : '-'],
       ['Chamados', support?.found ? support.chamados.length : 0]
     ]);
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 p-6 overflow-y-auto h-full">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">{basicInfo.nome_fantasia || basicInfo.nome}</h2>
@@ -354,7 +398,7 @@ export default function Client360Dashboard({ data }) {
         </Button>
       </div>
 
-      <Tabs defaultValue="info" className="w-full">
+      <Tabs defaultValue="vendas" className="w-full">
         <TabsList className="w-full justify-start h-auto flex-wrap bg-transparent p-0 gap-2">
           <TabsTrigger value="info" className="data-[state=active]:bg-primary data-[state=active]:text-white border bg-white"><User className="w-4 h-4 mr-2"/> Informações</TabsTrigger>
           <TabsTrigger value="vendas" className="data-[state=active]:bg-primary data-[state=active]:text-white border bg-white"><ShoppingCart className="w-4 h-4 mr-2"/> Vendas</TabsTrigger>

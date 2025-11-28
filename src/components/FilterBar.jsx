@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { Input } from '@/components/ui/input';
@@ -21,17 +20,15 @@ const FilterBar = () => {
     }
   }, [debouncedSearchTerm, updateFilters, filters.searchTerm]);
 
-  // Effect 2: Sync Global Context changes back to local state (e.g. "Clear All" button)
+  // Effect 2: Sync Global Context changes back to local state (e.g. from "Clear All" or another component)
   useEffect(() => {
-    // Check if filters.searchTerm is defined and different from local state
-    // We use a check against debouncedSearchTerm to avoid overwriting user typing
-    if (filters.searchTerm !== undefined && filters.searchTerm !== searchTerm) {
-       if (filters.searchTerm !== debouncedSearchTerm) {
-         setSearchTerm(filters.searchTerm || '');
-       }
+    // Check if the global searchTerm is different from the local one.
+    // This syncs changes from other components without causing an infinite loop.
+    if (filters.searchTerm !== searchTerm) {
+      setSearchTerm(filters.searchTerm || '');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.searchTerm]); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.searchTerm]);
 
   return (
     <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 sticky top-0 bg-background/95 backdrop-blur-sm z-10 py-4 px-4 sm:px-6 lg:px-8 border-b">

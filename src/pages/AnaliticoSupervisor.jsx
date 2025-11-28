@@ -1,11 +1,10 @@
-
 import React, { useState, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { format, startOfMonth, endOfMonth, subMonths, subDays } from 'date-fns';
 import { 
   DollarSign, TrendingUp, ShoppingCart, Package, Target, PieChart, 
   Award, Users, Briefcase, Gift, BarChart3, Download, Activity, 
-  ChevronRight, Home, Filter
+  Home, Filter
 } from 'lucide-react';
 import { 
   ResponsiveContainer, ComposedChart, Line, Bar, XAxis, YAxis, 
@@ -19,7 +18,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 
 // Custom Components
 import KPICard from '@/components/supervisor/KPICard';
@@ -121,7 +119,7 @@ const AnaliticoSupervisor = () => {
       // Efficiency Index
       const scoreRevenue = (curr.total_revenue / maxRevenue) * 40;
       const scoreGrowth = Math.min(20, Math.max(0, (growth + 0.5) * 20)); 
-      const scoreROI = Math.min(20, roi * 1.5); 
+      const scoreROI = Math.min(20, (roi ?? 0) * 1.5); // Use nullish coalescing here
       const scoreTicket = Math.min(20, (ticket / 1000) * 5); 
       
       const efficiencyIndex = scoreRevenue + scoreGrowth + scoreROI + scoreTicket;
@@ -129,7 +127,7 @@ const AnaliticoSupervisor = () => {
       return {
         ...curr,
         growth,
-        roi: roi.toFixed(1),
+        roi: (roi ?? 0), // Use nullish coalescing here
         efficiencyIndex,
         avgTicket: ticket,
         activeSellers: curr.client_activation > 0 ? Math.max(1, Math.round(curr.client_activation / 15)) : 0,
@@ -182,9 +180,16 @@ const AnaliticoSupervisor = () => {
   }, [dailyData, dateRange]);
 
   const handleExport = () => {
-    if (dashboardData.ranking.length === 0) return;
+    if (dashboardData.ranking.length === 0) {
+      toast({
+        title: "Nenhum dado para exportar",
+        description: "Não há dados de ranking de supervisores disponíveis para exportação.",
+        variant: "destructive",
+      });
+      return;
+    }
     toast({ title: "Iniciando exportação...", description: "Seu arquivo será baixado em instantes." });
-    // Logic to csv export...
+    // 🚧 This feature isn't implemented yet—but don't worry! You can request it in your next prompt! 🚀
   };
 
   return (
@@ -240,24 +245,24 @@ const AnaliticoSupervisor = () => {
           </div>
           
           {loadingCurr ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-              {[...Array(12)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl bg-white shadow-sm" />)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6">
+              {[...Array(12)].map((_, i) => <Skeleton key={i} className="h-[180px] rounded-xl bg-white shadow-sm" />)}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-              <KPICard title="Vendas Totais" value={formatCurrency(dashboardData.kpis.totalRevenue)} icon={DollarSign} color="blue" trend={dashboardData.kpis.totalGrowth >= 0 ? 'up' : 'down'} trendValue={`${dashboardData.kpis.totalGrowth.toFixed(1)}%`} />
-              <KPICard title="Crescimento YoY" value={formatPercentage(dashboardData.kpis.totalGrowth)} icon={TrendingUp} color="emerald" trend="up" trendValue="YoY" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-6">
+              <KPICard title="Vendas Totais" value={formatCurrency(dashboardData.kpis.totalRevenue)} icon={DollarSign} color="blue" trend={dashboardData.kpis.totalGrowth >= 0 ? 'up' : 'down'} trendValue={`${(dashboardData.kpis.totalGrowth ?? 0).toFixed(1)}%`} />
+              <KPICard title="Crescimento YoY" value={formatPercentage(dashboardData.kpis.totalGrowth)} icon={TrendingUp} color="emerald" trend="up" trendValue={`${(dashboardData.kpis.totalGrowth ?? 0).toFixed(1)}%`} />
               <KPICard title="Ticket Médio" value={formatCurrency(dashboardData.kpis.avgTicket)} icon={ShoppingCart} color="amber" />
               <KPICard title="Pedidos" value={dashboardData.kpis.totalOrders} icon={Package} color="indigo" />
-              <KPICard title="Conversão" value={`${dashboardData.kpis.conversion.toFixed(1)}%`} icon={PieChart} color="violet" />
-              <KPICard title="Margem Est." value={`${dashboardData.kpis.margin.toFixed(1)}%`} icon={BarChart3} color="slate" />
+              <KPICard title="Conversão" value={`${(dashboardData.kpis.conversion ?? 0).toFixed(1)}%`} icon={PieChart} color="violet" />
+              <KPICard title="Margem Est." value={`${(dashboardData.kpis.margin ?? 0).toFixed(1)}%`} icon={BarChart3} color="slate" />
               
-              <KPICard title="ROI Bonif." value={`${dashboardData.kpis.roi.toFixed(1)}x`} icon={Award} color="emerald" />
-              <KPICard title="Eficiência Global" value={dashboardData.kpis.efficiency} icon={Target} color="rose" />
+              <KPICard title="ROI Bonif." value={`${(dashboardData.kpis.roi ?? 0).toFixed(1)}x`} icon={Award} color="emerald" />
+              <KPICard title="Eficiência Global" value={(dashboardData.kpis.efficiency ?? 0).toFixed(0)} icon={Target} color="rose" />
               <KPICard title="Clientes Ativos" value={dashboardData.kpis.activeClients} icon={Users} color="blue" />
               <KPICard title="Equipamentos" value={formatCurrency(dashboardData.kpis.equipmentSold)} icon={Briefcase} color="amber" />
               <KPICard title="Bonificação" value={formatCurrency(dashboardData.kpis.totalBonification)} icon={Gift} color="cyan" />
-              <KPICard title="Meta vs Real" value={`${dashboardData.kpis.goalAchievement}%`} icon={Activity} color="emerald" />
+              <KPICard title="Meta vs Real" value={`${(dashboardData.kpis.goalAchievement ?? 0).toFixed(0)}%`} icon={Activity} color="emerald" />
             </div>
           )}
         </section>
@@ -299,7 +304,7 @@ const AnaliticoSupervisor = () => {
                         minTickGap={30}
                       />
                       <YAxis 
-                        tickFormatter={(val) => `R$${(val/1000).toFixed(0)}k`} 
+                        tickFormatter={(val) => `R$${((val ?? 0)/1000).toFixed(0)}k`} 
                         tick={{fontSize: 11, fill: '#64748b'}} 
                         axisLine={false} 
                         tickLine={false} 
@@ -307,7 +312,7 @@ const AnaliticoSupervisor = () => {
                       />
                       <RechartsTooltip 
                         contentStyle={{ borderRadius: '8px', border: '0', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '12px' }}
-                        formatter={(val) => formatCurrency(val)}
+                        formatter={(val) => formatCurrency(val ?? 0)}
                         labelStyle={{ color: '#64748b', marginBottom: '4px', fontSize: '12px' }}
                       />
                       <Area type="monotone" dataKey="total" stroke="none" fill="url(#colorRevenue)" activeDot={false} />
@@ -341,7 +346,7 @@ const AnaliticoSupervisor = () => {
             {/* Matrix (Table) */}
             <motion.div 
               layout 
-              className={`${selectedSupervisor ? 'xl:col-span-5' : 'xl:col-span-12'} transition-all duration-500 ease-in-out`}
+              className={`${selectedSupervisor ? 'xl:col-span-4' : 'xl:col-span-12'} transition-all duration-500 ease-in-out`}
             >
               <EfficiencyMatrix 
                 data={dashboardData.ranking} 
@@ -356,7 +361,7 @@ const AnaliticoSupervisor = () => {
               {selectedSupervisor && (
                 <motion.div 
                   layout
-                  className="xl:col-span-7"
+                  className="xl:col-span-8"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}

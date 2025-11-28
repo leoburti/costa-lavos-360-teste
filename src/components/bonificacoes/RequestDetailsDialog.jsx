@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -5,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, CheckCircle, XCircle, Clock, PlusCircle } from 'lucide-react';
 import BonificationStatusBadge from './BonificationStatusBadge';
+import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatDate, formatPercentage } from '@/lib/utils';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -20,7 +22,7 @@ const RequestDetailsDialog = ({ isOpen, onClose, request, isProcessing, rejectio
 
     useEffect(() => {
         const fetchAuditLog = async () => {
-            if (!isOpen || !request || request.source !== 'Sistema' || !isSupabaseConfigured) return;
+            if (!isOpen || !request || request.source === 'Protheus' || !isSupabaseConfigured) return;
             setLoadingAudit(true);
             try {
                 const { data, error } = await supabase
@@ -60,7 +62,7 @@ const RequestDetailsDialog = ({ isOpen, onClose, request, isProcessing, rejectio
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Detalhes da Bonificação</DialogTitle>
-                    <DialogDescription>{`Solicitado por ${request.user_full_name || 'N/A'} em ${formatDate(request.request_date)}`}</DialogDescription>
+                    <DialogDescription>{`Solicitado por ${request.seller_name || 'N/A'} em ${formatDate(request.request_date)}`}</DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
                     <div>
@@ -70,7 +72,16 @@ const RequestDetailsDialog = ({ isOpen, onClose, request, isProcessing, rejectio
                             <p><strong>Supervisor:</strong> {request.supervisor_name || 'N/A'}</p>
                             <p><strong>Vendedor:</strong> {request.seller_name || 'N/A'}</p>
                             <p><strong>Valor Total:</strong> {formatCurrency(request.total_amount)}</p>
-                            <p><strong>Percentual:</strong> {formatPercentage(request.percentual)}</p>
+                            <p><strong>Percentual sobre Venda:</strong> {formatPercentage(request.percentual)}</p>
+                             <div className="flex items-center gap-2">
+                                <strong>Motivos:</strong> 
+                                <div className="flex flex-wrap gap-1">
+                                {(request.motivos && request.motivos.length > 0) 
+                                    ? request.motivos.map(motivo => <Badge key={motivo} variant="secondary">{motivo}</Badge>) 
+                                    : <span className="text-muted-foreground">N/A</span>
+                                }
+                                </div>
+                            </div>
                             <p><strong>Status:</strong> <BonificationStatusBadge status={request.status} /></p>
                             {request.approver_name && <p><strong>Aprovador:</strong> {request.approver_name}</p>}
                             {request.approval_date && <p><strong>Data Aprovação:</strong> {formatDate(request.approval_date, 'dd/MM/yyyy HH:mm')}</p>}
@@ -80,8 +91,8 @@ const RequestDetailsDialog = ({ isOpen, onClose, request, isProcessing, rejectio
                     <div>
                         <h4 className="font-semibold mb-2">Produtos</h4>
                         <ScrollArea className="h-40 border rounded-md p-2">
-                            <ul className="text-sm space-y-1">
-                                {(request.items || []).map((p, i) => (
+                             <ul className="text-sm space-y-1">
+                                {(request.products_json || []).map((p, i) => (
                                     <li key={i}>{p.quantity}x {p.name} - {formatCurrency(p.price)}</li>
                                 ))}
                             </ul>
@@ -98,7 +109,7 @@ const RequestDetailsDialog = ({ isOpen, onClose, request, isProcessing, rejectio
                                         <div key={log.id} className="flex items-start gap-3">
                                             <div className="flex-shrink-0 mt-1"><AuditIcon action={log.action} /></div>
                                             <div>
-                                                <p className="text-sm font-medium">{log.action} por {log.user_name}</p>
+                                                <p className="text-sm font-medium">{log.action} por {log.user_name || 'Sistema'}</p>
                                                 <p className="text-xs text-muted-foreground">{formatDate(log.timestamp, 'dd/MM/yyyy HH:mm')}</p>
                                                 {log.details?.reason && <p className="text-xs mt-1">Motivo: {log.details.reason}</p>}
                                                 {log.details?.note && <p className="text-xs mt-1">Nota: {log.details.note}</p>}

@@ -7,6 +7,7 @@ import { SupabaseAuthProvider } from '@/contexts/SupabaseAuthContext';
 import { FilterProvider } from '@/contexts/FilterContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { PageActionProvider } from '@/contexts/PageActionContext';
+import { DataProvider } from '@/contexts/DataContext'; // Importado
 
 import AuthGuard from '@/components/AuthGuard';
 import ModuleGuard from '@/components/ModuleGuard';
@@ -29,12 +30,12 @@ const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const UpdatePassword = lazy(() => import('@/pages/auth/UpdatePassword'));
 
 // Main Feature Pages
-// RESTORED: DashboardComercial is now the main dashboard
 const DashboardComercial = lazy(() => import('@/pages/DashboardComercial'));
 const AIChat = lazy(() => import('@/pages/AIChat'));
-const BonificacoesPage = lazy(() => import('@/pages/bonificacoes/BonificacoesPage'));
 const Tarefas = lazy(() => import('@/pages/Tarefas'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+const BonificacoesPage = lazy(() => import('@/pages/bonificacoes/BonificacoesPage'));
+
 
 // CRM Layout & Pages
 const CRM = lazy(() => import('@/pages/crm/CRM'));
@@ -56,16 +57,15 @@ const Visao360Cliente = lazy(() => import('@/pages/Visao360Cliente'));
 
 // Commercial Analysis Pages
 const AnaliticoVendasDiarias = lazy(() => import('@/pages/AnaliticoVendasDiarias'));
-const AnaliseChurn = lazy(() => import('@/pages/AnaliseChurn'));
 const CurvaABC = lazy(() => import('@/pages/CurvaABC'));
-const CalculoRFM = lazy(() => import('@/pages/CalculoRFM'));
-const TendenciaVendas = lazy(() => import('@/pages/TendenciaVendas'));
 const AnaliseValorUnitario = lazy(() => import('@/pages/AnaliseValorUnitario'));
-const BaixoDesempenho = lazy(() => import('@/pages/BaixoDesempenho'));
-const AnaliseFidelidade = lazy(() => import('@/pages/AnaliseFidelidade'));
-const ProdutosBonificados = lazy(() => import('@/pages/ProdutosBonificados'));
-const PerformanceBonificados = lazy(() => import('@/pages/PerformanceBonificados'));
-const AnaliticoBonificados = lazy(() => import('@/pages/AnaliticoBonificados'));
+const AnaliseDesempenhoFidelidade = lazy(() => import('@/pages/AnaliseDesempenhoFidelidade'));
+const AnaliseClientes = lazy(() => import('@/pages/AnaliseClientes'));
+const AnaliseProdutos = lazy(() => import('@/pages/AnaliseProdutos'));
+const AnaliseSazonalidade = lazy(() => import('@/pages/AnaliseSazonalidade'));
+const AnaliseMargem = lazy(() => import('@/pages/AnaliseMargem'));
+const AnalisePreditivaVendas = lazy(() => import('@/pages/AnalisePreditivaVendas')); // ** NEW **
+
 
 // Equipment Analysis Pages
 const MovimentacaoEquipamentos = lazy(() => import('@/pages/MovimentacaoEquipamentos'));
@@ -199,7 +199,7 @@ const SupabaseTestPage = lazy(() => import('@/pages/debug/SupabaseTestPage'));
 
 // Memoized fallback to prevent re-renders of the spinner container
 const FullScreenLoader = memo(() => (
-  <div className="flex h-screen w-full items-center justify-center bg-slate-50">
+  <div className="flex h-screen w-full items-center justify-center bg-background">
     <LoadingSpinner message="Iniciando sistema..." />
   </div>
 ));
@@ -231,7 +231,6 @@ const AppContent = () => {
             </AuthGuard>
           }>
             <Route index element={<Navigate to="/dashboard" replace />} />
-            {/* RESTORED: Pointing to DashboardComercial */}
             <Route path="dashboard" element={<ModuleGuard moduleId="dashboard_comercial"><DashboardComercial /></ModuleGuard>} />
             <Route path="ai-chat" element={<ModuleGuard moduleId="senhor_lavos"><AIChat /></ModuleGuard>} />
             
@@ -245,17 +244,23 @@ const AppContent = () => {
             
             {/* Commercial Analysis */}
             <Route path="analitico-vendas-diarias" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoVendasDiarias /></ModuleGuard>} />
-            <Route path="analise-churn" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseChurn /></ModuleGuard>} />
             <Route path="curva-abc" element={<ModuleGuard moduleId="commercial-analysis"><CurvaABC /></ModuleGuard>} />
-            <Route path="calculo-rfm" element={<ModuleGuard moduleId="commercial-analysis"><CalculoRFM /></ModuleGuard>} />
-            <Route path="tendencia-vendas" element={<ModuleGuard moduleId="commercial-analysis"><TendenciaVendas /></ModuleGuard>} />
             <Route path="analise-valor-unitario" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseValorUnitario /></ModuleGuard>} />
-            <Route path="baixo-desempenho" element={<ModuleGuard moduleId="commercial-analysis"><BaixoDesempenho /></ModuleGuard>} />
-            <Route path="analise-fidelidade" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseFidelidade /></ModuleGuard>} />
-            <Route path="produtos-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><ProdutosBonificados /></ModuleGuard>} />
-            <Route path="performance-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><PerformanceBonificados /></ModuleGuard>} />
-            <Route path="analitico-bonificados" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoBonificados /></ModuleGuard>} />
+            <Route path="analise-desempenho-fidelidade" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseDesempenhoFidelidade /></ModuleGuard>} />
+            <Route path="analise-clientes" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseClientes /></ModuleGuard>} />
+            <Route path="analise-produtos" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseProdutos /></ModuleGuard>} />
+            <Route path="analise-sazonalidade" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseSazonalidade /></ModuleGuard>} />
+            <Route path="analise-margem" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseMargem /></ModuleGuard>} />
+            <Route path="analise-preditiva-vendas" element={<ModuleGuard moduleId="commercial-analysis"><AnalisePreditivaVendas /></ModuleGuard>} />
+
+            {/* ** OLD PREDICTIVE ROUTES REMOVED/REDIRECTED ** */}
+            <Route path="analise-churn" element={<Navigate to="/analise-preditiva-vendas" replace />} />
+            <Route path="calculo-rfm" element={<Navigate to="/analise-preditiva-vendas" replace />} />
+            <Route path="tendencia-vendas" element={<Navigate to="/analise-preditiva-vendas" replace />} />
             
+            <Route path="baixo-desempenho" element={<Navigate to="/analise-desempenho-fidelidade" replace />} />
+            <Route path="analise-fidelidade" element={<Navigate to="/analise-desempenho-fidelidade" replace />} />
+
             {/* Equipment Analysis */}
             <Route path="movimentacao-equipamentos" element={<ModuleGuard moduleId="commercial-analysis"><MovimentacaoEquipamentos /></ModuleGuard>} />
             <Route path="analitico-equipamentos-cliente" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoEquipamentosCliente /></ModuleGuard>} />
@@ -265,9 +270,9 @@ const AppContent = () => {
             {/* Managerial Analysis */}
             <Route path="raio-x-supervisor" element={<ModuleGuard moduleId="managerial-analysis"><RaioXSupervisor /></ModuleGuard>} />
             <Route path="raio-x-vendedor" element={<ModuleGuard moduleId="managerial-analysis"><RaioXVendedor /></ModuleGuard>} />
-
+            
             {/* Bonificações */}
-            <Route path="bonificacoes" element={<ModuleGuard moduleId="bonificacoes_module"><BonificacoesPage /></ModuleGuard>} />
+            <Route path="bonificacoes" element={<ModuleGuard moduleId="bonificacoes"><BonificacoesPage /></ModuleGuard>} />
             
             {/* Tarefas */}
             <Route path="tarefas" element={<ModuleGuard moduleId="tarefas"><Tarefas /></ModuleGuard>} />
@@ -473,13 +478,15 @@ function App() {
   return (
     <HelmetProvider>
       <SupabaseAuthProvider>
-        <NotificationProvider>
-          <FilterProvider>
-            <PageActionProvider>
-              <AppContent />
-            </PageActionProvider>
-          </FilterProvider>
-        </NotificationProvider>
+        <DataProvider>
+          <NotificationProvider>
+            <FilterProvider>
+              <PageActionProvider>
+                <AppContent />
+              </PageActionProvider>
+            </FilterProvider>
+          </NotificationProvider>
+        </DataProvider>
       </SupabaseAuthProvider>
     </HelmetProvider>
   );

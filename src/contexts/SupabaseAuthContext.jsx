@@ -1,6 +1,6 @@
-
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
+import { handleAuthError } from '@/services/authService';
 
 const SupabaseAuthContext = createContext();
 
@@ -27,7 +27,7 @@ export function SupabaseAuthProvider({ children }) {
       return;
     }
 
-    // Attempt to fetch for max 5 seconds or 3 tries
+    // Attempt to fetch for max 30 seconds or 3 tries
     let attempt = 0;
     const maxRetries = 3;
     let success = false;
@@ -36,27 +36,22 @@ export function SupabaseAuthProvider({ children }) {
       try {
         // Use AbortController for database timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout per try
+        // Aumentado o tempo para 10 segundos
+        const timeoutId = setTimeout(() => controller.abort('Timeout'), 10000); 
 
         const { data: roleData, error: roleError } = await supabase
-          .from('user_roles')
-          .select('role, module_permissions, can_access_crm')
-          .eq('user_id', currentUser.id)
-          .single()
-          .abortSignal(controller.signal);
+          .rpc('get_user_role', { p_user_id: currentUser.id })
+          .abortSignal(controller.signal)
+          .single();
 
         clearTimeout(timeoutId);
 
         if (roleError) {
-          // PGRST116 = Row not found. This is not a connection error, just missing config.
-          // Treat as default user
-          if (roleError.code === 'PGRST116' || roleError.code === '406') {
-            console.warn('User has no specific role assigned. Assigning default.');
-            setUserRole('Vendedor');
-            setUserPermissions({});
-            setCanAccessCRM(false);
-            success = true;
-            return;
+          if (roleError.name === 'AbortError' && attempt < maxRetries - 1) {
+            console.warn(`Attempt ${attempt + 1} timed out. Retrying...`);
+            attempt++;
+            await wait(1500); // Wait longer before retry
+            continue;
           }
           throw roleError;
         }
@@ -66,23 +61,35 @@ export function SupabaseAuthProvider({ children }) {
           setUserPermissions(roleData.module_permissions || {});
           setCanAccessCRM(roleData.can_access_crm || false);
           success = true;
+        } else {
+            // This case handles when the RPC returns null/empty, which means no role is found.
+            // It's not a connection error, but a data configuration issue.
+            console.warn(`User ${currentUser.id} has no role defined in the database. Assigning default 'Sem Permissão'.`);
+            setUserRole('Sem Permissão');
+            setUserPermissions({});
+            setCanAccessCRM(false);
+            success = true; // Mark as success to stop retries.
         }
+
       } catch (error) {
-        console.error(`Attempt ${attempt + 1} failed fetching user details:`, error);
+        console.error(`Attempt ${attempt + 1} failed fetching user details:`, error.message);
         attempt++;
-        if (attempt < maxRetries) await wait(1000); 
+        if (attempt < maxRetries) {
+            await wait(1500);
+        } else {
+            setAuthError(error.message);
+        }
       }
     }
 
     if (!success) {
-      // FALLBACK: If all retries fail (e.g. offline), allow partial access instead of blocking
       console.warn('All attempts to fetch user details failed. Using fallback permissions.');
-      setUserRole('Vendedor'); // Default safe role
+      setUserRole('Sem Permissão');
       setUserPermissions({});
       setCanAccessCRM(false);
-      // Don't block UI with error, let them use what they can
     }
   }, []);
+
 
   useEffect(() => {
     let mounted = true;
@@ -92,7 +99,10 @@ export function SupabaseAuthProvider({ children }) {
       try {
         const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         
-        if (error) throw error;
+        if (error) {
+            handleAuthError(error);
+            throw error;
+        }
 
         if (mounted) {
           setSession(currentSession);
@@ -118,14 +128,12 @@ export function SupabaseAuthProvider({ children }) {
         setUser(newSession?.user ?? null);
         
         if (newSession?.user) {
-          // We do NOT set loading=true here to avoid UI flashing, 
-          // we silently update permissions unless it's a LOGIN event
           if (event === 'SIGNED_IN') {
              setLoading(true);
              await fetchUserDetails(newSession.user);
              setLoading(false);
-          } else {
-             // Silent update for other events
+          } else if (event === 'TOKEN_REFRESHED') {
+             // On token refresh, just update details without a loading spinner
              fetchUserDetails(newSession.user);
           }
         } else {
@@ -142,7 +150,7 @@ export function SupabaseAuthProvider({ children }) {
     };
   }, [fetchUserDetails]);
 
-  // Global timeout safety: Ensure loading never sticks for more than 8 seconds
+  // Global timeout safety: Ensure loading never sticks for more than 12 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading((currentLoading) => {
@@ -152,7 +160,7 @@ export function SupabaseAuthProvider({ children }) {
         }
         return currentLoading;
       });
-    }, 8000);
+    }, 12000);
 
     return () => clearTimeout(timer);
   }, []);

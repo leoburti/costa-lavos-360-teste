@@ -1,216 +1,160 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { TrendingUp, RefreshCw, TrendingDown, Minus } from 'lucide-react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { formatCurrency } from '@/lib/utils';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import React, { useMemo } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { motion } from 'framer-motion';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { useFilters } from '@/contexts/FilterContext';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import MetricCard from '@/components/MetricCard';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { TrendingUp, TrendingDown, ArrowRight, UserCheck, UserPlus, UserX } from 'lucide-react';
+import AIInsight from '@/components/AIInsight';
 
-const TendenciaVendas = () => {
+const formatCurrency = (value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const reasonConfig = {
+  'AUMENTO_EXPRESSIVO': { label: 'Aumento Expressivo', color: 'bg-emerald-500', icon: TrendingUp },
+  'AUMENTO': { label: 'Aumento', color: 'bg-green-500', icon: TrendingUp },
+  'ESTABILIDADE': { label: 'Estabilidade', color: 'bg-blue-500', icon: ArrowRight },
+  'QUEDA_ACENTUADA': { label: 'Queda Acentuada', color: 'bg-orange-500', icon: TrendingDown },
+  'RISCO_CHURN': { label: 'Risco de Churn', color: 'bg-red-600', icon: TrendingDown },
+  'PROMISSOR': { label: 'Promissor', color: 'bg-sky-500', icon: UserPlus },
+  'INDEFINIDO': { label: 'Indefinido', color: 'bg-gray-500', icon: UserX },
+};
+
+const TendenciaVendas = ({ isTab = false }) => {
   const { filters } = useFilters();
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Correct date access and formatting
-  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
-  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
-  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
-
-  // Debug Logs
-  useEffect(() => {
-    console.log('[TendenciaVendas] Filters:', filters);
-    console.log('[TendenciaVendas] Dates:', { startDateStr, endDateStr });
-  }, [filters, startDateStr, endDateStr]);
-
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Para tendência, geralmente queremos ver um período um pouco maior para ver a curva,
-      // mas vamos respeitar o filtro do usuário para a análise principal.
-      // Se o usuário selecionar 1 mês, mostramos os dias. Se for > 3 meses, mostramos meses.
-      
-      const diffTime = Math.abs(new Date(endDateStr) - new Date(startDateStr));
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-      
-      let query = supabase
-        .from('bd-cl')
-        .select('Total, "DT Emissao", Cfo')
-        .gte('DT Emissao', startDateStr)
-        .lte('DT Emissao', endDateStr)
-        .gt('Total', 0);
-
-      // Filtros adicionais
-      if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
-      if (filters.sellers?.length > 0) query = query.in('Nome Vendedor', filters.sellers);
-      if (filters.regions?.length > 0) query = query.in('Desc.Regiao', filters.regions);
-      if (filters.customerGroups?.length > 0) query = query.in('Nome Grp Cliente', filters.customerGroups);
-      if (filters.clients?.length > 0) query = query.in('N Fantasia', filters.clients.map(c => c.label));
-
-      const { data: rawData, error: supabaseError } = await query;
-
-      if (supabaseError) throw supabaseError;
-
-      // Processamento dos dados
-      const salesByDate = {};
-      
-      rawData.forEach(row => {
-        if (['5910', '6910', '5908', '6551', '6908', '5551'].includes(String(row.Cfo))) return; // Apenas vendas reais
-
-        const dateKey = diffDays > 90 
-          ? row['DT Emissao'].substring(0, 7) // YYYY-MM
-          : row['DT Emissao'].substring(0, 10); // YYYY-MM-DD
-        
-        if (!salesByDate[dateKey]) salesByDate[dateKey] = 0;
-        salesByDate[dateKey] += row.Total;
-      });
-
-      const chartData = Object.keys(salesByDate).sort().map(key => ({
-        period: key,
-        total: salesByDate[key],
-        // Média móvel simples (placeholder, ideal seria calcular com janelas)
-        media: salesByDate[key] // Placeholder para visualização
-      }));
-
-      // Calcular média móvel real (3 períodos)
-      for(let i = 0; i < chartData.length; i++) {
-        let sum = 0;
-        let count = 0;
-        for(let j = Math.max(0, i - 2); j <= i; j++) {
-          sum += chartData[j].total;
-          count++;
-        }
-        chartData[i].media = sum / count;
-      }
-
-      setData(chartData);
-
-    } catch (err) {
-      console.error("Erro Tendencia:", err);
-      setError("Falha ao carregar dados de tendência.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [filters, startDateStr, endDateStr]);
-
-  const trendInfo = useMemo(() => {
-    if (data.length < 2) return { direction: 'neutral', percent: 0 };
-    const last = data[data.length - 1].media;
-    const first = data[0].media;
-    const percent = first !== 0 ? ((last - first) / first) * 100 : 0;
-    
+  
+  const dateRange = useMemo(() => filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }, [filters.dateRange]);
+  
+  const params = useMemo(() => {
+    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
     return {
-      direction: percent > 5 ? 'up' : percent < -5 ? 'down' : 'neutral',
-      percent: Math.abs(percent)
+      p_start_date: dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : null,
+      p_end_date: dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : null,
+      p_exclude_employees: filters.excludeEmployees,
+      p_supervisors: filters.supervisors,
+      p_sellers: filters.sellers,
+      p_customer_groups: filters.customerGroups,
+      p_regions: filters.regions,
+      p_clients: selectedClients,
+      p_search_term: filters.searchTerm,
+      p_analysis_type: 'all_clients', // Default analysis type
     };
+  }, [filters, dateRange]);
+
+  const { data, loading, error } = useAnalyticalData('get_new_client_trends', params, { enabled: !!params.p_start_date && !!params.p_end_date, defaultValue: [] });
+
+  const kpis = useMemo(() => {
+    if (!data) return { growing: 0, stable: 0, declining: 0, totalChange: 0 };
+    let growing = 0, stable = 0, declining = 0, totalChange = 0;
+    data.forEach(item => {
+      totalChange += item.trendChange;
+      if (item.reason === 'AUMENTO_EXPRESSIVO' || item.reason === 'AUMENTO') growing++;
+      else if (item.reason === 'ESTABILIDADE' || item.reason === 'PROMISSOR') stable++;
+      else declining++;
+    });
+    return { growing, stable, declining, totalChange };
   }, [data]);
 
-  return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center">
+  const pageContent = (
+    <div className="space-y-6">
+      {!isTab && (
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Tendência de Vendas</h1>
-          <p className="text-muted-foreground mt-1">Análise temporal do faturamento e média móvel.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Tendência de Vendas por Cliente</h1>
+          <p className="text-muted-foreground">Compare o desempenho de vendas entre dois períodos para identificar tendências.</p>
         </div>
-        <Button onClick={fetchData} variant="outline" disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Atualizar
-        </Button>
-      </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>Erro</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
       )}
 
-      {loading && !data.length ? (
-        <div className="h-96 flex items-center justify-center"><LoadingSpinner /></div>
-      ) : (
+      {loading ? (
+        <div className="flex justify-center items-center h-96">
+          <LoadingSpinner message="Analisando tendências..." />
+        </div>
+      ) : error ? (
+        <div className="text-red-500 text-center">Erro ao carregar dados: {error.message}</div>
+      ) : data ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tendência do Período</CardTitle></CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2">
-                  {trendInfo.direction === 'up' && <TrendingUp className="h-8 w-8 text-emerald-500" />}
-                  {trendInfo.direction === 'down' && <TrendingDown className="h-8 w-8 text-red-500" />}
-                  {trendInfo.direction === 'neutral' && <Minus className="h-8 w-8 text-slate-400" />}
-                  <span className="text-2xl font-bold">
-                    {trendInfo.percent.toFixed(1)}%
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Variação da média móvel (Início vs Fim)</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pico de Vendas</CardTitle></CardHeader>
-              <CardContent>
-                <span className="text-2xl font-bold">
-                  {data.length > 0 ? formatCurrency(Math.max(...data.map(d => d.total))) : 'R$ 0,00'}
-                </span>
-                <p className="text-xs text-muted-foreground mt-1">Melhor desempenho no período</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Menor Desempenho</CardTitle></CardHeader>
-              <CardContent>
-                <span className="text-2xl font-bold">
-                  {data.length > 0 ? formatCurrency(Math.min(...data.map(d => d.total))) : 'R$ 0,00'}
-                </span>
-                <p className="text-xs text-muted-foreground mt-1">Pior desempenho no período</p>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <MetricCard title="Variação Total" value={formatCurrency(kpis.totalChange)} icon={kpis.totalChange > 0 ? TrendingUp : TrendingDown} subtitle="Soma das variações de receita" />
+            <MetricCard title="Clientes em Crescimento" value={kpis.growing.toString()} icon={TrendingUp} subtitle="Receita aumentou no período" />
+            <MetricCard title="Clientes Estáveis" value={kpis.stable.toString()} icon={ArrowRight} subtitle="Receita se manteve" />
+            <MetricCard title="Clientes em Queda" value={kpis.declining.toString()} icon={TrendingDown} subtitle="Receita diminuiu no período" />
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Evolução de Vendas & Média Móvel</CardTitle>
+              <CardTitle>Detalhes da Tendência por Cliente</CardTitle>
             </CardHeader>
-            <CardContent className="h-[450px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis 
-                    dataKey="period" 
-                    tick={{ fontSize: 12 }} 
-                    tickFormatter={(val) => {
-                      if (val.length === 7) { // YYYY-MM
-                        const [y, m] = val.split('-');
-                        return `${m}/${y}`;
-                      }
-                      // YYYY-MM-DD
-                      const [y, m, d] = val.split('-');
-                      return `${d}/${m}`;
-                    }}
-                  />
-                  <YAxis tickFormatter={(val) => `R$${(val/1000).toFixed(0)}k`} />
-                  <Tooltip 
-                    formatter={(value, name) => [formatCurrency(value), name === 'total' ? 'Vendas' : 'Média Móvel (3p)']}
-                    labelFormatter={(label) => `Período: ${label}`}
-                  />
-                  <Legend />
-                  <Bar dataKey="total" name="Vendas" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30} />
-                  <Line type="monotone" dataKey="media" name="Média Móvel" stroke="#f59e0b" strokeWidth={3} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
+            <CardContent>
+              <ScrollArea className="h-[500px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Vendedor</TableHead>
+                      <TableHead>Tendência</TableHead>
+                      <TableHead className="text-right">Variação (R$)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.map((item, index) => {
+                      const config = reasonConfig[item.reason] || reasonConfig['INDEFINIDO'];
+                      return (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{item.clientName}</TableCell>
+                          <TableCell>{item.seller}</TableCell>
+                          <TableCell>
+                            <Badge className={config.color}>
+                              <config.icon className="h-3 w-3 mr-1" />
+                              {config.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={`text-right font-semibold ${item.trendChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(item.trendChange)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
             </CardContent>
           </Card>
+
+          <AIInsight 
+            context="Análise de Tendência de Vendas"
+            data={data}
+            question="Com base nos dados de tendência, quais são as 3 principais ações para clientes em queda e para potencializar clientes em crescimento?"
+          />
         </>
+      ) : (
+        <div className="text-center py-12">Nenhum dado encontrado para os filtros selecionados.</div>
       )}
     </div>
+  );
+
+  if (isTab) {
+    return pageContent;
+  }
+
+  return (
+    <>
+      <Helmet>
+        <title>Tendência de Vendas - Costa Lavos</title>
+      </Helmet>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="p-4 sm:p-6"
+      >
+        {pageContent}
+      </motion.div>
+    </>
   );
 };
 

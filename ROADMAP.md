@@ -1,4 +1,3 @@
-
 # Costa Lavos 360 - Roadmap Técnico & Documentação de Arquitetura
 
 **Data de Atualização:** 27/11/2025

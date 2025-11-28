@@ -1,125 +1,131 @@
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
+import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { useMemo } from 'react';
 
-export const useAnalyticalData = (rpcName, params, options = {}) => {
-  const { 
-    enabled = true, 
-    timeout = 60000, 
-    defaultValue = [],
-    processData,
-    showErrorToast = true
-  } = options;
+const STALE_TIME = 1000 * 60 * 5; // 5 minutes
 
-  const [data, setData] = useState(defaultValue);
-  const [loading, setLoading] = useState(enabled);
-  const [error, setError] = useState(null);
-  const { toast } = useToast();
-  
-  // Refs to hold latest values of unstable dependencies to avoid effect re-runs
-  // This prevents infinite loops when these values change reference on every render
-  const defaultValueRef = useRef(defaultValue);
-  const processDataRef = useRef(processData);
-  const toastRef = useRef(toast);
-  const showErrorToastRef = useRef(showErrorToast);
-  
-  const abortControllerRef = useRef(null);
-  const isMountedRef = useRef(true);
+const formatDateToAPI = (date) => date ? format(new Date(date), 'yyyy-MM-dd') : null;
 
-  // Update refs when props change - this does NOT trigger re-renders
-  useEffect(() => {
-    defaultValueRef.current = defaultValue;
-    processDataRef.current = processData;
-    toastRef.current = toast;
-    showErrorToastRef.current = showErrorToast;
-  }, [defaultValue, processData, toast, showErrorToast]);
+// Mapa de parâmetros esperados por cada função RPC. Essencial para a consistência dos dados.
+const rpcParamsMap = {
+    get_all_drivers_for_delivery_management: [],
+    get_abc_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_analytical_bonification: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_bonification_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only'],
+    get_bonification_performance: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only', 'p_group_by'],
+    get_bonification_distribution_drilldown: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_drilldown_level', 'p_parent_keys'],
+    get_bonification_performance_drilldown: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_drilldown_level', 'p_parent_keys'],
+    get_churn_analysis_data_v3: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_client_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_client_equipments: ['p_cliente_id', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_client_360_data_v2: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_products', 'p_show_defined_groups_only', 'p_target_client_code', 'p_target_store'],
+    get_dashboard_and_daily_sales_kpis: ['p_start_date', 'p_end_date', 'p_previous_start_date', 'p_previous_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only'],
+    get_daily_sales_data: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_daily_sales_data_v2: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups'],
+    get_deliveries_for_optimization: ['p_delivery_date', 'p_driver_id'],
+    get_detailed_equipment_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only'],
+    get_equipment_by_client: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only', 'p_grouping_level'],
+    get_equipment_movement: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_group_sales_analysis: ['p_level', 'p_parent_key', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_exclude_employees'],
+    get_low_performance_clients: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_loyalty_analysis_drilldown: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_margin_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_margin_ranges', 'p_products'],
+    get_new_client_trends: ['p_start_date', 'p_end_date'],
+    get_operational_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only', 'p_view_mode'],
+    get_overview_data_v2: ['p_start_date', 'p_end_date', 'p_previous_start_date', 'p_previous_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only'],
+    get_price_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_product_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_product_basket_analysis_v2: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_product_mix_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only'],
+    get_projected_abc_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_rfm_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_seasonality_analysis: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_products'],
+    get_seller_analytical_data: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_supervisor_analytical_data: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term'],
+    get_treemap_data: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_analysis_mode', 'p_show_defined_groups_only'],
+    get_drilldown_data: ['p_analysis_mode', 'p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_show_defined_groups_only', 'p_drilldown_level', 'p_parent_keys'],
+    get_customer_group_drilldown_data: ['p_start_date', 'p_end_date', 'p_exclude_employees', 'p_supervisors', 'p_sellers', 'p_customer_groups', 'p_regions', 'p_clients', 'p_search_term', 'p_drilldown_level', 'p_parent_keys'],
+    get_dashboard_xray_data: ['p_start_date', 'p_end_date', 'p_supervisors', 'p_regions'],
+};
 
-  // Cleanup on unmount
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+export const useAnalyticalData = (rpcName, filters = {}, options = {}) => {
+  const { enabled = true, defaultValue = null } = options;
+
+  const queryParams = useMemo(() => {
+    const { dateRange, ...restFilters } = filters || {};
+    
+    const defaultStart = startOfMonth(new Date());
+    const defaultEnd = endOfMonth(new Date());
+
+    const allParams = {
+      p_start_date: formatDateToAPI(dateRange?.from || defaultStart),
+      p_end_date: formatDateToAPI(dateRange?.to || defaultEnd),
+      ...restFilters, // Inclui p_analysis_mode, p_show_defined_groups_only, etc.
     };
-  }, []);
 
-  // Stable params string for dependency comparison
-  const paramsString = JSON.stringify(params);
-
-  const fetchData = useCallback(async () => {
-    if (!enabled) {
-        if (isMountedRef.current) setLoading(false);
-        return;
+    const validParamKeys = rpcParamsMap[rpcName];
+    if (!validParamKeys) {
+      console.warn(`[useAnalyticalData] RPC function "${rpcName}" não encontrada no rpcParamsMap. Todos os parâmetros serão enviados.`);
+      return allParams;
     }
 
-    if (isMountedRef.current) {
-        setLoading(true);
-        setError(null);
+    const finalParams = {};
+    for (const key of validParamKeys) {
+      // Renomeia chaves camelCase para snake_case se necessário
+      const snakeCaseKey = `p_${key.replace('p_', '').replace(/([A-Z])/g, '_$1').toLowerCase()}`;
+      const originalKey = key;
+      const camelCaseKey = key.replace(/_([a-z])/g, g => g[1].toUpperCase()).replace('p_', '');
+      const camelCaseWithP = `p_${camelCaseKey}`;
+
+      if (allParams.hasOwnProperty(originalKey)) {
+        finalParams[originalKey] = allParams[originalKey];
+      } else if (allParams.hasOwnProperty(camelCaseWithP)) {
+        finalParams[originalKey] = allParams[camelCaseWithP];
+      } else if (allParams.hasOwnProperty(camelCaseKey)) {
+         finalParams[originalKey] = allParams[camelCaseKey];
+      }
     }
     
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    return finalParams;
 
-    try {
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Tempo limite da requisição excedido (Timeout)')), timeout)
-      );
+  }, [filters, rpcName]);
+  
+  const queryKey = [rpcName, queryParams];
 
-      const rpcPromise = supabase.rpc(rpcName, JSON.parse(paramsString));
-
-      const { data: result, error: rpcError } = await Promise.race([
-        rpcPromise,
-        timeoutPromise
-      ]);
-
-      if (signal.aborted) return;
-
-      if (rpcError) throw rpcError;
-
-      const processFn = processDataRef.current || ((d) => d);
-      const processed = processFn(result);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const { data: result, error: rpcError } = await supabase.rpc(rpcName, queryParams);
       
-      if (isMountedRef.current) {
-          setData(processed || defaultValueRef.current);
-          setError(null);
-      }
-
-    } catch (err) {
-      if (signal.aborted) return;
-      if (!isMountedRef.current) return;
-
-      console.error(`[AnalyticalData] Error in ${rpcName}:`, err);
-      setError(err.message);
-      setData(defaultValueRef.current);
-
-      if (showErrorToastRef.current && toastRef.current) {
-        toastRef.current({
-          variant: "destructive",
-          title: "Erro de Carregamento",
-          description: `Não foi possível carregar dados de ${rpcName}. Detalhe: ${err.message}`
+      if (rpcError) {
+        console.error(`[useAnalyticalData] Erro ao chamar RPC ${rpcName}:`, {
+            message: rpcError.message,
+            details: rpcError.details,
+            code: rpcError.code,
+            params: queryParams,
         });
+        throw new Error(rpcError.message || `Falha ao buscar dados de ${rpcName}`);
       }
-    } finally {
-      if (isMountedRef.current && !signal.aborted) {
-        setLoading(false);
+      
+      if (rpcName === 'get_drilldown_data' && result && typeof result === 'object' && 'data' in result) {
+        return result; 
       }
-    }
-  }, [rpcName, paramsString, enabled, timeout]); // Removed toast and showErrorToast from dependencies
+      
+      return result;
+    },
+    enabled,
+    staleTime: STALE_TIME,
+    placeholderData: (previousData) => previousData || defaultValue,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const refetch = useCallback(() => {
-    fetchData();
-  }, [fetchData]);
-
-  return { data, loading, error, refetch };
+  return { 
+    data: data ?? defaultValue, 
+    loading: isLoading || isFetching,
+    error,
+    refetch 
+  };
 };

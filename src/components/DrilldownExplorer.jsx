@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Loader2, ChevronRight, MapPin, Building2, User, Users, Store, Calendar, ShoppingCart, Package, CreditCard, TrendingUp, TrendingDown, Minus, Home } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -7,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
 
 const formatCurrency = (value) => {
   if (typeof value !== 'number') return 'R$ 0,00';
@@ -28,116 +30,20 @@ const analysisConfig = {
   region: {
     dimensions: ['region', 'supervisor', 'seller', 'customerGroup', 'client', 'date', 'order', 'product'],
     dimensionLabels: ["Regiões", "Supervisores", "Vendedores", "Grupos de Clientes", "Clientes", "Datas", "Pedidos", "Produtos"],
-    initialRpc: 'get_treemap_data',
-    drilldownRpc: 'get_drilldown_data'
+  },
+  customerGroup: {
+    dimensions: ['customerGroup', 'supervisor', 'seller', 'region', 'client', 'date', 'order', 'product'],
+    dimensionLabels: ["Grupos de Clientes", "Supervisores", "Vendedores", "Regiões", "Clientes", "Datas", "Pedidos", "Produtos"],
   },
   seller: {
     dimensions: ['region', 'customerGroup', 'client', 'date', 'order', 'product'],
     dimensionLabels: ["Regiões", "Grupos de Clientes", "Clientes", "Datas", "Pedidos", "Produtos"],
-    initialRpc: 'get_drilldown_data',
-    drilldownRpc: 'get_drilldown_data'
   },
   supervisor: {
     dimensions: ['seller', 'region', 'customerGroup', 'client', 'date', 'order', 'product'],
     dimensionLabels: ["Vendedores", "Regiões", "Grupos de Clientes", "Clientes", "Datas", "Pedidos", "Produtos"],
-    initialRpc: 'get_drilldown_data',
-    drilldownRpc: 'get_drilldown_data'
   }
 };
-
-const useDrilldownData = (analysisMode, filters, overrideFilters) => {
-    const { toast } = useToast();
-    const config = analysisConfig[analysisMode];
-
-    // Stabilize activeFilters using useMemo to prevent infinite loops
-    const activeFilters = useMemo(() => {
-        return { ...filters, ...overrideFilters };
-    }, [
-        filters.startDate,
-        filters.endDate,
-        filters.excludeEmployees,
-        filters.searchTerm,
-        JSON.stringify(filters.supervisors),
-        JSON.stringify(filters.sellers),
-        JSON.stringify(filters.customerGroups),
-        JSON.stringify(filters.regions),
-        JSON.stringify(filters.clients),
-        JSON.stringify(overrideFilters)
-    ]);
-
-    const fetchInitialData = useCallback(async () => {
-        const isDrilldownRpc = ['seller', 'supervisor'].includes(analysisMode);
-        const rpcName = isDrilldownRpc ? config.drilldownRpc : config.initialRpc;
-
-        const rpcParams = isDrilldownRpc ? {
-            p_start_date: activeFilters.startDate,
-            p_end_date: activeFilters.endDate,
-            p_exclude_employees: activeFilters.excludeEmployees,
-            p_supervisors: activeFilters.supervisors,
-            p_sellers: activeFilters.sellers,
-            p_customer_groups: activeFilters.customerGroups,
-            p_regions: activeFilters.regions,
-            p_clients: activeFilters.clients,
-            p_search_term: activeFilters.searchTerm,
-            p_analysis_mode: analysisMode,
-            p_drilldown_level: 1,
-            p_parent_keys: []
-        } : {
-            p_start_date: activeFilters.startDate,
-            p_end_date: activeFilters.endDate,
-            p_exclude_employees: activeFilters.excludeEmployees,
-            p_supervisors: activeFilters.supervisors,
-            p_sellers: activeFilters.sellers,
-            p_customer_groups: activeFilters.customerGroups,
-            p_regions: activeFilters.regions,
-            p_clients: activeFilters.clients,
-            p_search_term: activeFilters.searchTerm,
-            p_analysis_mode: config.dimensions[0],
-            p_show_defined_groups_only: false,
-        };
-
-        const { data, error } = await supabase.rpc(rpcName, rpcParams);
-
-        if (error) {
-            toast({ variant: "destructive", title: `Erro ao buscar dados iniciais`, description: error.message });
-            return [];
-        }
-
-        const items = (isDrilldownRpc ? data : data.map(d => ({ key: d.name, name: d.name, value: d.size }))).map(item => ({
-            ...item,
-            value: item.value || item.size
-        }));
-        
-        return items;
-
-    }, [activeFilters, toast, analysisMode, config]);
-    
-    const fetchDrilldownData = useCallback(async (level, parentKeys) => {
-        const { data, error } = await supabase.rpc(config.drilldownRpc, {
-            p_start_date: activeFilters.startDate,
-            p_end_date: activeFilters.endDate,
-            p_exclude_employees: activeFilters.excludeEmployees,
-            p_supervisors: activeFilters.supervisors,
-            p_sellers: activeFilters.sellers,
-            p_customer_groups: activeFilters.customerGroups,
-            p_regions: activeFilters.regions,
-            p_clients: activeFilters.clients,
-            p_search_term: activeFilters.searchTerm,
-            p_analysis_mode: analysisMode,
-            p_drilldown_level: level,
-            p_parent_keys: parentKeys
-        });
-
-        if (error) {
-            toast({ variant: "destructive", title: `Erro ao detalhar`, description: error.message });
-            return [];
-        }
-        return Array.isArray(data) ? data : [];
-    }, [activeFilters, toast, analysisMode, config.drilldownRpc]);
-
-    return { fetchInitialData, fetchDrilldownData };
-};
-
 
 const PriceDifferenceIndicator = ({ unitPrice, avgPrice }) => {
   if (!unitPrice || !avgPrice || avgPrice === 0) return <Minus className="h-3 w-3 text-slate-400" />;
@@ -148,7 +54,7 @@ const PriceDifferenceIndicator = ({ unitPrice, avgPrice }) => {
 };
 
 const ProductDetails = ({ products, isLoading }) => (
-  <div className="p-2 h-full flex flex-col bg-slate-50/50">
+  <div className="p-2">
     <h4 className="font-semibold text-xs uppercase tracking-wider text-slate-500 mb-3 px-3 pt-3 flex items-center gap-2">
       <Package className="h-4 w-4" />
       Produtos do Pedido
@@ -176,7 +82,7 @@ const ProductDetails = ({ products, isLoading }) => (
                 <span className="text-[10px] uppercase text-slate-400">Preço Unit.</span>
                 <div className="flex items-center gap-1.5">
                   <span className="font-medium text-slate-700">{formatCurrency(child.unit_price)}</span>
-                  <span className={cn("flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full", child.unit_price > child.avg_unit_price ? 'bg-emerald-100 text-emerald-700' : child.unit_price < child.avg_unit_price ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600')}>
+                  <span className={cn("flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full", child.unit_price > child.avg_unit_price ? 'bg-emerald-100 text-emerald-700' : child.unit_price < child.avg_unit_price ? 'bg-slate-100 text-slate-600' : 'bg-slate-100 text-slate-600')}>
                     <PriceDifferenceIndicator unitPrice={child.unit_price} avgPrice={child.avg_unit_price} />
                     {child.avg_unit_price ? `${Math.abs(((child.unit_price - child.avg_unit_price) / child.avg_unit_price) * 100).toFixed(0)}%` : '-'}
                   </span>
@@ -200,10 +106,11 @@ const ProductDetails = ({ products, isLoading }) => (
   </div>
 );
 
-const Panel = ({ title, items, onSelect, selectedKey, level, icon, isLoading }) => {
+const Panel = forwardRef(({ title, items, onSelect, selectedKey, level, icon, isLoading }, ref) => {
   const Icon = icon;
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
@@ -256,59 +163,44 @@ const Panel = ({ title, items, onSelect, selectedKey, level, icon, isLoading }) 
       </ScrollArea>
     </motion.div>
   );
-};
+});
 
-const DrilldownExplorer = ({ analysisMode = 'region', initialFilters = {}, overrideFilters = {} }) => {
+const formatDateToAPI = (date) => (date ? format(new Date(date), 'yyyy-MM-dd') : null);
+
+const DrilldownExplorer = ({ analysisMode = 'region', filters: initialFilters = {} }) => {
   const [panels, setPanels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [productDetails, setProductDetails] = useState({ isLoading: false, data: [] });
   const containerRef = useRef(null);
+  const { toast } = useToast();
 
   const config = analysisConfig[analysisMode];
-  const { fetchInitialData, fetchDrilldownData } = useDrilldownData(analysisMode, initialFilters, overrideFilters);
 
-  // Use a ref to track previous essential dependencies to avoid infinite loops or unnecessary resets
-  const prevFiltersRef = useRef(null);
-
-  const initExplorer = useCallback(async () => {
-    setLoading(true);
-    setProductDetails({ isLoading: false, data: [] }); // Reset product details
-    const topLevelItems = await fetchInitialData();
-    setPanels([{
-        title: config.dimensionLabels[0],
-        items: topLevelItems,
-        selectedKey: null,
-        isLoading: false,
-    }]);
-    setLoading(false);
-  }, [fetchInitialData, config.dimensionLabels]);
+  const { data: initialResponse, loading: initialLoading } = useAnalyticalData(
+    'get_treemap_data', 
+    { ...initialFilters, p_analysis_mode: analysisMode, p_show_defined_groups_only: false },
+    { enabled: panels.length === 0 }
+  );
 
   useEffect(() => {
-    const currentFilters = { ...initialFilters, ...overrideFilters };
-    
-    // Check if filters actually changed using deep comparison for arrays
-    const prevFilters = prevFiltersRef.current;
-    
-    const hasChanged = !prevFilters ||
-        currentFilters.startDate !== prevFilters.startDate ||
-        currentFilters.endDate !== prevFilters.endDate ||
-        JSON.stringify(currentFilters.supervisors) !== JSON.stringify(prevFilters.supervisors) ||
-        JSON.stringify(currentFilters.sellers) !== JSON.stringify(prevFilters.sellers) ||
-        JSON.stringify(currentFilters.regions) !== JSON.stringify(prevFilters.regions) ||
-        JSON.stringify(currentFilters.customerGroups) !== JSON.stringify(prevFilters.customerGroups);
-
-    if (hasChanged) {
-        prevFiltersRef.current = currentFilters;
-        initExplorer();
+    if (!initialLoading && initialResponse) {
+      const initialData = initialResponse || [];
+      const items = initialData.map(d => ({ key: d.name, name: d.name, value: d.size || d.value }));
+      setPanels([{
+          title: config.dimensionLabels[0],
+          items: items,
+          selectedKey: null,
+          isLoading: false,
+      }]);
+      setLoading(false);
     }
-  }, [initExplorer, initialFilters, overrideFilters]); // Removed panels.length to avoid loop
-
+  }, [initialResponse, initialLoading, config.dimensionLabels, analysisMode]);
 
   const handleSelect = useCallback(async (panelIndex, item) => {
     const currentPanel = panels[panelIndex];
     if (currentPanel.selectedKey === item.key) return;
 
-    const newPanels = panels.slice(0, panelIndex + 1);
+    let newPanels = panels.slice(0, panelIndex + 1);
     newPanels[panelIndex] = { ...newPanels[panelIndex], selectedKey: item.key };
     setProductDetails({ isLoading: false, data: [] });
 
@@ -316,58 +208,91 @@ const DrilldownExplorer = ({ analysisMode = 'region', initialFilters = {}, overr
     if (nextLevelIndex >= config.dimensions.length) return;
 
     const nextDrilldownLevel = nextLevelIndex + 1;
+    
+    // 1. Get keys from PREVIOUS panels
+    const parentKeys = panels.slice(0, panelIndex).map(p => p.selectedKey).filter(Boolean);
+    
+    // 2. Add the CURRENTLY clicked item's key
+    const newParentKeys = [...parentKeys, item.key];
 
-    const parentKeys = newPanels.map(p => {
-        const selectedItem = p.items.find(i => i.key === p.selectedKey);
-        return selectedItem ? selectedItem.key : null;
-    }).filter(Boolean);
+    // CRITICAL: Logging before the RPC call
+    console.log("DEBUG - DrilldownExplorer: Chamada RPC 'get_drilldown_data'");
+    console.log("  1) panelIndex:", panelIndex);
+    console.log("  2) item.key:", item.key);
+    console.log("  3) parentKeys (array completo):", newParentKeys);
+    console.log("  4) nextDrilldownLevel:", nextDrilldownLevel);
 
-    if (config.dimensions[nextLevelIndex] === 'product') {
-        setPanels(newPanels);
-        setProductDetails({ isLoading: true, data: [] });
-        const productData = await fetchDrilldownData(nextDrilldownLevel, parentKeys);
-        setProductDetails({ isLoading: false, data: productData });
-        return;
-    }
+    const defaultStart = startOfMonth(new Date());
+    const defaultEnd = endOfMonth(new Date());
+
+    const drilldownParams = {
+        p_analysis_mode: analysisMode,
+        p_start_date: formatDateToAPI(initialFilters.dateRange?.from || defaultStart),
+        p_end_date: formatDateToAPI(initialFilters.dateRange?.to || defaultEnd),
+        p_exclude_employees: initialFilters.excludeEmployees,
+        p_supervisors: initialFilters.supervisors,
+        p_sellers: initialFilters.sellers,
+        p_customer_groups: initialFilters.customerGroups,
+        p_regions: initialFilters.regions,
+        p_clients: initialFilters.clients,
+        p_search_term: initialFilters.searchTerm,
+        p_show_defined_groups_only: false,
+        p_drilldown_level: nextDrilldownLevel,
+        p_parent_keys: newParentKeys,
+    };
 
     setPanels([...newPanels, { title: config.dimensionLabels[nextLevelIndex], items: [], selectedKey: null, isLoading: true }]);
+    
+    const { data: response, error } = await supabase.rpc('get_drilldown_data', drilldownParams);
+    
+    if (error) {
+        toast({ variant: "destructive", title: `Erro ao detalhar`, description: error.message });
+        console.error("DEBUG: Erro da RPC get_drilldown_data para o nível " + config.dimensionLabels[nextLevelIndex] + ":", { error, params: drilldownParams });
+    }
 
-    const childrenData = await fetchDrilldownData(nextDrilldownLevel, parentKeys);
+    if (response?.debug_info) {
+      console.log("DEBUG: Informações de depuração da RPC 'get_drilldown_data':", response.debug_info);
+      toast({
+        variant: "default",
+        title: "Depuração RPC",
+        description: "Informações de depuração foram registradas no console do navegador.",
+        duration: 10000,
+      });
+    }
+    
+    const finalChildren = response?.data || [];
 
-    setPanels(prevPanels => {
-      const updatedPanels = [...prevPanels];
-      const targetPanelIndex = panelIndex + 1;
-      if (updatedPanels[targetPanelIndex]) {
-        updatedPanels[targetPanelIndex] = {
-          ...updatedPanels[targetPanelIndex],
-          items: childrenData,
-          isLoading: false,
-        };
-      }
-      return updatedPanels;
-    });
-  }, [panels, fetchDrilldownData, config]);
+    if (config.dimensions[nextLevelIndex] === 'product') {
+        setPanels(newPanels); // Don't add a new panel for products
+        setProductDetails({ isLoading: false, data: finalChildren });
+    } else {
+        setPanels(prevPanels => {
+          const updatedPanels = [...prevPanels];
+          const targetPanelIndex = panelIndex + 1;
+          if (updatedPanels[targetPanelIndex]) {
+            updatedPanels[targetPanelIndex] = {
+              ...updatedPanels[targetPanelIndex],
+              items: finalChildren,
+              isLoading: false,
+            };
+          }
+          return updatedPanels;
+        });
+    }
+
+  }, [panels, config, analysisMode, initialFilters, toast]);
 
   useEffect(() => {
     if (containerRef.current) {
-      // Smooth scroll to right
       containerRef.current.scrollTo({
         left: containerRef.current.scrollWidth,
         behavior: 'smooth'
       });
     }
-  }, [panels.length, productDetails.data.length]);
+  }, [panels.length, productDetails.data?.length]);
   
   const getBreadcrumbs = () => {
     const crumbs = [];
-    
-    // Add root context based on analysis mode
-    if(analysisMode === 'seller' && overrideFilters.sellers && overrideFilters.sellers.length > 0) {
-      crumbs.push({ name: overrideFilters.sellers[0], index: -2, icon: User });
-    } else if (analysisMode === 'supervisor' && overrideFilters.supervisors && overrideFilters.supervisors.length > 0) {
-      crumbs.push({ name: overrideFilters.supervisors[0], index: -2, icon: Building2 });
-    }
-
     panels.forEach((p, i) => {
         const selectedItem = p.items.find(it => it.key === p.selectedKey);
         if (selectedItem) {
@@ -380,10 +305,6 @@ const DrilldownExplorer = ({ analysisMode = 'region', initialFilters = {}, overr
   const breadcrumbs = getBreadcrumbs();
 
   const handleBreadcrumbClick = (index) => {
-    if (index < 0) {
-        handleHomeClick();
-        return;
-    }
     const newPanels = panels.slice(0, index + 1);
     newPanels[index] = {...newPanels[index], selectedKey: null};
     setPanels(newPanels);
@@ -405,7 +326,6 @@ const DrilldownExplorer = ({ analysisMode = 'region', initialFilters = {}, overr
 
   return (
     <div className="flex flex-col h-[650px] bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      {/* Breadcrumbs Bar */}
       <div className="flex items-center gap-1 p-3 border-b border-slate-100 bg-white text-sm text-slate-500 overflow-x-auto no-scrollbar">
         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full hover:bg-indigo-50 hover:text-indigo-600" onClick={handleHomeClick}>
           <Home className="h-4 w-4" />
@@ -413,9 +333,7 @@ const DrilldownExplorer = ({ analysisMode = 'region', initialFilters = {}, overr
         
         {breadcrumbs.length > 0 && <ChevronRight className="h-4 w-4 text-slate-300 flex-shrink-0" />}
         
-        {breadcrumbs.map((crumb, i) => {
-          const CrumbIcon = crumb.icon;
-          return (
+        {breadcrumbs.map((crumb, i) => (
             <React.Fragment key={i}>
                 <Button
                 variant="ghost"
@@ -426,16 +344,13 @@ const DrilldownExplorer = ({ analysisMode = 'region', initialFilters = {}, overr
                 )}
                 onClick={() => handleBreadcrumbClick(crumb.index)}
                 >
-                {CrumbIcon && <CrumbIcon className="h-3.5 w-3.5 mr-2 opacity-70" />}
                 <span className="truncate">{crumb.name}</span>
                 </Button>
                 {i < breadcrumbs.length - 1 && <ChevronRight className="h-4 w-4 text-slate-300 flex-shrink-0" />}
             </React.Fragment>
-          );
-        })}
+        ))}
       </div>
 
-      {/* Panels Container */}
       <div ref={containerRef} className="flex flex-grow overflow-x-auto scroll-smooth">
         <AnimatePresence initial={false} mode="popLayout">
           {panels.map((panel, index) => (

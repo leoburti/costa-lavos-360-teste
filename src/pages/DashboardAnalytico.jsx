@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { useFilters } from '@/contexts/FilterContext'; // Import Context
 import { supabase } from '@/lib/customSupabaseClient';

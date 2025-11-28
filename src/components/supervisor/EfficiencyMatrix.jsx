@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   Table, 
@@ -44,16 +43,17 @@ const EfficiencyMatrix = ({ data, isLoading, onSelectSupervisor, selectedId }) =
       </div>
       
       <ScrollArea className="flex-1">
-        <div className="w-full min-w-[600px]"> {/* Ensure table doesn't crush on small screens */}
+        <div className="w-full min-w-full"> {/* Ensure table takes full width */}
           <Table>
             <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
               <TableRow className="hover:bg-slate-50 border-b border-slate-200">
-                <TableHead className="w-[50px] text-center font-bold text-slate-600 text-xs uppercase">#</TableHead>
-                <TableHead className="font-bold text-slate-600 text-xs uppercase w-[30%]">Supervisor</TableHead>
-                <TableHead className="text-right font-bold text-slate-600 text-xs uppercase w-[25%]">Vendas</TableHead>
-                <TableHead className="text-center font-bold text-slate-600 text-xs uppercase w-[15%]">Score</TableHead>
-                <TableHead className="text-center font-bold text-slate-600 text-xs uppercase w-[15%]">KPIs</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                <TableHead className="w-[40px] text-center font-bold text-slate-600 text-xs uppercase">#</TableHead>
+                <TableHead className="font-bold text-slate-600 text-xs uppercase">Supervisor</TableHead>
+                <TableHead className="text-right font-bold text-slate-600 text-xs uppercase">Vendas</TableHead>
+                <TableHead className="text-center font-bold text-slate-600 text-xs uppercase w-[80px]">Score</TableHead>
+                {/* Hide complex cols when compact view might be active via selectedId, but for now keep consistent table layout */}
+                <TableHead className="text-center font-bold text-slate-600 text-xs uppercase hidden sm:table-cell">ROI/Var</TableHead>
+                <TableHead className="w-[40px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -74,46 +74,46 @@ const EfficiencyMatrix = ({ data, isLoading, onSelectSupervisor, selectedId }) =
                       className={`cursor-pointer transition-all border-b border-slate-100 last:border-0 group hover:bg-slate-50/80 ${isSelected ? 'bg-blue-50/60 border-l-4 border-l-blue-600' : 'border-l-4 border-l-transparent'}`}
                       onClick={() => onSelectSupervisor(item.name)}
                     >
-                      <TableCell className="text-center font-bold text-slate-400 group-hover:text-slate-600 text-xs">
+                      <TableCell className="text-center font-bold text-slate-400 group-hover:text-slate-600 text-xs p-3">
                         {index + 1}
                       </TableCell>
                       
-                      <TableCell>
+                      <TableCell className="p-3">
                         <div className="flex flex-col">
-                          <span className={`font-bold text-sm ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>
+                          <span className={`font-bold text-sm truncate max-w-[180px] ${isSelected ? 'text-blue-700' : 'text-slate-800'}`} title={item.name}>
                             {item.name}
                           </span>
                           <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                            <Users size={10} /> {item.activeSellers} vendedores
+                            <Users size={10} /> {item.activeSellers} vend.
                           </span>
                         </div>
                       </TableCell>
                       
-                      <TableCell className="text-right">
+                      <TableCell className="text-right p-3">
                         <div className="flex flex-col items-end gap-1">
-                          <span className="font-bold text-sm text-slate-900">{formatCurrency(item.total_revenue)}</span>
-                          <Progress value={(item.total_revenue / maxSales) * 100} className="h-1.5 w-full max-w-[100px]" indicatorClassName="bg-blue-600" />
+                          <span className="font-bold text-sm text-slate-900 whitespace-nowrap">{formatCurrency(item.total_revenue)}</span>
+                          <Progress value={(item.total_revenue / maxSales) * 100} className="h-1.5 w-full max-w-[80px]" indicatorClassName="bg-blue-600" />
                         </div>
                       </TableCell>
                       
-                      <TableCell className="text-center">
+                      <TableCell className="text-center p-3">
                         <div className="flex flex-col items-center gap-1">
                           <Badge variant="secondary" className={`text-[10px] font-bold border-0 px-2 ${efficiencyColor} text-white`}>
-                            {Math.round(item.efficiencyIndex)} pts
+                            {Math.round(item.efficiencyIndex)}
                           </Badge>
                         </div>
                       </TableCell>
                       
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell p-3">
                         <div className="flex flex-col gap-1 items-center">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm ${item.growth >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm whitespace-nowrap ${item.growth >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                             {item.growth >= 0 ? '▲' : '▼'} {formatPercentage(Math.abs(item.growth * 100))}
                           </span>
-                          <span className="text-[10px] text-slate-400">ROI: {item.roi}x</span>
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap">{item.roi}x ROI</span>
                         </div>
                       </TableCell>
                       
-                      <TableCell>
+                      <TableCell className="p-3">
                         <Button 
                           variant="ghost" 
                           size="icon" 

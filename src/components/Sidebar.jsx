@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,21 +35,14 @@ export const allMenuItems = [
     id: 'commercial-analysis', label: 'Análise Comercial', icon: BarChartHorizontal, moduleId: 'commercial-analysis',
     subItems: [
       { path: '/analitico-vendas-diarias', id: 'analitico_vendas_diarias', label: 'Vendas Diárias', moduleId: 'commercial-analysis' },
-      { path: '/analise-churn', id: 'analise_churn', label: 'Análise de Churn', moduleId: 'commercial-analysis' },
+      { path: '/analise-preditiva-vendas', id: 'analise_preditiva_vendas', label: 'Análise Preditiva', moduleId: 'commercial-analysis' },
       { path: '/curva-abc', id: 'curva_abc', label: 'Curva ABC', moduleId: 'commercial-analysis' },
-      { path: '/calculo-rfm', id: 'calculo_rfm', label: 'Cálculo RFM', moduleId: 'commercial-analysis' },
-      { path: '/tendencia-vendas', id: 'tendencia_vendas', label: 'Tendência de Vendas', moduleId: 'commercial-analysis' },
       { path: '/analise-valor-unitario', id: 'analise_valor_unitario', label: 'Análise Valor Unitário', moduleId: 'commercial-analysis' },
-      { path: '/baixo-desempenho', id: 'baixo_desempenho', label: 'Baixo Desempenho', moduleId: 'commercial-analysis' },
-      { path: '/analise-fidelidade', id: 'analise_fidelidade', label: 'Análise de Fidelidade', moduleId: 'commercial-analysis' },
-      {
-        id: 'bonificados', label: 'Bonificados', moduleId: 'commercial-analysis',
-        subItems: [
-          { path: '/produtos-bonificados', id: 'produtos_bonificados', label: 'Visão Geral', moduleId: 'commercial-analysis' },
-          { path: '/performance-bonificados', id: 'performance_bonificados', label: '% Performance', moduleId: 'commercial-analysis' },
-          { path: '/analitico-bonificados', id: 'analitico_bonificados', label: 'Analítico', moduleId: 'commercial-analysis' },
-        ]
-      },
+      { path: '/analise-desempenho-fidelidade', id: 'analise_desempenho_fidelidade', label: 'Desempenho e Fidelidade', moduleId: 'commercial-analysis' },
+      { path: '/analise-clientes', id: 'analise_clientes', label: 'Análise de Clientes', moduleId: 'commercial-analysis' },
+      { path: '/analise-produtos', id: 'analise_produtos', label: 'Análise de Produtos', moduleId: 'commercial-analysis' },
+      { path: '/analise-sazonalidade', id: 'analise_sazonalidade', label: 'Análise Sazonalidade', moduleId: 'commercial-analysis' },
+      { path: '/analise-margem', id: 'analise_margem', label: 'Análise de Margem', moduleId: 'commercial-analysis' },
       {
         id: 'equipamentos', label: 'Equipamentos', moduleId: 'commercial-analysis',
         subItems: [
@@ -135,7 +129,6 @@ export const allMenuItems = [
       }
     ]
   },
-  { path: '/bonificacoes', id: 'bonificacoes_module', label: 'Bonificações', icon: Gift, moduleId: 'bonificacoes_module' },
   { path: '/tarefas', id: 'tarefas', label: 'Tarefas', icon: ListTodo, moduleId: 'tarefas' },
   {
     id: 'manutencao_equip', label: 'Manutenção Equip.', icon: Wrench, moduleId: 'manutencao_equip',
@@ -377,7 +370,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                     </Accordion>
                 ) : (
                     <div className="text-center text-primary-foreground/60 p-4 text-sm">
-                        <AlertCircle className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                        <AlertCircle className="mx-auto h-8 w-8 mb-4 opacity-50" />
                         <p>Nenhum menu disponível.</p>
                         <p className="text-xs mt-1">Verifique suas permissões ou a conexão.</p>
                     </div>

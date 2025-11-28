@@ -1,185 +1,166 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { useFilters } from '@/contexts/FilterContext';
-import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ZAxis, Legend } from 'recharts';
-import { formatCurrency } from '@/lib/utils';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertTriangle } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { motion } from 'framer-motion';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { useFilters } from '@/contexts/FilterContext';
+import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import MetricCard from '@/components/MetricCard';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Award, Star, Diamond, TrendingDown, Users, TrendingUp } from 'lucide-react';
+import AIInsight from '@/components/AIInsight';
 
-const SEGMENT_COLORS = {
-  'Campeões': '#15803d',
-  'Clientes Fiéis': '#22c55e',
-  'Potenciais Fiéis': '#84cc16',
-  'Novos Clientes': '#3b82f6',
-  'Promissores': '#a855f7',
-  'Precisam de Atenção': '#f97316',
-  'Em Risco': '#ef4444',
-  'Hibernando': '#64748b'
+const formatCurrency = (value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const segmentConfig = {
+  'Campeões': { icon: Award, color: 'bg-yellow-400 text-yellow-900', description: 'Compram muito, com frequência e recentemente.' },
+  'Clientes Fiéis': { icon: Star, color: 'bg-blue-400 text-blue-900', description: 'Compram com frequência, valorizam a marca.' },
+  'Potenciais Fiéis': { icon: Diamond, color: 'bg-green-400 text-green-900', description: 'Compradores recentes com bom potencial.' },
+  'Novos Clientes': { icon: Users, color: 'bg-sky-400 text-sky-900', description: 'Recém-chegados, precisam de atenção.' },
+  'Em Risco': { icon: TrendingDown, color: 'bg-orange-400 text-orange-900', description: 'Não compram há algum tempo, risco de churn.' },
+  'Hibernando': { icon: TrendingDown, color: 'bg-red-500 text-red-900', description: 'Não compram há muito tempo, quase perdidos.' },
+  'Precisam de Atenção': { icon: TrendingDown, color: 'bg-purple-400 text-purple-900', description: 'Baixa frequência, precisam de estímulo.' },
+  'Promissores': { icon: TrendingUp, color: 'bg-indigo-400 text-indigo-900', description: 'Compraram recentemente, mas precisam de mais frequência.' },
 };
 
-const CalculoRFM = () => {
+const CalculoRFM = ({ isTab = false }) => {
   const { filters } = useFilters();
-  const [rawData, setRawData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Correct date access and formatting
-  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
-  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
-  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
-
-  // Debug Logs
-  useEffect(() => {
-    console.log('[CalculoRFM] Filters:', filters);
-    console.log('[CalculoRFM] Dates:', { startDateStr, endDateStr });
-  }, [filters, startDateStr, endDateStr]);
-
-  useEffect(() => {
-    if (!startDateStr || !endDateStr) return;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        let query = supabase
-          .from('bd-cl')
-          .select('Cliente, Nome, "N Fantasia", Total, "DT Emissao", Pedido, Cfo')
-          .gte('DT Emissao', startDateStr)
-          .lte('DT Emissao', endDateStr)
-          .gt('Total', 0);
-
-        if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
-        
-        const { data, error: supabaseError } = await query.abortSignal(controller.signal);
-
-        if (supabaseError) throw supabaseError;
-        setRawData(data || []);
-
-      } catch (err) {
-        console.error("Erro RFM:", err);
-        if (err.name === 'AbortError') setError("Timeout na consulta. Tente um intervalo menor.");
-        else setError("Erro ao calcular RFM.");
-      } finally {
-        setLoading(false);
-        clearTimeout(timeoutId);
-      }
-    };
-
-    fetchData();
-    return () => {
-      controller.abort();
-      clearTimeout(timeoutId);
-    };
-  }, [filters, startDateStr, endDateStr]);
-
-  const chartData = useMemo(() => {
-    if (!rawData.length) return [];
-
-    const clients = {};
-    const today = new Date();
-
-    rawData.forEach(row => {
-      if (['5910', '6910', '5908', '6551', '6908', '5551'].includes(String(row.Cfo))) return;
-
-      const id = row.Cliente;
-      if (!clients[id]) {
-        clients[id] = {
-          id,
-          clientName: row['N Fantasia'] || row.Nome,
-          total: 0,
-          orders: new Set(),
-          lastDate: new Date(0) // epoch
-        };
-      }
-      clients[id].total += row.Total;
-      clients[id].orders.add(row.Pedido);
-      const date = new Date(row['DT Emissao']);
-      if (date > clients[id].lastDate) clients[id].lastDate = date;
-    });
-
-    const processed = Object.values(clients).map(c => {
-      const recency = Math.ceil(Math.abs(today - c.lastDate) / (1000 * 60 * 60 * 24));
-      const frequency = c.orders.size;
-      const monetary = c.total;
-
-      // Simple segmentation logic (simplified RFM)
-      let segment = 'Promissores';
-      if (frequency >= 4 && monetary > 10000) segment = 'Campeões';
-      else if (frequency >= 3) segment = 'Clientes Fiéis';
-      else if (recency <= 30 && frequency === 1) segment = 'Novos Clientes';
-      else if (recency > 90) segment = 'Hibernando';
-      else if (recency > 60) segment = 'Em Risco';
-      else if (monetary > 5000) segment = 'Potenciais Fiéis';
-      else if (recency > 30 && frequency < 2) segment = 'Precisam de Atenção';
-
-      return { ...c, recency, frequency, monetary, segment };
-    });
-
-    // Group by segment for chart
-    const grouped = {};
-    processed.forEach(p => {
-      if (!grouped[p.segment]) grouped[p.segment] = [];
-      grouped[p.segment].push(p);
-    });
-
-    return Object.entries(grouped).map(([key, value]) => ({
-      name: key,
-      data: value,
-      color: SEGMENT_COLORS[key] || '#888'
-    }));
-  }, [rawData]);
-
-  if (loading && !rawData.length) return <div className="h-96 flex items-center justify-center"><LoadingSpinner message="Calculando Matriz RFM..." /></div>;
   
-  if (error) return <Alert variant="destructive" className="m-6"><AlertTriangle className="h-4 w-4"/><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
+  const dateRange = useMemo(() => filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }, [filters.dateRange]);
+  
+  const params = useMemo(() => {
+    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
+    return {
+      p_start_date: dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : null,
+      p_end_date: dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : null,
+      p_exclude_employees: filters.excludeEmployees,
+      p_supervisors: filters.supervisors,
+      p_sellers: filters.sellers,
+      p_customer_groups: filters.customerGroups,
+      p_regions: filters.regions,
+      p_clients: selectedClients,
+      p_search_term: filters.searchTerm,
+    };
+  }, [filters, dateRange]);
+
+  const { data, loading, error } = useAnalyticalData('get_rfm_analysis', params, { enabled: !!params.p_start_date && !!params.p_end_date });
+
+  const segments = useMemo(() => {
+    if (!data) return {};
+    const segmentedData = {};
+    data.forEach(client => {
+      if (!segmentedData[client.segment]) {
+        segmentedData[client.segment] = [];
+      }
+      segmentedData[client.segment].push(client);
+    });
+    return segmentedData;
+  }, [data]);
+
+  const sortedSegments = Object.entries(segments).sort(([, a], [, b]) => b.length - a.length);
+  
+  const pageContent = (
+    <div className="space-y-6">
+      {!isTab && (
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Cálculo RFM</h1>
+          <p className="text-muted-foreground">Segmente seus clientes por Recência, Frequência e Valor Monetário.</p>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center items-center h-96">
+          <LoadingSpinner message="Calculando segmentos RFM..." />
+        </div>
+      ) : error ? (
+        <div className="text-red-500 text-center">Erro ao carregar dados: {error.message}</div>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {sortedSegments.slice(0, 4).map(([segmentName, clients]) => {
+              const config = segmentConfig[segmentName] || { icon: Users, description: '' };
+              return (
+                <MetricCard 
+                  key={segmentName}
+                  title={segmentName}
+                  value={clients.length.toString()}
+                  icon={config.icon}
+                  subtitle={config.description}
+                />
+              );
+            })}
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Segmentos de Clientes (RFM)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[500px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Segmento</TableHead>
+                      <TableHead className="text-right">Valor (R$)</TableHead>
+                      <TableHead className="text-right">Recência (dias)</TableHead>
+                      <TableHead className="text-right">Frequência</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.map((client, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">{client.clientName}</TableCell>
+                        <TableCell>
+                          <Badge className={segmentConfig[client.segment]?.color}>
+                            {client.segment}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{formatCurrency(client.monetary)}</TableCell>
+                        <TableCell className="text-right">{client.recency}</TableCell>
+                        <TableCell className="text-right">{client.frequency}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+          
+          <AIInsight 
+            context="Análise RFM"
+            data={data}
+            question="Com base na segmentação RFM, quais são as 3 principais estratégias para engajar os diferentes segmentos de clientes?"
+          />
+        </>
+      ) : (
+        <div className="text-center py-12">Nenhum dado encontrado para os filtros selecionados.</div>
+      )}
+    </div>
+  );
+
+  if (isTab) {
+    return pageContent;
+  }
 
   return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Matriz RFM</h1>
-        <p className="text-muted-foreground mt-1">Recência, Frequência e Valor Monetário (Consulta Direta)</p>
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle>Distribuição de Clientes</CardTitle></CardHeader>
-        <CardContent className="h-[500px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" dataKey="recency" name="Recência" label={{ value: 'Dias sem compra', position: 'insideBottom', offset: -10 }} reversed />
-              <YAxis type="number" dataKey="monetary" name="Valor" unit="R$" label={{ value: 'Valor Total', angle: -90, position: 'insideLeft' }} />
-              <ZAxis type="number" dataKey="frequency" range={[50, 400]} name="Frequência" />
-              <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ payload }) => {
-                if (payload && payload.length) {
-                  const d = payload[0].payload;
-                  return (
-                    <div className="bg-white p-3 border rounded shadow-lg text-sm">
-                      <p className="font-bold">{d.clientName}</p>
-                      <p>Seg: {d.segment}</p>
-                      <p>Rec: {d.recency} dias</p>
-                      <p>Val: {formatCurrency(d.monetary)}</p>
-                      <p>Freq: {d.frequency} pedidos</p>
-                    </div>
-                  );
-                }
-                return null;
-              }} />
-              <Legend />
-              {chartData.map((s) => (
-                <Scatter key={s.name} name={s.name} data={s.data} fill={s.color} />
-              ))}
-            </ScatterChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-    </div>
+    <>
+      <Helmet>
+        <title>Cálculo RFM - Costa Lavos</title>
+      </Helmet>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="p-4 sm:p-6"
+      >
+        {pageContent}
+      </motion.div>
+    </>
   );
 };
 
