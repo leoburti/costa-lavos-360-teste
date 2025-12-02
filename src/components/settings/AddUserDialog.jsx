@@ -42,17 +42,19 @@ const AddUserDialog = ({ isOpen, onClose, onUserAdded, supervisors = [], sellers
     }
     setLoading(true);
 
+    // Call Edge Function to create user in Supabase Auth
     const { data: createData, error: createError } = await supabase.functions.invoke('create-user', {
         body: { email, password, fullName }
     });
 
-    if (createError || createData.error) {
-        toast({ variant: 'destructive', title: 'Erro ao criar usuário', description: createError?.message || createData.error.message });
+    if (createError || (createData && createData.error)) {
+        toast({ variant: 'destructive', title: 'Erro ao criar usuário', description: createError?.message || createData?.error?.message });
         setLoading(false);
         return;
     }
 
-    if (createData.user) {
+    if (createData && createData.user) {
+      // Assign role and metadata via RPC
       const { error: roleError } = await supabase.rpc('update_user_role', {
           p_user_id: createData.user.id,
           p_role: role,
@@ -67,7 +69,7 @@ const AddUserDialog = ({ isOpen, onClose, onUserAdded, supervisors = [], sellers
       } else {
         toast({ title: 'Sucesso!', description: `Usuário ${fullName} criado com a permissão ${role}.` });
         if (onUserAdded) onUserAdded();
-        onClose();
+        if (onClose) onClose();
       }
     }
     setLoading(false);
@@ -80,7 +82,7 @@ const AddUserDialog = ({ isOpen, onClose, onUserAdded, supervisors = [], sellers
   const validSellers = Array.isArray(sellers) ? sellers : [];
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose && onClose()}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Adicionar Novo Usuário</DialogTitle>

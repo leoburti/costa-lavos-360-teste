@@ -16,7 +16,7 @@ const EditUserDialog = ({ user, isOpen, onClose, onUserUpdated }) => {
 
     useEffect(() => {
         if (isOpen && user) {
-            setFullName(user.full_name || '');
+            setFullName(user.full_name || user.nome || '');
             setPassword('');
         }
     }, [isOpen, user]);
@@ -28,8 +28,22 @@ const EditUserDialog = ({ user, isOpen, onClose, onUserUpdated }) => {
         }
         setLoading(true);
 
+        // First update public.users/users_unified
+        const { error: dbError } = await supabase
+            .from('users_unified')
+            .update({ nome: fullName })
+            .eq('id', user.user_id || user.id);
+
+        if (dbError) {
+             toast({ variant: 'destructive', title: 'Erro ao atualizar dados', description: dbError.message });
+             setLoading(false);
+             return;
+        }
+
+        // Optionally update password via RPC if provided (requires admin privilege usually wrapped in RPC)
+        // For now, we assume standard metadata update or custom logic
         const { error } = await supabase.rpc('update_user_by_admin', {
-            p_user_id: user.user_id,
+            p_user_id: user.user_id || user.id,
             p_full_name: fullName,
             p_password: password || null,
         });
@@ -38,15 +52,15 @@ const EditUserDialog = ({ user, isOpen, onClose, onUserUpdated }) => {
             toast({ variant: 'destructive', title: 'Erro ao atualizar usuário', description: error.message });
         } else {
             toast({ title: 'Sucesso!', description: `Usuário ${fullName} atualizado.` });
-            onUserUpdated(user.user_id, fullName);
-            onClose();
+            if (onUserUpdated) onUserUpdated(user.user_id || user.id, fullName);
+            if (onClose) onClose();
             setPassword('');
         }
         setLoading(false);
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose && onClose()}>
             <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
                     <DialogTitle>Editar Usuário: {user?.email}</DialogTitle>

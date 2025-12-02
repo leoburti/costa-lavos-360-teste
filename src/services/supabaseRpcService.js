@@ -1,5 +1,5 @@
-import { supabase } from '@/lib/customSupabaseClient';
-import { getAnalyticalData } from './analytics';
+
+import { callRpc } from '@/services/api';
 
 /**
  * @deprecated This file is obsolete and its logic has been merged into 'services/api.js' and 'services/analytics.js'.
@@ -10,7 +10,7 @@ console.warn("WARNING: `services/supabaseRpcService.js` is deprecated. Update im
 
 export async function callRpcFunction(functionName, params) {
     try {
-        const { data, error } = await getAnalyticalData(functionName, params);
+        const { data, error } = await callRpc(functionName, params);
         if (error) throw error;
         return data;
     } catch (error) {
@@ -23,7 +23,7 @@ export async function callRpcFunction(functionName, params) {
 }
 
 export function mapParametersToBackend(params, functionName) {
-    // This function is obsolete as mapping is now handled inside analytics.js
-    console.warn("mapParametersToBackend is deprecated.");
+    // This function is obsolete as mapping is now handled inside analytics.js or via manual mapping
+    console.warn("mapParametersToBackend is deprecated and returns params as-is.");
     return params;
 }

@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { apiClient } from '@/lib/apiClient';
+import { callRpc } from '@/services/api';
 
 /**
  * Hook para buscar dados analíticos com cache, retry e debounce de parâmetros.
@@ -38,7 +38,7 @@ export function useAnalyticalData(rpcName, params = {}, options = {}) {
     }
 
     try {
-      const { data: result, error: apiError } = await apiClient.callRpc(cleanRpcName, currentParams);
+      const { data: result, error: apiError } = await callRpc(cleanRpcName, currentParams);
 
       if (apiError) throw apiError;
 
