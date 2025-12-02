@@ -1,7 +1,8 @@
-import React from 'react';
+
+import React, { useMemo } from 'react';
 import AnalyticsTemplate from '@/components/analytics/AnalyticsTemplate';
 import ChartContainer from '@/components/analytics/ChartContainer';
-import { AnalyticsTable } from '@/components/analytics/AnalyticsWidgets'; // Reusing widget for table
+import { AnalyticsTable } from '@/components/analytics/AnalyticsWidgets'; 
 import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 import { useFilters } from '@/contexts/FilterContext';
 import { formatDateForAPI, formatCurrency } from '@/lib/utils';
@@ -10,13 +11,16 @@ import { AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContai
 export default function RelatoriFinanceiroReceita() {
   const { filters } = useFilters();
   
+  // Memoize options to avoid infinite loop in useAnalyticsData
+  const options = useMemo(() => ({ fallbackOnError: true }), []);
+
   const { data, isLoading, refetch } = useAnalyticsData(
     'get_relatorio_financeiro_receita',
     {
       p_start_date: formatDateForAPI(filters.dateRange?.[0]),
       p_end_date: formatDateForAPI(filters.dateRange?.[1])
     },
-    { fallbackOnError: true }
+    options
   );
 
   return (

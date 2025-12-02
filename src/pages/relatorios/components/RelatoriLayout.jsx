@@ -4,13 +4,15 @@ import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RefreshCw } from 'lucide-react';
-import { toast } from '@/components/ui/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 
 /**
  * Layout padrão para páginas de relatório.
  * Inclui título, descrição e um botão de atualização.
  */
-export default function RelatoriLayout({ title, description, children, isLoading = false, onRefresh }) {
+export function RelatoriLayout({ title, description, children, isLoading = false, onRefresh }) {
+  const { toast } = useToast();
+
   const handleRefreshClick = () => {
     if (onRefresh) {
       onRefresh();
@@ -52,3 +54,6 @@ export default function RelatoriLayout({ title, description, children, isLoading
     </div>
   );
 }
+
+// Export default as well to support consumers using default import
+export default RelatoriLayout;

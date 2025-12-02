@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+
+import React, { useMemo, useCallback } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
 import { useToast } from '@/components/ui/use-toast';
@@ -20,18 +21,21 @@ export default function RelatoriClienteCarteira() {
     p_end_date: endDate.toISOString().split('T')[0],
   }), [startDate, endDate]);
 
+  // Memoize options to prevent infinite re-renders
+  const options = useMemo(() => ({
+    onError: (err) => {
+      toast({
+        title: 'Erro ao carregar relatório',
+        description: err.message,
+        variant: 'destructive',
+      });
+    },
+  }), [toast]);
+
   const { data, loading, error, retry } = useAnalyticalData(
     'get_relatorio_cliente_carteira',
     params,
-    {
-      onError: (err) => {
-        toast({
-          title: 'Erro ao carregar relatório',
-          description: err.message,
-          variant: 'destructive',
-        });
-      },
-    }
+    options
   );
 
   const kpis = useMemo(() => {

@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
@@ -22,18 +23,20 @@ export default function RelatoriClienteChurn() {
     p_end_date: endDate.toISOString().split('T')[0],
   }), [startDate, endDate]);
 
+  const options = useMemo(() => ({
+    onError: (err) => {
+      toast({
+        title: 'Erro ao carregar relatório',
+        description: err.message,
+        variant: 'destructive',
+      });
+    },
+  }), [toast]);
+
   const { data, loading, error, retry } = useAnalyticalData(
     'get_relatorio_cliente_churn',
     params,
-    {
-      onError: (err) => {
-        toast({
-          title: 'Erro ao carregar relatório',
-          description: err.message,
-          variant: 'destructive',
-        });
-      },
-    }
+    options
   );
 
   const kpis = useMemo(() => {

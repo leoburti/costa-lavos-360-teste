@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { useFilters } from '@/contexts/FilterContext';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
@@ -23,18 +24,20 @@ export default function RelatoriVendasDiario() {
     p_page_size: 50,
   }), [startDate, endDate, currentPage]);
 
+  const options = useMemo(() => ({
+    onError: (err) => {
+      toast({
+        title: 'Erro ao carregar relatório',
+        description: err.message,
+        variant: 'destructive',
+      });
+    },
+  }), [toast]);
+
   const { data, loading, error, retry } = useAnalyticalData(
     'get_relatorio_vendas_diario',
     params,
-    {
-      onError: (err) => {
-        toast({
-          title: 'Erro ao carregar relatório',
-          description: err.message,
-          variant: 'destructive',
-        });
-      },
-    }
+    options
   );
 
   const kpis = useMemo(() => {
