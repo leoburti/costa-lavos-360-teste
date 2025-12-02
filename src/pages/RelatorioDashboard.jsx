@@ -1,9 +1,10 @@
+
 import React, { useMemo } from 'react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart3, TrendingUp, Users, Zap, DollarSign, Clock } from 'lucide-react';
-import { RelatoriLayout } from '@/components/RelatoriLayout';
+import RelatoriLayout from '@/pages/relatorios/components/RelatoriLayout'; // Corrected import path
 
 export default function RelatorioDashboard() {
   const { user } = useAuth();
