@@ -1,150 +1,174 @@
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription, 
-  DialogFooter 
+import React, { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { useMaintenance } from '@/hooks/useMaintenance';
 import { useToast } from '@/components/ui/use-toast';
-import { Construction, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { format } from 'date-fns';
+import { Construction, Power, PowerOff, Save } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
-const MaintenanceControlModal = ({ isOpen, onClose }) => {
-  const { maintenanceStatus, toggleMaintenance } = useMaintenance();
+const MaintenanceControlModal = ({ isOpen, onOpenChange }) => {
+  const { maintenanceStatus, loading, toggleMaintenance, refreshStatus } = useMaintenance();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  
-  const [isActive, setIsActive] = useState(maintenanceStatus?.isActive || false);
-  const [endTime, setEndTime] = useState(maintenanceStatus?.endTime ? new Date(maintenanceStatus.endTime).toISOString().slice(0, 16) : '');
-  const [message, setMessage] = useState(maintenanceStatus?.message || '');
 
-  // Sync state when modal opens or status changes
-  React.useEffect(() => {
+  const [isActive, setIsActive] = useState(false);
+  const [message, setMessage] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [endTime, setEndTime] = useState('');
+
+  useEffect(() => {
     if (isOpen) {
-      setIsActive(maintenanceStatus?.isActive || false);
-      setEndTime(maintenanceStatus?.endTime ? new Date(maintenanceStatus.endTime).toISOString().slice(0, 16) : '');
-      setMessage(maintenanceStatus?.message || '');
+      refreshStatus();
     }
-  }, [isOpen, maintenanceStatus]);
+  }, [isOpen, refreshStatus]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const finalEndTime = isActive && endTime ? new Date(endTime).toISOString() : null;
-      const finalMessage = isActive ? message : null;
-
-      const result = await toggleMaintenance(isActive, finalEndTime, finalMessage);
-
-      if (result.success) {
-        toast({
-          title: isActive ? "Modo Manutenção Ativado" : "Modo Manutenção Desativado",
-          description: isActive 
-            ? `O sistema está bloqueado para usuários até ${new Date(endTime).toLocaleString()}.` 
-            : "O sistema está acessível novamente.",
-          variant: isActive ? "destructive" : "default",
-        });
-        onClose();
+  useEffect(() => {
+    if (!loading && maintenanceStatus) {
+      setIsActive(maintenanceStatus.isActive);
+      setMessage(maintenanceStatus.message || 'Estamos realizando melhorias. O sistema voltará em breve.');
+      if (maintenanceStatus.endTime) {
+        try {
+          const d = new Date(maintenanceStatus.endTime);
+          setEndDate(format(d, 'yyyy-MM-dd'));
+          setEndTime(format(d, 'HH:mm'));
+        } catch (e) {
+          console.error("Invalid date from server for maintenance end time:", maintenanceStatus.endTime)
+          setEndDate('');
+          setEndTime('');
+        }
       } else {
-        throw new Error("Falha ao atualizar status");
+        setEndDate('');
+        setEndTime('');
       }
-    } catch (error) {
+    }
+  }, [maintenanceStatus, loading]);
+
+  const handleSave = async () => {
+    let combinedDateTime = null;
+    if (endDate && endTime) {
+      try {
+        combinedDateTime = new Date(`${endDate}T${endTime}:00`).toISOString();
+      } catch (e) {
+        toast({
+            title: 'Data inválida',
+            description: 'A data ou hora de retorno fornecida não é válida.',
+            variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    const { success, error } = await toggleMaintenance(isActive, combinedDateTime, message);
+
+    if (success) {
       toast({
-        title: "Erro",
-        description: "Não foi possível alterar o modo de manutenção.",
-        variant: "destructive"
+        title: 'Modo de Manutenção Atualizado',
+        description: `O sistema está agora ${isActive ? 'EM' : 'FORA DE'} manutenção.`,
+        variant: isActive ? 'destructive' : 'success',
       });
-    } finally {
-      setLoading(false);
+      onOpenChange(false);
+    } else {
+      toast({
+        title: 'Erro ao Salvar',
+        description: error?.message || 'Não foi possível alterar o modo de manutenção.',
+        variant: 'destructive',
+      });
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Construction className="h-6 w-6 text-amber-500" />
-            Controle de Manutenção
+          <DialogTitle className="flex items-center gap-2">
+            <Construction className="h-5 w-5" /> Controle de Manutenção
           </DialogTitle>
           <DialogDescription>
-            Ative o modo de manutenção para bloquear o acesso de usuários não administradores durante atualizações.
+            Ative ou desative o modo de manutenção para todos os usuários, exceto administradores.
           </DialogDescription>
         </DialogHeader>
+        <div className="grid gap-6 py-4">
+          <Card className={isActive ? 'border-destructive bg-destructive/10' : 'border-emerald-500 bg-emerald-500/10'}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="maintenance-mode" className="text-lg font-semibold">
+                  Modo Manutenção
+                </Label>
+                <div className="flex items-center gap-4">
+                  <span className={`text-sm font-bold ${isActive ? 'text-destructive' : 'text-emerald-500'}`}>
+                    {isActive ? 'ATIVADO' : 'DESATIVADO'}
+                  </span>
+                  <Switch
+                    id="maintenance-mode"
+                    checked={isActive}
+                    onCheckedChange={setIsActive}
+                    className="data-[state=checked]:bg-destructive data-[state=unchecked]:bg-emerald-500"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        <form onSubmit={handleSubmit} className="space-y-6 py-4">
-          
-          <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <div className="space-y-0.5">
-              <Label className="text-base">Status do Sistema</Label>
-              <p className="text-sm text-muted-foreground">
-                {isActive ? "Sistema em Manutenção (Bloqueado)" : "Sistema Operacional (Online)"}
-              </p>
-            </div>
-            <Switch 
-              checked={isActive}
-              onCheckedChange={setIsActive}
+          <div className="space-y-2">
+            <Label htmlFor="message">Mensagem de Manutenção</Label>
+            <Textarea
+              id="message"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Ex: Estamos implementando novas funcionalidades..."
+              disabled={loading}
             />
           </div>
 
-          {isActive && (
-            <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
-              <div className="space-y-2">
-                <Label htmlFor="endTime">Previsão de Retorno</Label>
-                <Input 
-                  id="endTime"
-                  type="datetime-local" 
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  required={isActive}
-                />
-                <p className="text-xs text-muted-foreground">Data e hora estimada para finalização.</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="message">Mensagem para Usuários</Label>
-                <Textarea 
-                  id="message"
-                  placeholder="Ex: Estamos realizando uma atualização programada..."
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  rows={3}
-                />
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 flex gap-3 items-start">
-                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                <p className="text-sm text-amber-800">
-                  Enquanto ativo, apenas administradores (Nível 1) poderão acessar o sistema. Todos os outros usuários verão a tela de manutenção.
-                </p>
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="end-date">Data de Retorno</Label>
+              <Input
+                id="end-date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                disabled={loading}
+              />
             </div>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-              Cancelar
-            </Button>
-            <Button 
-              type="submit" 
-              variant={isActive ? "destructive" : "default"}
-              disabled={loading}
-              className="gap-2"
-            >
-              {loading ? "Salvando..." : (isActive ? "Confirmar Bloqueio" : "Liberar Sistema")}
-              {isActive ? <Construction className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-            </Button>
-          </DialogFooter>
-        </form>
+            <div className="space-y-2">
+              <Label htmlFor="end-time">Hora de Retorno</Label>
+              <Input
+                id="end-time"
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSave} disabled={loading} className={isActive ? 'bg-destructive hover:bg-destructive/90' : 'bg-emerald-600 hover:bg-emerald-600/90'}>
+            {loading ? 'Salvando...' : (
+              <>
+                {isActive ? <Power className="mr-2 h-4 w-4" /> : <PowerOff className="mr-2 h-4 w-4" />}
+                {isActive ? 'Ativar Manutenção' : 'Desativar Manutenção'}
+                <Save className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

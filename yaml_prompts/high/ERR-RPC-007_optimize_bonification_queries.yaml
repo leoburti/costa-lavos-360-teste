@@ -1,0 +1,9 @@
+task: "Optimize Bonification RPC Queries"
+severity: "High"
+context: "The function 'get_bonification_analysis' performs slow filters on the large 'bd-cl' table using unoptimized 'Cfo' string comparisons."
+files_to_modify:
+  - "supabase_functions.sql"
+requirements:
+  - "Create a partial index on 'bd-cl' for Cfo IN ('5910', '6910')."
+  - "Refactor 'get_bonification_analysis' to use this index explicitly."
+  - "Consider creating a Materialized View 'mv_bonifications' if volume is high."

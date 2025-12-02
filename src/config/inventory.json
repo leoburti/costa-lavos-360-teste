@@ -1,0 +1,299 @@
+{
+  "modulos": [
+    {
+      "nome": "Dashboard Principal",
+      "rota": "/dashboard",
+      "componentes": ["DashboardComercial", "DashboardHeader", "DateRangePicker", "RankingList"],
+      "rpcs": ["get_overview_data_v2", "get_dashboard_and_daily_sales_kpis"],
+      "tabelas": ["private.mv_sales_summary", "private.mv_filter_options"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Análise Preditiva de Vendas (Unificada)",
+      "rota": "/analise-preditiva-vendas",
+      "componentes": ["AnalisePreditivaVendas", "InsightCard"],
+      "rpcs": ["get_churn_analysis_data_v3", "get_rfm_analysis", "get_new_client_trends"],
+      "tabelas": ["bd-cl", "private.mv_sales_summary"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Análise de Desempenho e Fidelidade",
+      "rota": "/analise-desempenho-fidelidade",
+      "componentes": ["AnaliseDesempenhoFidelidade", "EfficiencyMatrix"],
+      "rpcs": ["get_low_performance_clients", "get_loyalty_analysis"],
+      "tabelas": ["bd-cl"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Senhor Lavos (IA)",
+      "rota": "/ai-chat",
+      "componentes": ["AIChat"],
+      "rpcs": [],
+      "tabelas": ["ai_analysis_history"],
+      "integracoes": ["OpenAI/Gemini via Edge Function"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Bonificações (V2)",
+      "rota": "/bonificacoes-novo",
+      "componentes": ["BonificacoesNovo", "NewRequestView", "ConsultRequestsView"],
+      "rpcs": ["handle_bonification_request_triggers"],
+      "tabelas": ["bonification_requests", "bonification_approvers", "bonification_audit_log"],
+      "status": "ativo"
+    },
+    {
+      "nome": "CRM",
+      "rota": "/crm",
+      "componentes": ["CRM (Layout)", "Pipeline", "Contacts", "ComodatoContracts"],
+      "rpcs": ["get_registration_reports"],
+      "tabelas": ["crm_contacts", "crm_deals", "crm_stages", "crm_interactions"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Apoio (Operacional)",
+      "rota": "/apoio",
+      "componentes": ["ApoioLayout", "ComodatoLayout", "ChamadosLayout", "AgendaLayout"],
+      "rpcs": ["get_agenda_profissional", "criar_chamado_comodato", "validar_checkin_checkout"],
+      "tabelas": ["apoio_chamados", "apoio_clientes_comodato", "apoio_agenda_eventos", "apoio_equipamentos_comodato"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Configurações (Unificado)",
+      "rota": "/configuracoes",
+      "componentes": ["ConfiguracoesLayout", "CentralizedTeamManagement", "SystemDiagnosisPage"],
+      "rpcs": ["get_user_access_scope", "is_admin"],
+      "tabelas": ["users_unified", "apoio_equipes", "apoio_personas"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Páginas Analíticas Detalhadas",
+      "rota": "/analitico-*",
+      "componentes": ["AnaliticoSupervisor", "AnaliticoVendedor", "AnaliticoRegiao", "AnaliticoGrupoClientes", "AnaliticoProduto"],
+      "rpcs": ["get_supervisor_analytical_data", "get_seller_analytical_data", "get_regional_summary_v2", "get_group_sales_analysis", "get_product_basket_analysis_v2"],
+      "tabelas": ["bd-cl", "private.mv_sales_summary"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Visão 360° do Cliente",
+      "rota": "/visao-360-cliente",
+      "componentes": ["Visao360Cliente", "Client360Dashboard"],
+      "rpcs": ["get_client_360_data_v2", "get_single_client_kpis"],
+      "tabelas": ["bd-cl", "bd_cl_inv", "apoio_chamados", "crm_contacts"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Análise de Vendas Diárias",
+      "rota": "/analitico-vendas-diarias",
+      "componentes": ["AnaliticoVendasDiarias", "DailySalesTimeline", "DailySalesTabsExplorer"],
+      "rpcs": ["get_daily_sales_data_v2"],
+      "tabelas": ["bd-cl"],
+      "status": "ativo"
+    },
+    {
+      "nome": "Páginas de Debug",
+      "rota": "/debug/*",
+      "componentes": ["RPCTestPage", "AnaliseProfundaPage", "DataVerificationPage", "SupabaseTestPage"],
+      "rpcs": ["inspect_table_structure", "get_db_overview"],
+      "tabelas": ["pg_tables", "pg_proc"],
+      "status": "ativo_desenvolvimento"
+    }
+  ],
+  "rpcs": [
+    {
+      "nome": "get_dashboard_and_daily_sales_kpis",
+      "schema": "public",
+      "parametros": ["p_start_date", "p_end_date", "p_previous_start_date", "p_previous_end_date", "filters..."],
+      "retorno": "jsonb",
+      "tabelas_usadas": ["private.mv_sales_summary"],
+      "status": "ativo"
+    },
+    {
+      "nome": "get_client_360_data_v2",
+      "schema": "public",
+      "parametros": ["p_start_date", "p_end_date", "p_target_client_code", "p_target_store"],
+      "retorno": "jsonb",
+      "tabelas_usadas": ["bd-cl", "private.mv_sales_summary", "clientes_apoio", "apoio_chamados", "crm_contacts", "bd_cl_inv"],
+      "status": "ativo"
+    },
+    {
+      "nome": "get_churn_analysis_data_v3",
+      "schema": "public",
+      "parametros": ["filters..."],
+      "retorno": "jsonb",
+      "tabelas_usadas": ["bd-cl"],
+      "status": "ativo"
+    },
+    {
+      "nome": "get_rfm_analysis",
+      "schema": "public",
+      "parametros": ["p_start_date", "p_end_date", "filters..."],
+      "retorno": "jsonb",
+      "tabelas_usadas": ["private.mv_sales_summary"],
+      "status": "ativo"
+    },
+    {
+      "nome": "get_abc_analysis",
+      "schema": "public",
+      "parametros": ["p_start_date", "p_end_date", "filters..."],
+      "retorno": "jsonb",
+      "tabelas_usadas": ["bd-cl"],
+      "status": "ativo"
+    },
+    {
+      "nome": "is_admin",
+      "schema": "public",
+      "parametros": [],
+      "retorno": "boolean",
+      "tabelas_usadas": ["users_unified"],
+      "status": "ativo"
+    },
+    {
+      "nome": "get_user_access_scope",
+      "schema": "public",
+      "parametros": [],
+      "retorno": "jsonb",
+      "tabelas_usadas": ["users_unified"],
+      "status": "ativo"
+    },
+    {
+        "nome": "f_unaccent",
+        "schema": "public",
+        "parametros": ["text"],
+        "retorno": "text",
+        "tabelas_usadas": ["extensions.unaccent"],
+        "status": "ativo"
+    },
+    {
+        "nome": "unaccent",
+        "schema": "public",
+        "parametros": ["text"],
+        "retorno": "text",
+        "tabelas_usadas": ["extensions.unaccent"],
+        "status": "ativo"
+    },
+    {
+        "nome": "process_refresh_sales_summary",
+        "schema": "public",
+        "parametros": [],
+        "retorno": "void",
+        "tabelas_usadas": ["private.mv_sales_summary", "private.mv_filter_options", "private.mv_available_periods"],
+        "status": "ativo"
+    }
+  ],
+  "tabelas": [
+    {
+      "nome": "bd-cl",
+      "schema": "public",
+      "rls_ativado": true,
+      "politicas": 1,
+      "colunas_principais": ["Cliente", "Nome Vendedor", "Nome Supervisor", "DT Emissao", "Total"],
+      "status": "ativo"
+    },
+    {
+      "nome": "users_unified",
+      "schema": "public",
+      "rls_ativado": true,
+      "politicas": 3,
+      "colunas_principais": ["id", "email", "nome", "role", "equipe_id"],
+      "status": "ativo"
+    },
+    {
+      "nome": "user_roles",
+      "schema": "public",
+      "rls_ativado": true,
+      "politicas": 5,
+      "colunas_principais": ["user_id", "role"],
+      "status": "ativo"
+    },
+    {
+      "nome": "apoio_chamados",
+      "schema": "public",
+      "rls_ativado": true,
+      "politicas": 2,
+      "colunas_principais": ["id", "cliente_id", "tipo_chamado", "status", "profissional_sugerido_id"],
+      "status": "ativo"
+    },
+    {
+      "nome": "apoio_agenda_eventos",
+      "schema": "public",
+      "rls_ativado": true,
+      "politicas": 1,
+      "colunas_principais": ["id", "profissional_id", "chamado_id", "data_evento", "titulo"],
+      "status": "ativo"
+    },
+    {
+      "nome": "crm_contacts",
+      "schema": "public",
+      "rls_ativado": true,
+      "politicas": 5,
+      "colunas_principais": ["id", "fantasy_name", "cnpj", "owner_id", "seller_id"],
+      "status": "ativo"
+    },
+    {
+      "nome": "crm_deals",
+      "schema": "public",
+      "rls_ativado": true,
+      "politicas": 3,
+      "colunas_principais": ["id", "contact_id", "stage_id", "title", "value"],
+      "status": "ativo"
+    },
+    {
+      "nome": "bonification_requests",
+      "schema": "public",
+      "rls_ativado": true,
+      "politicas": 4,
+      "colunas_principais": ["id", "user_id", "client_name", "total_amount", "status"],
+      "status": "ativo"
+    },
+    {
+      "nome": "mv_sales_summary",
+      "schema": "private",
+      "rls_ativado": false,
+      "politicas": 0,
+      "colunas_principais": ["sale_date", "net_revenue", "bonification", "supervisor_name", "seller_name"],
+      "status": "ativo"
+    },
+    {
+      "nome": "mv_filter_options",
+      "schema": "private",
+      "rls_ativado": false,
+      "politicas": 0,
+      "colunas_principais": ["supervisors", "sellers", "customer_groups", "regions", "clients"],
+      "status": "ativo"
+    },
+    {
+      "nome": "mv_available_periods",
+      "schema": "private",
+      "rls_ativado": false,
+      "politicas": 0,
+      "colunas_principais": ["year", "months"],
+      "status": "ativo"
+    }
+  ],
+  "integracoes": [
+    {
+      "nome": "Microsoft Authentication Library (MSAL)",
+      "componentes": ["MsalProvider", "AuthGuard"],
+      "descricao": "Autenticação de usuários via Microsoft Entra ID (Azure AD).",
+      "status": "ativo"
+    },
+    {
+      "nome": "OpenAI / Google Gemini",
+      "componentes": ["AIChat", "InsightCard"],
+      "descricao": "Geração de insights e análises de texto via IA, orquestrado por Edge Functions.",
+      "status": "ativo"
+    },
+    {
+      "nome": "Contele",
+      "componentes": ["RotasPage", "IntegracoesPage"],
+      "descricao": "Integração para geolocalização e otimização de rotas (A ser implementada via Edge Function).",
+      "status": "pendente"
+    },
+    {
+      "nome": "ERP (via Google Sheets/CSV)",
+      "componentes": ["Sincronização de dados via Supabase"],
+      "descricao": "Carga de dados mestre de vendas ('bd-cl') a partir de uma fonte externa (atualmente CSV).",
+      "status": "ativo"
+    }
+  ]
+}

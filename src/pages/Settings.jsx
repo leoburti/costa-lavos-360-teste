@@ -93,8 +93,8 @@ const Settings = () => {
       p_user_id: targetUser.user_id,
       p_role: targetUser.role,
       p_can_access_crm: targetUser.can_access_crm,
-      p_supervisor_name: targetUser.supervisor_name,
-      p_seller_name: targetUser.seller_name,
+      p_vinculo_comercial: targetUser.vinculo_comercial,
+      p_tipo_vinculo: targetUser.tipo_vinculo,
       p_module_permissions: targetUser.module_permissions,
       p_phone_number: targetUser.phone_number,
     });
@@ -178,8 +178,8 @@ const Settings = () => {
                     <TableHead className="min-w-[180px]">Telefone</TableHead>
                     <TableHead className="min-w-[150px]">Nível de Acesso</TableHead>
                     <TableHead className="text-center">Acesso CRM</TableHead>
-                    <TableHead className="min-w-[200px]">Vínculo Supervisor</TableHead>
-                    <TableHead className="min-w-[200px]">Vínculo Vendedor</TableHead>
+                    <TableHead className="min-w-[200px]">Vínculo Comercial</TableHead>
+                    <TableHead className="min-w-[150px]">Tipo de Vínculo</TableHead>
                     <TableHead className="text-right min-w-[220px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -204,15 +204,15 @@ const Settings = () => {
                             <Switch checked={u.can_access_crm} onCheckedChange={(checked) => handleFieldChange(u.user_id, 'can_access_crm', checked)} disabled={!canEdit} />
                         </TableCell>
                         <TableCell>
-                          <Select value={u.supervisor_name || 'null'} onValueChange={(value) => handleFieldChange(u.user_id, 'supervisor_name', value === 'null' ? null : value)} disabled={!canEdit || u.role !== 'Supervisor'}>
+                           <Select value={u.vinculo_comercial || 'null'} onValueChange={(value) => handleFieldChange(u.user_id, 'vinculo_comercial', value === 'null' ? null : value)} disabled={!canEdit || !['supervisor', 'vendedor'].includes(u.tipo_vinculo)}>
                             <SelectTrigger className="h-9"><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                            <SelectContent><ScrollArea className="h-[200px]"><SelectItem value='null'>Nenhum</SelectItem>{supervisors.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}</ScrollArea></SelectContent>
+                            <SelectContent><ScrollArea className="h-[200px]"><SelectItem value='null'>Nenhum</SelectItem>{u.tipo_vinculo === 'supervisor' ? supervisors.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>) : sellers.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}</ScrollArea></SelectContent>
                           </Select>
                         </TableCell>
                         <TableCell>
-                          <Select value={u.seller_name || 'null'} onValueChange={(value) => handleFieldChange(u.user_id, 'seller_name', value === 'null' ? null : value)} disabled={!canEdit || u.role !== 'Vendedor'}>
+                          <Select value={u.tipo_vinculo || 'null'} onValueChange={(value) => handleFieldChange(u.user_id, 'tipo_vinculo', value === 'null' ? null : value)} disabled={!canEdit}>
                             <SelectTrigger className="h-9"><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                            <SelectContent><ScrollArea className="h-[200px]"><SelectItem value='null'>Nenhum</SelectItem>{sellers.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}</ScrollArea></SelectContent>
+                            <SelectContent><SelectItem value='null'>Nenhum</SelectItem><SelectItem value='supervisor'>Supervisor</SelectItem><SelectItem value='vendedor'>Vendedor</SelectItem></SelectContent>
                           </Select>
                         </TableCell>
                         <TableCell className="text-right">

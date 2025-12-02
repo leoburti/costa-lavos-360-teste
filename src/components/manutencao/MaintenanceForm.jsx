@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { format } from 'date-fns';
 import ComodatoEquipmentSelector from './ComodatoEquipmentSelector';
 import ClientOwnedEquipmentForm from './ClientOwnedEquipmentForm';
@@ -33,7 +33,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 
 const MaintenanceForm = ({ onCancel, onSaveSuccess, equipmentToEdit }) => {
   const { toast } = useToast();
-  const { user } = useSupabaseAuth();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
   const [isSearching, setIsSearching] = useState(false);

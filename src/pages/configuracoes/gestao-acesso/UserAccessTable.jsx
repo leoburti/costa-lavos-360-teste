@@ -6,37 +6,50 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, MoreHorizontal, ShieldAlert, UserCog } from 'lucide-react';
+import { Search, MoreHorizontal, ShieldAlert, UserCog, UserX } from 'lucide-react';
 import { 
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import AccessEditModal from '@/pages/configuracoes/gestao-acesso/AccessEditModal';
+import { useUsuarios } from '@/hooks/useUsuarios';
+import { useToast } from '@/components/ui/use-toast';
 
-const UserAccessTable = ({ users, personas, onRefresh, loading }) => {
+const UserAccessTable = ({ users, personas, onRefresh, loading: initialLoading }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const { toggleStatusUsuario, loading: actionLoading } = useUsuarios();
+  const { toast } = useToast();
 
   const filteredUsers = users.filter(user => 
     user.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.departamento?.toLowerCase().includes(searchTerm.toLowerCase())
+    user.departamento?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.role?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleEdit = (user) => {
     setSelectedUser(user);
     setIsEditOpen(true);
   };
+  
+  const handleToggleStatus = async (user) => {
+    const success = await toggleStatusUsuario(user.id, user.status);
+    if(success) {
+      onRefresh();
+    }
+  }
 
-  const getLevelBadge = (level) => {
-    const colors = {
-      1: 'bg-gray-100 text-gray-800',
-      2: 'bg-blue-100 text-blue-800',
-      3: 'bg-green-100 text-green-800',
-      4: 'bg-orange-100 text-orange-800',
-      5: 'bg-red-100 text-red-800'
+  const getRoleBadge = (role) => {
+    const roleColors = {
+      'Nivel 1': 'bg-red-100 text-red-800',
+      'Nivel 5': 'bg-purple-100 text-purple-800',
+      'Supervisor': 'bg-blue-100 text-blue-800',
+      'Vendedor': 'bg-green-100 text-green-800',
+      'Técnico': 'bg-orange-100 text-orange-800',
+      'Financeiro': 'bg-yellow-100 text-yellow-800'
     };
-    return <Badge variant="outline" className={colors[level] || colors[1]}>Nível {level || 1}</Badge>;
+    return <Badge variant="outline" className={roleColors[role] || 'bg-gray-100 text-gray-800'}>{role || 'Não definido'}</Badge>;
   };
 
   return (
@@ -69,14 +82,14 @@ const UserAccessTable = ({ users, personas, onRefresh, loading }) => {
                   <TableHead>Usuário</TableHead>
                   <TableHead>Equipe</TableHead>
                   <TableHead>Persona</TableHead>
-                  <TableHead>Nível</TableHead>
+                  <TableHead>Cargo (Role)</TableHead>
                   <TableHead>Módulos Ativos</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {initialLoading ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8">Carregando...</TableCell>
                   </TableRow>
@@ -97,18 +110,18 @@ const UserAccessTable = ({ users, personas, onRefresh, loading }) => {
                       <TableCell>
                         <Badge variant="secondary">{user.persona?.nome || 'Sem Persona'}</Badge>
                       </TableCell>
-                      <TableCell>{getLevelBadge(user.nivel_acesso)}</TableCell>
+                      <TableCell>{getRoleBadge(user.role)}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {user.modulos_acesso && Object.keys(user.modulos_acesso).filter(k => user.modulos_acesso[k]).length > 0 ? (
-                             Object.keys(user.modulos_acesso).filter(k => user.modulos_acesso[k]).slice(0, 2).map(m => (
-                               <Badge key={m} variant="outline" className="text-[10px] px-1 py-0 uppercase">{m.replace('_', ' ')}</Badge>
+                          {user.module_permissions && Object.keys(user.module_permissions).filter(k => user.module_permissions[k]).length > 0 ? (
+                             Object.keys(user.module_permissions).filter(k => user.module_permissions[k]).slice(0, 2).map(m => (
+                               <Badge key={m} variant="outline" className="text-[10px] px-1 py-0 uppercase">{m.replace(/_/g, ' ')}</Badge>
                              ))
                           ) : (
                             <span className="text-xs text-muted-foreground">-</span>
                           )}
-                          {user.modulos_acesso && Object.keys(user.modulos_acesso).filter(k => user.modulos_acesso[k]).length > 2 && (
-                            <Badge variant="outline" className="text-[10px] px-1 py-0">+{Object.keys(user.modulos_acesso).filter(k => user.modulos_acesso[k]).length - 2}</Badge>
+                          {user.module_permissions && Object.keys(user.module_permissions).filter(k => user.module_permissions[k]).length > 2 && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0">+{Object.keys(user.module_permissions).filter(k => user.module_permissions[k]).length - 2}</Badge>
                           )}
                         </div>
                       </TableCell>
@@ -129,8 +142,11 @@ const UserAccessTable = ({ users, personas, onRefresh, loading }) => {
                             <DropdownMenuItem onClick={() => handleEdit(user)}>
                               <UserCog className="mr-2 h-4 w-4" /> Editar Acesso
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleToggleStatus(user)} disabled={actionLoading}>
+                              <UserX className="mr-2 h-4 w-4" /> Alterar Status
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600">
+                            <DropdownMenuItem className="text-red-600" onClick={() => toast({ title: "Funcionalidade não implementada.", variant: "destructive" })}>
                               <ShieldAlert className="mr-2 h-4 w-4" /> Revogar Acesso
                             </DropdownMenuItem>
                           </DropdownMenuContent>

@@ -1,495 +1,111 @@
 
-import React, { Suspense, lazy, useEffect, memo } from 'react';
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import React, { Suspense, lazy } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HelmetProvider } from 'react-helmet-async';
 
-import { SupabaseAuthProvider } from '@/contexts/SupabaseAuthContext';
+import { CombinedAuthProvider } from '@/contexts/SupabaseAuthContext';
 import { FilterProvider } from '@/contexts/FilterContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { PageActionProvider } from '@/contexts/PageActionContext';
-import { DataProvider } from '@/contexts/DataContext'; // Importado
+import { DataProvider } from '@/contexts/DataContext';
 
 import AuthGuard from '@/components/AuthGuard';
-import ModuleGuard from '@/components/ModuleGuard';
-import LayoutOverride from '@/components/LayoutOverride';
+import AppLayout from '@/layouts/AppLayout'; 
 import { Toaster } from '@/components/ui/toaster';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import PageSkeleton from '@/components/PageSkeleton';
-import { prefetchCriticalRoutes } from '@/utils/performance';
-import UnauthorizedPage from '@/pages/UnauthorizedPage';
+import ErrorBoundary from '@/components/error-boundary/ErrorBoundary';
 import OfflineIndicator from '@/components/OfflineIndicator';
-import { useScrollRestoration } from '@/hooks/useScrollRestoration';
 import ForensicFloatingButton from '@/components/ForensicFloatingButton';
+import PageSkeleton from '@/components/PageSkeleton';
+import { TooltipProvider } from "@/components/ui/tooltip";
 
-// --- Optimized Lazy Imports ---
+import { ROUTES } from '@/constants/routes';
 
-// Auth Pages
+// Lazy Pages - Core
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
-const AuthConfirmation = lazy(() => import('@/pages/auth/AuthConfirmation'));
-const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
-const UpdatePassword = lazy(() => import('@/pages/auth/UpdatePassword'));
-
-// Main Feature Pages
-const DashboardComercial = lazy(() => import('@/pages/DashboardComercial'));
-const AIChat = lazy(() => import('@/pages/AIChat'));
-const Tarefas = lazy(() => import('@/pages/Tarefas'));
+const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
-const BonificacoesPage = lazy(() => import('@/pages/bonificacoes/BonificacoesPage'));
+const UnauthorizedPage = lazy(() => import('@/pages/UnauthorizedPage'));
 
+// Debug Page (Dev Only)
+const DebugPage = lazy(() => import('@/pages/Debug'));
 
-// CRM Layout & Pages
-const CRM = lazy(() => import('@/pages/crm/CRM'));
-const Pipeline = lazy(() => import('@/pages/crm/Pipeline'));
-const CrmContacts = lazy(() => import('@/pages/crm/Contacts'));
-const ComodatoContracts = lazy(() => import('@/pages/crm/ComodatoContracts'));
-const CrmAutomations = lazy(() => import('@/pages/crm/Automations'));
-const CrmReports = lazy(() => import('@/pages/crm/Reports'));
-const CrmTeam = lazy(() => import('@/pages/crm/Team'));
-const CommercialRelationship = lazy(() => import('@/pages/crm/CommercialRelationship'));
+// Dynamic Modular Router (Generic)
+const ModuleRouter = lazy(() => import('@/components/ModuleRouter'));
 
-// Analytics Pages
-const AnaliticoSupervisor = lazy(() => import('@/pages/AnaliticoSupervisor'));
-const AnaliticoVendedor = lazy(() => import('@/pages/AnaliticoVendedor'));
-const AnaliticoRegiao = lazy(() => import('@/pages/AnaliticoRegiao'));
-const AnaliticoGrupoClientes = lazy(() => import('@/pages/AnaliticoGrupoClientes'));
-const AnaliticoProduto = lazy(() => import('@/pages/AnaliticoProduto'));
-const Visao360Cliente = lazy(() => import('@/pages/Visao360Cliente'));
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, 
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-// Commercial Analysis Pages
-const AnaliticoVendasDiarias = lazy(() => import('@/pages/AnaliticoVendasDiarias'));
-const CurvaABC = lazy(() => import('@/pages/CurvaABC'));
-const AnaliseValorUnitario = lazy(() => import('@/pages/AnaliseValorUnitario'));
-const AnaliseDesempenhoFidelidade = lazy(() => import('@/pages/AnaliseDesempenhoFidelidade'));
-const AnaliseClientes = lazy(() => import('@/pages/AnaliseClientes'));
-const AnaliseProdutos = lazy(() => import('@/pages/AnaliseProdutos'));
-const AnaliseSazonalidade = lazy(() => import('@/pages/AnaliseSazonalidade'));
-const AnaliseMargem = lazy(() => import('@/pages/AnaliseMargem'));
-const AnalisePreditivaVendas = lazy(() => import('@/pages/AnalisePreditivaVendas')); // ** NEW **
-
-
-// Equipment Analysis Pages
-const MovimentacaoEquipamentos = lazy(() => import('@/pages/MovimentacaoEquipamentos'));
-const AnaliticoEquipamentosCliente = lazy(() => import('@/pages/AnaliticoEquipamentosCliente'));
-const AnaliticoEquipamento = lazy(() => import('@/pages/AnaliticoEquipamento'));
-const EquipamentosEmCampo = lazy(() => import('@/pages/EquipamentosEmCampo'));
-
-// Managerial Analysis Pages
-const RaioXSupervisor = lazy(() => import('@/pages/RaioXSupervisor'));
-const RaioXVendedor = lazy(() => import('@/pages/RaioXVendedor'));
-
-// Delivery Management Pages
-const DeliveryDashboard = lazy(() => import('@/pages/delivery-management/Dashboard'));
-const Deliveries = lazy(() => import('@/pages/delivery-management/Deliveries'));
-const Drivers = lazy(() => import('@/pages/delivery-management/Drivers'));
-const RouteOptimization = lazy(() => import('@/pages/delivery-management/RouteOptimization'));
-const Customers = lazy(() => import('@/pages/delivery-management/Customers'));
-const Disputes = lazy(() => import('@/pages/delivery-management/Disputes'));
-const DeliveryReports = lazy(() => import('@/pages/delivery-management/Reports'));
-const DeliveryReceipts = lazy(() => import('@/pages/delivery-management/DeliveryReceipts'));
-const DeliverySettings = lazy(() => import('@/pages/delivery-management/Settings'));
-
-// Gestão de Equipe
-const CentralizedTeamManagement = lazy(() => import('@/pages/configuracoes/gestao-equipe/CentralizedTeamManagement'));
-
-// Admin Configuration Pages
-const UserManagementPage = lazy(() => import('@/pages/admin/configuracoes/UserManagementPage'));
-const ProfileManagementPage = lazy(() => import('@/pages/admin/configuracoes/ProfileManagementPage'));
-const SystemSettingsPage = lazy(() => import('@/pages/admin/configuracoes/SystemSettingsPage'));
-
-// Apoio Pages
-const ApoioLayout = lazy(() => import('@/pages/apoio/ApoioLayout'));
-// Comodato
-const ComodatoLayout = lazy(() => import('@/pages/apoio/comodato/ComodatoLayout'));
-const ClientesComodatoPage = lazy(() => import('@/pages/apoio/comodato/clientes/ClientesComodatoPage'));
-const ClienteComodatoForm = lazy(() => import('@/pages/apoio/comodato/clientes/ClienteComodatoForm'));
-const ModelosEquipamentosPage = lazy(() => import('@/pages/apoio/comodato/equipamentos/ModelosEquipamentosPage'));
-const ModeloEquipamentoForm = lazy(() => import('@/pages/apoio/comodato/equipamentos/ModeloEquipamentoForm'));
-const EstoqueClientePage = lazy(() => import('@/pages/apoio/comodato/estoque/EstoqueClientePage'));
-const EquipamentoComodatoForm = lazy(() => import('@/pages/apoio/comodato/estoque/EquipamentoComodatoForm'));
-const EntregaForm = lazy(() => import('@/pages/apoio/comodato/fluxos/EntregaForm'));
-const TrocaForm = lazy(() => import('@/pages/apoio/comodato/fluxos/TrocaForm'));
-const RetiradaForm = lazy(() => import('@/pages/apoio/comodato/fluxos/RetiradaForm'));
-
-// Chamados
-const ChamadosLayout = lazy(() => import('@/pages/apoio/chamados/ChamadosLayout'));
-const ChamadosTodosPage = lazy(() => import('@/pages/apoio/chamados/ChamadosTodosPage'));
-const ChamadoForm = lazy(() => import('@/pages/apoio/chamados/ChamadoForm'));
-const ChamadoDetalhesPage = lazy(() => import('@/pages/apoio/chamados/ChamadoDetalhesPage'));
-const MotivosPage = lazy(() => import('@/pages/apoio/chamados/MotivosPage'));
-const MotivoForm = lazy(() => import('@/pages/apoio/chamados/MotivoForm'));
-const FormulariosPage = lazy(() => import('@/pages/apoio/chamados/FormulariosPage'));
-const FormularioForm = lazy(() => import('@/pages/apoio/chamados/FormularioForm'));
-
-// Agenda
-const AgendaLayout = lazy(() => import('@/pages/apoio/agenda/AgendaLayout'));
-const MinhaAgendaPage = lazy(() => import('@/pages/apoio/agenda/MinhaAgendaPage'));
-const AgendaEquipePage = lazy(() => import('@/pages/apoio/agenda/AgendaEquipePage'));
-const DisponibilidadePage = lazy(() => import('@/pages/apoio/agenda/DisponibilidadePage'));
-const BloqueiosPage = lazy(() => import('@/pages/apoio/agenda/BloqueiosPage'));
-const ConflitosPage = lazy(() => import('@/pages/apoio/agenda/ConflitosPage'));
-const DisponibilidadeForm = lazy(() => import('@/pages/apoio/agenda/DisponibilidadeForm'));
-const BloqueioForm = lazy(() => import('@/pages/apoio/agenda/BloqueioForm'));
-const EventosPage = lazy(() => import('@/pages/apoio/agenda/EventosPage'));
-const AgendamentosPage = lazy(() => import('@/pages/apoio/agenda/AgendamentosPage'));
-
-// Notificações
-const NotificacoesLayout = lazy(() => import('@/pages/apoio/notificacoes/NotificacoesLayout'));
-const MinhasNotificacoesPage = lazy(() => import('@/pages/apoio/notificacoes/MinhasNotificacoesPage'));
-const NaoLidasPage = lazy(() => import('@/pages/apoio/notificacoes/NaoLidasPage'));
-const ArquivadasPage = lazy(() => import('@/pages/apoio/notificacoes/ArquivadasPage'));
-const PreferenciasPage = lazy(() => import('@/pages/apoio/notificacoes/PreferenciasPage'));
-
-// Geolocalização
-const GeolocalizacaoLayout = lazy(() => import('@/pages/apoio/geolocalizacao/GeolocalizacaoLayout'));
-const CheckinCheckoutPage = lazy(() => import('@/pages/apoio/geolocalizacao/CheckinCheckoutPage'));
-const RastreamentoPage = lazy(() => import('@/pages/apoio/geolocalizacao/RastreamentoPage'));
-const RotasPage = lazy(() => import('@/pages/apoio/geolocalizacao/RotasPage'));
-const HistoricoPage = lazy(() => import('@/pages/apoio/geolocalizacao/HistoricoPage'));
-const RelatoriosGeoPage = lazy(() => import('@/pages/apoio/geolocalizacao/RelatoriosPage'));
-const IntegracoesPage = lazy(() => import('@/pages/apoio/geolocalizacao/IntegracoesPage'));
-const IntegracaoForm = lazy(() => import('@/pages/apoio/geolocalizacao/IntegracaoForm'));
-const DadosClientesApoioPage = lazy(() => import('@/pages/apoio/geolocalizacao/DadosClientesPage'));
-
-// Relatórios
-const RelatoriosLayout = lazy(() => import('@/pages/apoio/relatorios/RelatoriosLayout'));
-const RelatoriosDashboardPage = lazy(() => import('@/pages/apoio/relatorios/DashboardPage'));
-const ApoioDashboardPage = lazy(() => import('@/pages/apoio/relatorios/ApoioDashboardPage'));
-const RelatorioComodatoPage = lazy(() => import('@/pages/apoio/relatorios/RelatorioComodatoPage'));
-const RelatorioOperacionalPage = lazy(() => import('@/pages/apoio/relatorios/RelatorioOperacionalPage'));
-const AlertasPage = lazy(() => import('@/pages/apoio/relatorios/AlertasPage'));
-const DashboardPersonalizadoPage = lazy(() => import('@/pages/apoio/relatorios/DashboardPersonalizadoPage'));
-const PersonalizadoPage = lazy(() => import('@/pages/apoio/relatorios/PersonalizadoPage'));
-
-// Manutenção
-const ManutencaoEquipamentosPage = lazy(() => import('@/pages/apoio/manutencao/ManutencaoEquipamentosPage'));
-
-// Configurações
-const ConfiguracoesLayout = lazy(() => import('@/pages/configuracoes/ConfiguracoesLayout'));
-const PerfilUsuarioPage = lazy(() => import('@/pages/configuracoes/PerfilUsuarioPage'));
-const SegurancaPage = lazy(() => import('@/pages/configuracoes/SegurancaPage'));
-const NotificacoesGeraisPage = lazy(() => import('@/pages/configuracoes/NotificacoesGeraisPage'));
-const AparenciaPage = lazy(() => import('@/pages/configuracoes/AparenciaPage'));
-const IntegracoesGlobaisPage = lazy(() => import('@/pages/configuracoes/IntegracoesGlobaisPage'));
-const BackupExportacaoPage = lazy(() => import('@/pages/configuracoes/BackupExportacaoPage'));
-const SobreAjudaPage = lazy(() => import('@/pages/configuracoes/SobreAjudaPage'));
-const PrivacidadePage = lazy(() => import('@/pages/configuracoes/PrivacidadePage'));
-const FaturamentoPage = lazy(() => import('@/pages/configuracoes/FaturamentoPage'));
-const LogsPage = lazy(() => import('@/pages/configuracoes/LogsPage'));
-const SystemDiagnosisPage = lazy(() => import('@/pages/configuracoes/SystemDiagnosisPage'));
-const RPCDiagnosisPage = lazy(() => import('@/pages/configuracoes/RPCDiagnosisPage'));
-const DeepDiagnosisPage = lazy(() => import('@/pages/configuracoes/DeepDiagnosisPage'));
-const AutoDiagnosisPage = lazy(() => import('@/pages/configuracoes/AutoDiagnosisPage'));
-const ForensicDiagnosisPage = lazy(() => import('@/pages/configuracoes/ForensicDiagnosisPage'));
-
-// Apoio Configs
-const PreferenciasRelatoriosPage = lazy(() => import('@/pages/configuracoes/PreferenciasRelatoriosPage'));
-const PreferenciasDashboardPage = lazy(() => import('@/pages/configuracoes/PreferenciasDashboardPage'));
-const PreferenciasGeolocalizacaoPage = lazy(() => import('@/pages/configuracoes/PreferenciasGeolocalizacaoPage'));
-const PreferenciasAgendaPage = lazy(() => import('@/pages/configuracoes/PreferenciasAgendaPage'));
-const PreferenciasChamadosPage = lazy(() => import('@/pages/configuracoes/PreferenciasChamadosPage'));
-const PreferenciasComodatoPage = lazy(() => import('@/pages/configuracoes/PreferenciasComodatoPage'));
-const DadosClientesConfigPage = lazy(() => import('@/pages/configuracoes/DadosClientesPage'));
-const ConfiguracoesAvancadasAPoioPage = lazy(() => import('@/pages/configuracoes/ConfiguracoesAvancadasAPoioPage'));
-
-// Debug Pages
-const RPCTestPage = lazy(() => import('@/pages/debug/RPCTestPage'));
-const AnaliseProfundaPage = lazy(() => import('@/pages/debug/AnaliseProfundaPage'));
-const DataVerificationPage = lazy(() => import('@/pages/debug/DataVerificationPage'));
-const SupabaseTestPage = lazy(() => import('@/pages/debug/SupabaseTestPage'));
-
-// Memoized fallback to prevent re-renders of the spinner container
-const FullScreenLoader = memo(() => (
-  <div className="flex h-screen w-full items-center justify-center bg-background">
-    <LoadingSpinner message="Iniciando sistema..." />
-  </div>
-));
-
-// Main App Content Wrapper to access hooks that require Contexts
-const AppContent = () => {
-  useScrollRestoration();
-
+export default function App() {
   return (
-    <>
-      <OfflineIndicator />
-      <ForensicFloatingButton />
-      <Suspense fallback={<FullScreenLoader />}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/auth/confirm" element={<AuthConfirmation />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/update-password" element={<UpdatePassword />} />
-          
-          <Route path="/unauthorized" element={<UnauthorizedPage />} />
+    <ErrorBoundary>
+      <Router>
+        <QueryClientProvider client={queryClient}>
+          <HelmetProvider>
+            <TooltipProvider>
+              <CombinedAuthProvider>
+                <NotificationProvider>
+                  <FilterProvider>
+                    <PageActionProvider>
+                      <DataProvider>
+                        <OfflineIndicator />
+                        {/* ForensicFloatingButton mantido para debug/suporte, mas discreto */}
+                        <ForensicFloatingButton />
+                        
+                        <Routes>
+                          <Route path={ROUTES.LOGIN} element={<Suspense fallback={null}><LoginPage /></Suspense>} />
+                          <Route path="/forgot-password" element={<Suspense fallback={null}><ForgotPasswordPage /></Suspense>} />
+                          <Route path="/reset-password" element={<Suspense fallback={null}><ResetPasswordPage /></Suspense>} />
+                          <Route path="/unauthorized" element={<Suspense fallback={null}><UnauthorizedPage /></Suspense>} />
 
-          <Route path="/" element={
-            <AuthGuard>
-              <LayoutOverride>
-                <Suspense fallback={<PageSkeleton />}>
-                  <Outlet />
-                </Suspense>
-              </LayoutOverride>
-            </AuthGuard>
-          }>
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<ModuleGuard moduleId="dashboard_comercial"><DashboardComercial /></ModuleGuard>} />
-            <Route path="ai-chat" element={<ModuleGuard moduleId="senhor_lavos"><AIChat /></ModuleGuard>} />
-            
-            {/* Analytics */}
-            <Route path="analitico-supervisor" element={<ModuleGuard moduleId="analytics"><AnaliticoSupervisor /></ModuleGuard>} />
-            <Route path="analitico-vendedor" element={<ModuleGuard moduleId="analytics"><AnaliticoVendedor /></ModuleGuard>} />
-            <Route path="analitico-regiao" element={<ModuleGuard moduleId="analytics"><AnaliticoRegiao /></ModuleGuard>} />
-            <Route path="analitico-grupo-clientes" element={<ModuleGuard moduleId="analytics"><AnaliticoGrupoClientes /></ModuleGuard>} />
-            <Route path="analitico-produto" element={<ModuleGuard moduleId="analytics"><AnaliticoProduto /></ModuleGuard>} />
-            <Route path="visao-360-cliente" element={<ModuleGuard moduleId="analytics"><Visao360Cliente /></ModuleGuard>} />
-            
-            {/* Commercial Analysis */}
-            <Route path="analitico-vendas-diarias" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoVendasDiarias /></ModuleGuard>} />
-            <Route path="curva-abc" element={<ModuleGuard moduleId="commercial-analysis"><CurvaABC /></ModuleGuard>} />
-            <Route path="analise-valor-unitario" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseValorUnitario /></ModuleGuard>} />
-            <Route path="analise-desempenho-fidelidade" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseDesempenhoFidelidade /></ModuleGuard>} />
-            <Route path="analise-clientes" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseClientes /></ModuleGuard>} />
-            <Route path="analise-produtos" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseProdutos /></ModuleGuard>} />
-            <Route path="analise-sazonalidade" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseSazonalidade /></ModuleGuard>} />
-            <Route path="analise-margem" element={<ModuleGuard moduleId="commercial-analysis"><AnaliseMargem /></ModuleGuard>} />
-            <Route path="analise-preditiva-vendas" element={<ModuleGuard moduleId="commercial-analysis"><AnalisePreditivaVendas /></ModuleGuard>} />
+                          {/* Debug Route - Dev Only */}
+                          {process.env.NODE_ENV === 'development' && (
+                            <Route path="/debug" element={<Suspense fallback={null}><DebugPage /></Suspense>} />
+                          )}
 
-            {/* ** OLD PREDICTIVE ROUTES REMOVED/REDIRECTED ** */}
-            <Route path="analise-churn" element={<Navigate to="/analise-preditiva-vendas" replace />} />
-            <Route path="calculo-rfm" element={<Navigate to="/analise-preditiva-vendas" replace />} />
-            <Route path="tendencia-vendas" element={<Navigate to="/analise-preditiva-vendas" replace />} />
-            
-            <Route path="baixo-desempenho" element={<Navigate to="/analise-desempenho-fidelidade" replace />} />
-            <Route path="analise-fidelidade" element={<Navigate to="/analise-desempenho-fidelidade" replace />} />
+                          <Route path="/" element={
+                            <AuthGuard>
+                              <AppLayout />
+                            </AuthGuard>
+                          }>
+                            <Route index element={<Navigate to="/analytics/dashboard-gerencial" replace />} />
+                            
+                            {/* NEW MODULAR ARCHITECTURE ROUTING */}
+                            <Route 
+                              path="/:module/:page" 
+                              element={
+                                <Suspense fallback={<div className="p-8"><PageSkeleton /></div>}>
+                                  <ModuleRouter />
+                                </Suspense>
+                              } 
+                            />
 
-            {/* Equipment Analysis */}
-            <Route path="movimentacao-equipamentos" element={<ModuleGuard moduleId="commercial-analysis"><MovimentacaoEquipamentos /></ModuleGuard>} />
-            <Route path="analitico-equipamentos-cliente" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoEquipamentosCliente /></ModuleGuard>} />
-            <Route path="analitico-equipamento" element={<ModuleGuard moduleId="commercial-analysis"><AnaliticoEquipamento /></ModuleGuard>} />
-            <Route path="equipamentos-em-campo" element={<ModuleGuard moduleId="commercial-analysis"><EquipamentosEmCampo /></ModuleGuard>} />
-
-            {/* Managerial Analysis */}
-            <Route path="raio-x-supervisor" element={<ModuleGuard moduleId="managerial-analysis"><RaioXSupervisor /></ModuleGuard>} />
-            <Route path="raio-x-vendedor" element={<ModuleGuard moduleId="managerial-analysis"><RaioXVendedor /></ModuleGuard>} />
-            
-            {/* Bonificações */}
-            <Route path="bonificacoes" element={<ModuleGuard moduleId="bonificacoes"><BonificacoesPage /></ModuleGuard>} />
-            
-            {/* Tarefas */}
-            <Route path="tarefas" element={<ModuleGuard moduleId="tarefas"><Tarefas /></ModuleGuard>} />
-            
-            {/* Manutenção - Redirect to new location */}
-            <Route path="manutencao" element={<Navigate to="/admin/apoio/manutencao-equipamentos" replace />} />
-
-            {/* Delivery Management */}
-            <Route path="admin/delivery-management" element={<ModuleGuard moduleId="delivery"><DeliveryDashboard /></ModuleGuard>} />
-            <Route path="admin/delivery-management/deliveries" element={<ModuleGuard moduleId="delivery"><Deliveries /></ModuleGuard>} />
-            <Route path="admin/delivery-management/drivers" element={<ModuleGuard moduleId="delivery"><Drivers /></ModuleGuard>} />
-            <Route path="admin/delivery-management/route-optimization" element={<ModuleGuard moduleId="delivery"><RouteOptimization /></ModuleGuard>} />
-            <Route path="admin/delivery-management/customers" element={<ModuleGuard moduleId="delivery"><Customers /></ModuleGuard>} />
-            <Route path="admin/delivery-management/disputes" element={<ModuleGuard moduleId="delivery"><Disputes /></ModuleGuard>} />
-            <Route path="admin/delivery-management/reports" element={<ModuleGuard moduleId="delivery"><DeliveryReports /></ModuleGuard>} />
-            <Route path="admin/delivery-management/delivery-receipts" element={<ModuleGuard moduleId="delivery"><DeliveryReceipts /></ModuleGuard>} />
-            <Route path="admin/delivery-management/settings" element={<ModuleGuard moduleId="delivery"><DeliverySettings /></ModuleGuard>} />
-
-            {/* CRM - Nested under CRM Layout */}
-            <Route path="crm" element={<ModuleGuard moduleId="crm"><CRM /></ModuleGuard>}>
-                <Route index element={<Navigate to="pipeline" replace />} />
-                <Route path="pipeline" element={<Pipeline />} />
-                <Route path="contacts" element={<CrmContacts />} />
-                <Route path="comodato-contracts" element={<ModuleGuard moduleId="comodato_module"><ComodatoContracts /></ModuleGuard>} />
-                <Route path="automations" element={<CrmAutomations />} />
-                <Route path="reports" element={<CrmReports />} />
-                <Route path="team" element={<CrmTeam />} />
-                <Route path="relationship" element={<CommercialRelationship />} />
-            </Route>
-
-            {/* Gestão de Equipe (REDIRECT OLD ROUTES) */}
-            <Route path="admin/gestao-equipe/usuarios-acesso" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
-
-            {/* Admin Configurations */}
-            <Route path="admin/configuracoes">
-                <Route index element={<Navigate to="usuarios" replace />} />
-                <Route path="usuarios" element={<ModuleGuard moduleId="configuracoes"><UserManagementPage /></ModuleGuard>} />
-                <Route path="perfis" element={<ModuleGuard moduleId="configuracoes"><ProfileManagementPage /></ModuleGuard>} />
-                <Route path="sistema" element={<ModuleGuard moduleId="configuracoes"><SystemSettingsPage /></ModuleGuard>} />
-            </Route>
-
-            {/* Apoio */}
-            <Route path="admin/apoio" element={<ModuleGuard moduleId="apoio"><ApoioLayout /></ModuleGuard>}>
-              <Route index element={<Navigate to="comodato/clientes" replace />} />
-              
-              <Route path="comodato" element={<ComodatoLayout />}>
-                <Route index element={<Navigate to="clientes" replace />} />
-                <Route path="clientes" element={<ClientesComodatoPage />} />
-                <Route path="clientes/novo" element={<ClienteComodatoForm />} />
-                <Route path="clientes/:id/editar" element={<ClienteComodatoForm />} />
-                <Route path="clientes/:id/estoque" element={<EstoqueClientePage />} />
-                <Route path="modelos" element={<ModelosEquipamentosPage />} />
-                <Route path="modelos/novo" element={<ModeloEquipamentoForm />} />
-                <Route path="modelos/:id/editar" element={<ModeloEquipamentoForm />} />
-                <Route path="equipamentos/novo" element={<EquipamentoComodatoForm />} />
-                <Route path="equipamentos/:id/editar" element={<EquipamentoComodatoForm />} />
-                <Route path="entrega" element={<EntregaForm />} />
-                <Route path="troca" element={<TrocaForm />} />
-                <Route path="retirada" element={<RetiradaForm />} />
-                <Route path="lista" element={<Navigate to="clientes" replace />} />
-                <Route path="detalhes" element={<Navigate to="clientes" replace />} />
-              </Route>
-              
-              <Route path="chamados" element={<ChamadosLayout />}>
-                  <Route index element={<Navigate to="todos" replace />} />
-                  <Route path="todos" element={<ChamadosTodosPage />} />
-                  <Route path="abertos" element={<Navigate to="todos?status=aberto" replace />} />
-                  <Route path="em-andamento" element={<Navigate to="todos?status=em_andamento" replace />} />
-                  <Route path="em-progresso" element={<Navigate to="todos?status=em_andamento" replace />} />
-                  <Route path="resolvidos" element={<Navigate to="todos?status=resolvido" replace />} />
-                  <Route path="fechados" element={<Navigate to="todos?status=fechado" replace />} />
-                  
-                  <Route path="novo" element={<ChamadoForm />} />
-                  <Route path="motivos" element={<MotivosPage />} />
-                  <Route path="motivos/novo" element={<MotivoForm />} />
-                  <Route path="motivos/:id/editar" element={<MotivoForm />} />
-                  <Route path="formularios" element={<FormulariosPage />} />
-                  <Route path="formularios/novo" element={<FormularioForm />} />
-                  <Route path="formularios/:id/editar" element={<FormularioForm />} />
-                  <Route path=":id" element={<ChamadoDetalhesPage />} />
-                  <Route path=":id/editar" element={<ChamadoForm />} />
-              </Route>
-
-              <Route path="agenda" element={<AgendaLayout />}>
-                <Route index element={<Navigate to="minha-agenda" replace />} />
-                <Route path="minha-agenda" element={<MinhaAgendaPage />} />
-                <Route path="calendario" element={<Navigate to="minha-agenda" replace />} />
-                <Route path="eventos" element={<EventosPage />} />
-                <Route path="agendamentos" element={<AgendamentosPage />} />
-                <Route path="equipe" element={<AgendaEquipePage />} />
-                <Route path="disponibilidade" element={<DisponibilidadePage />} />
-                <Route path="disponibilidade/novo" element={<DisponibilidadeForm />} />
-                <Route path="disponibilidade/:id/editar" element={<DisponibilidadeForm />} />
-                <Route path="bloqueios" element={<BloqueiosPage />} />
-                <Route path="bloqueios/novo" element={<BloqueioForm />} />
-                <Route path="bloqueios/:id/editar" element={<BloqueioForm />} />
-                <Route path="conflitos" element={<ConflitosPage />} />
-              </Route>
-              
-              <Route path="notificacoes" element={<NotificacoesLayout />}>
-                <Route index element={<Navigate to="minhas" replace />} />
-                <Route path="minhas" element={<MinhasNotificacoesPage />} />
-                <Route path="nao-lidas" element={<NaoLidasPage />} />
-                <Route path="arquivadas" element={<ArquivadasPage />} />
-                <Route path="preferencias" element={<PreferenciasPage />} />
-              </Route>
-
-              <Route path="geolocalizacao" element={<GeolocalizacaoLayout />}>
-                <Route index element={<Navigate to="rastreamento" replace />} />
-                <Route path="checkin-checkout" element={<CheckinCheckoutPage />} />
-                <Route path="rastreamento" element={<RastreamentoPage />} />
-                <Route path="mapa" element={<Navigate to="rastreamento" replace />} />
-                <Route path="rotas" element={<RotasPage />} />
-                <Route path="historico" element={<HistoricoPage />} />
-                <Route path="relatorios" element={<RelatoriosGeoPage />} />
-                <Route path="integracoes" element={<IntegracoesPage />} />
-                <Route path="integracoes/novo" element={<IntegracaoForm />} />
-                <Route path="integracoes/:id/editar" element={<IntegracaoForm />} />
-                <Route path="dados-clientes" element={<DadosClientesApoioPage />} />
-              </Route>
-              <Route path="geolocalização" element={<Navigate to="geolocalizacao" replace />} />
-
-              <Route path="relatorios" element={<RelatoriosLayout />}>
-                <Route index element={<Navigate to="dashboard-apoio" replace />} />
-                <Route path="dashboard" element={<RelatoriosDashboardPage />} />
-                <Route path="dashboard-apoio" element={<ApoioDashboardPage />} />
-                <Route path="geral" element={<Navigate to="dashboard-apoio" replace />} />
-                <Route path="comodato" element={<RelatorioComodatoPage />} />
-                <Route path="operacional" element={<RelatorioOperacionalPage />} />
-                <Route path="alertas" element={<AlertasPage />} />
-                <Route path="dashboard-personalizado" element={<DashboardPersonalizadoPage />} />
-                <Route path="personalizado" element={<PersonalizadoPage />} />
-              </Route>
-
-              <Route path="personas" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
-
-              {/* Manutenção Equipamentos (Submodule) */}
-              <Route path="manutencao-equipamentos" element={<ModuleGuard moduleId="manutencao_equip"><ManutencaoEquipamentosPage /></ModuleGuard>} />
-              <Route path="manutencao" element={<Navigate to="manutencao-equipamentos" replace />} />
-              <Route path="manutenção" element={<Navigate to="manutencao-equipamentos" replace />} />
-              <Route path="manutencao-equipamentos/preventiva" element={<ManutencaoEquipamentosPage />} />
-              <Route path="manutencao-equipamentos/corretiva" element={<ManutencaoEquipamentosPage />} />
-
-              <Route path="configuracoes" element={<Navigate to="/configuracoes" replace />} />
-
-            </Route>
-
-            {/* UNIFIED SETTINGS */}
-            <Route path="configuracoes" element={<ModuleGuard moduleId="configuracoes"><ConfiguracoesLayout /></ModuleGuard>}>
-              <Route index element={<Navigate to="perfil" replace />} />
-              <Route path="perfil" element={<PerfilUsuarioPage />} />
-              <Route path="seguranca" element={<SegurancaPage />} />
-              <Route path="notificacoes" element={<NotificacoesGeraisPage />} />
-              <Route path="privacidade" element={<PrivacidadePage />} />
-              <Route path="aparencia" element={<AparenciaPage />} />
-              <Route path="integracoes" element={<IntegracoesGlobaisPage />} />
-              <Route path="faturamento" element={<FaturamentoPage />} />
-              <Route path="backup" element={<BackupExportacaoPage />} />
-              <Route path="logs" element={<LogsPage />} />
-              <Route path="sobre" element={<SobreAjudaPage />} />
-              
-              <Route path="usuarios/*" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
-              <Route path="gestao-acesso-unificada" element={<Navigate to="/configuracoes/gestao-equipe" replace />} />
-              
-              <Route path="gestao-equipe" element={<ModuleGuard moduleId="settings_users"><CentralizedTeamManagement /></ModuleGuard>} />
-              
-              <Route path="diagnostico" element={<SystemDiagnosisPage />} />
-              <Route path="rpc-diagnostico" element={<RPCDiagnosisPage />} />
-              <Route path="diagnostico-profundo" element={<DeepDiagnosisPage />} />
-              <Route path="auto-diagnostico" element={<AutoDiagnosisPage />} />
-              <Route path="diagnostico-forense" element={<ForensicDiagnosisPage />} />
-
-              <Route path="apoio/relatorios" element={<PreferenciasRelatoriosPage />} />
-              <Route path="apoio/dashboard" element={<PreferenciasDashboardPage />} />
-              <Route path="apoio/geolocalizacao" element={<PreferenciasGeolocalizacaoPage />} />
-              <Route path="apoio/agenda" element={<PreferenciasAgendaPage />} />
-              <Route path="apoio/chamados" element={<PreferenciasChamadosPage />} />
-              <Route path="apoio/comodato" element={<PreferenciasComodatoPage />} />
-              <Route path="apoio/dados-clientes" element={<DadosClientesConfigPage />} />
-              <Route path="apoio/avancadas" element={<ConfiguracoesAvancadasAPoioPage />} />
-            </Route>
-
-            {/* DEBUGGING ROUTES */}
-            <Route path="debug/rpc-test" element={<RPCTestPage />} />
-            <Route path="debug/analise-profunda" element={<AnaliseProfundaPage />} />
-            <Route path="debug/verificacao-dados" element={<DataVerificationPage />} />
-            <Route path="debug/teste-supabase" element={<SupabaseTestPage />} />
-
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
-        </Routes>
-      </Suspense>
-      <Toaster />
-    </>
-  );
-};
-
-function App() {
-  useEffect(() => {
-    prefetchCriticalRoutes();
-  }, []);
-
-  return (
-    <HelmetProvider>
-      <SupabaseAuthProvider>
-        <DataProvider>
-          <NotificationProvider>
-            <FilterProvider>
-              <PageActionProvider>
-                <AppContent />
-              </PageActionProvider>
-            </FilterProvider>
-          </NotificationProvider>
-        </DataProvider>
-      </SupabaseAuthProvider>
-    </HelmetProvider>
+                            {/* LEGACY ROUTE ALIASES */}
+                            <Route path="/dashboard" element={<Navigate to="/analytics/dashboard-gerencial" replace />} />
+                            <Route path="/gerencial" element={<Navigate to="/analytics/dashboard-gerencial" replace />} />
+                            <Route path="/settings" element={<Navigate to="/configuracoes/geral" replace />} />
+                            
+                            <Route path="*" element={<NotFoundPage />} />
+                          </Route>
+                        </Routes>
+                        <Toaster />
+                      </DataProvider>
+                    </PageActionProvider>
+                  </FilterProvider>
+                </NotificationProvider>
+              </CombinedAuthProvider>
+            </TooltipProvider>
+          </HelmetProvider>
+        </QueryClientProvider>
+      </Router>
+    </ErrorBoundary>
   );
 }
-
-export default App;

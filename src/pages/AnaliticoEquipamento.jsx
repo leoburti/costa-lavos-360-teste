@@ -3,11 +3,10 @@ import { useFilters } from '@/contexts/FilterContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatCurrency, formatNumber } from '@/lib/utils';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import { formatCurrency, formatNumber, formatDateForAPI } from '@/lib/utils';
 import { Package, TrendingUp, Users } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import PageSkeleton from '@/components/PageSkeleton';
 
 const AnaliticoEquipamento = () => {
   const { filters } = useFilters();
@@ -15,22 +14,16 @@ const AnaliticoEquipamento = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Correct date access and formatting
-  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
-  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
-  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
-
-  // Debug Logs
-  useEffect(() => {
-    console.log('[AnaliticoEquipamento] Filters:', filters);
-    console.log('[AnaliticoEquipamento] Dates:', { startDateStr, endDateStr });
-  }, [filters, startDateStr, endDateStr]);
+  const startDateStr = formatDateForAPI(filters.dateRange?.from || filters.dateRange?.[0]);
+  const endDateStr = formatDateForAPI(filters.dateRange?.to || filters.dateRange?.[1]);
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const fetchData = async () => {
+      if (!startDateStr || !endDateStr) return;
+      
       setLoading(true);
       setError(null);
       try {
@@ -43,7 +36,9 @@ const AnaliticoEquipamento = () => {
           .in('Cfo', ['5908', '6551', '6908', '5551']) // CFOs de Equipamento
           .gt('Total', 0);
 
-        if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
+        if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors.map(s => String(s)));
+        if (filters.sellers?.length > 0) query = query.in('Nome Vendedor', filters.sellers.map(s => String(s)));
+        if (filters.regions?.length > 0) query = query.in('Desc.Regiao', filters.regions.map(s => String(s)));
         
         const { data, error: supabaseError } = await query.abortSignal(controller.signal);
 
@@ -99,11 +94,11 @@ const AnaliticoEquipamento = () => {
     };
   }, [rawData]);
 
-  if (loading && !rawData.length) return <div className="h-96 flex items-center justify-center"><LoadingSpinner message="Analisando equipamentos..." /></div>;
+  if (loading) return <PageSkeleton />;
   if (error) return <Alert variant="destructive" className="m-6"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
 
   return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-in fade-in duration-500">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Análise de Equipamentos</h1>
         <p className="text-muted-foreground mt-1">Performance detalhada por tipo (Consulta Direta)</p>

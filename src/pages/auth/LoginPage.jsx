@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { signIn } from '@/utils/auth';  // ✅ IMPORT FIX
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,41 +14,47 @@ import { Loader2 } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um e-mail válido.' }),
-  password: z.string().min(1, { message: 'A senha não pode estar em branco.' }),
+  password: z.string().min(6, { message: 'A senha deve ter pelo menos 6 caracteres.' }),
 });
 
 const LoginPage = () => {
-  const { signIn, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/dashboard';
+  const [isLoading, setIsLoading] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    setError,
+    formState: { errors },
   } = useForm({
     resolver: zodResolver(loginSchema),
     mode: 'onChange',
   });
 
-  useEffect(() => {
-    if (user) {
-      navigate(from, { replace: true });
-    }
-  }, [user, navigate, from]);
-
   const onSubmit = async (data) => {
-    await signIn(data.email, data.password);
+    setIsLoading(true);
+    try {
+      console.log('[LoginPage] Tentando fazer login com:', data.email);
+      await signIn(data.email, data.password); // ✅ Correct function call
+      console.log('[LoginPage] Login bem-sucedido, redirecionando...');
+      navigate(from, { replace: true });
+    } catch (error) {
+      console.error('[LoginPage] Erro ao fazer login:', error);
+      setError('root', {
+        message: error.message || 'Credenciais inválidas ou erro no servidor.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
-
-  const isLoading = authLoading || isSubmitting;
 
   return (
     <>
       <Helmet>
         <title>Login - Costa Lavos 360</title>
-        <meta name="description" content="Acesse sua conta para visualizar os dashboards." />
+        <meta name="description" content="Acesse sua conta." />
       </Helmet>
       <div className="min-h-screen w-full bg-muted/40 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
@@ -77,7 +84,7 @@ const LoginPage = () => {
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <Label htmlFor="password">Senha</Label>
-                                <Link to="/forgot-password" className={`text-sm text-primary hover:underline ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
+                                <Link to="/forgot-password" className="text-sm text-primary hover:underline">
                                     Esqueceu a senha?
                                 </Link>
                             </div>
@@ -92,6 +99,11 @@ const LoginPage = () => {
                             />
                             {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
                         </div>
+                        {errors.root && (
+                            <div className="p-3 rounded bg-destructive/10 text-destructive text-sm font-medium text-center">
+                                {errors.root.message}
+                            </div>
+                        )}
                     </CardContent>
                     <CardFooter className="flex flex-col gap-4">
                         <Button type="submit" className="w-full" disabled={isLoading}>

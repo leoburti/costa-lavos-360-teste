@@ -1,0 +1,13 @@
+task: "Implement get_relatorio_comodato RPC"
+severity: "High"
+context: "The function get_relatorio_comodato currently returns a hardcoded 'Under Construction' message. It needs real SQL logic."
+files_to_modify:
+  - "supabase_functions.sql"
+requirements:
+  - "Replace the placeholder body of `get_relatorio_comodato`."
+  - "Query `bd-cl` (sales) and `bd_cl_inv` (inventory) tables."
+  - "Return a JSON object with:"
+    - "summary: total equipment count, total active contracts."
+    - "details: list of clients with their equipment count and last maintenance date."
+  - "Use efficient JOINs and filtering."
+  - "Respect RLS via `p_exclude_employees` and other standard filters if applicable."

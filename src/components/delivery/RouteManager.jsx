@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,8 +17,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 
-const RouteManager = ({ routes, onRoutesUpdate }) => {
+const RouteManager = ({ routes = [], onRoutesUpdate, loading: externalLoading }) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -62,7 +64,7 @@ const RouteManager = ({ routes, onRoutesUpdate }) => {
       if (routeError) throw routeError;
 
       toast({ title: 'Rota excluída com sucesso!' });
-      onRoutesUpdate();
+      if (onRoutesUpdate) onRoutesUpdate();
     } catch (error) {
       console.error('Error deleting route:', error);
       toast({
@@ -103,7 +105,7 @@ const RouteManager = ({ routes, onRoutesUpdate }) => {
       if (error) throw error;
 
       toast({ title: `Rota ${editingRoute ? 'atualizada' : 'criada'} com sucesso!` });
-      onRoutesUpdate();
+      if (onRoutesUpdate) onRoutesUpdate();
       setIsFormOpen(false);
     } catch (error) {
       console.error('Error saving route:', error);
@@ -166,7 +168,13 @@ const RouteManager = ({ routes, onRoutesUpdate }) => {
         </Dialog>
       </CardHeader>
       <CardContent>
-        {routes.length === 0 ? (
+        {externalLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : !routes || routes.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nenhuma rota cadastrada.</p>
         ) : (
           <ul className="space-y-2">

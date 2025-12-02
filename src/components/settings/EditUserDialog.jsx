@@ -1,26 +1,25 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { PenLine as FilePenLine, Loader2, Save } from 'lucide-react';
+import { Loader2, Save } from 'lucide-react';
 
-const EditUserDialog = ({ user, onUserUpdated }) => {
-    const [open, setOpen] = useState(false);
+const EditUserDialog = ({ user, isOpen, onClose, onUserUpdated }) => {
     const [fullName, setFullName] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
 
     useEffect(() => {
-        if(open) {
+        if (isOpen && user) {
             setFullName(user.full_name || '');
             setPassword('');
         }
-    }, [open, user]);
+    }, [isOpen, user]);
 
     const handleUpdateUser = async () => {
         if (!fullName) {
@@ -40,27 +39,17 @@ const EditUserDialog = ({ user, onUserUpdated }) => {
         } else {
             toast({ title: 'Sucesso!', description: `Usuário ${fullName} atualizado.` });
             onUserUpdated(user.user_id, fullName);
-            setOpen(false);
+            onClose();
             setPassword('');
         }
         setLoading(false);
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <DialogTrigger asChild>
-                        <Button size="icon" variant="ghost">
-                            <FilePenLine className="h-4 w-4 text-blue-500" />
-                        </Button>
-                    </DialogTrigger>
-                </TooltipTrigger>
-                <TooltipContent><p>Editar Nome/Senha</p></TooltipContent>
-            </Tooltip>
+        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
-                    <DialogTitle>Editar Usuário: {user.email}</DialogTitle>
+                    <DialogTitle>Editar Usuário: {user?.email}</DialogTitle>
                     <DialogDescription>
                         Altere o nome completo ou defina uma nova senha. Deixe o campo de senha em branco para não alterá-la.
                     </DialogDescription>

@@ -1,38 +1,20 @@
-
 import React from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Trash2, ShieldAlert, ChevronsUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2, Trash2, ShieldAlert } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { formatCurrency, formatDate, formatPercentage } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import BonificationStatusBadge from './BonificationStatusBadge';
 
-const SortableHeader = ({ children, columnKey, sortConfig, onSort }) => {
-    const isActive = sortConfig && sortConfig.key === columnKey;
-    const Icon = isActive
-        ? sortConfig.direction === 'ascending' ? ArrowUp : ArrowDown
-        : ChevronsUpDown;
-
-    return (
-        <TableHead onClick={() => onSort && onSort(columnKey)} className={onSort ? "cursor-pointer hover:bg-muted/50" : ""}>
-            <div className="flex items-center gap-2">
-                {children}
-                {onSort && <Icon className={`h-4 w-4 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`} />}
-            </div>
-        </TableHead>
-    );
-};
-
-const RequestTable = ({ requests, loading, title, description, onOpenDetail, onDelete, onQuickApprove, onQuickReject, isApproverTab = false, isProtheus = false, sortConfig, onSort }) => {
+const RequestTable = ({ requests, loading, title, description, onOpenDetail, onDelete, onQuickApprove, onQuickReject, isApproverTab = false }) => {
     const { userContext } = useAuth();
     const userRole = userContext?.role;
     const canDelete = userRole === 'Nivel 1' || userRole === 'Nivel 2';
 
-    const protheusHeaders = [
-        { key: "document_number", label: "Num. Dcto." },
+    const headers = [
         { key: "client_name", label: "Cliente" },
         { key: "total_amount", label: "Valor" },
         { key: "request_date", label: "Data" },
@@ -40,17 +22,6 @@ const RequestTable = ({ requests, loading, title, description, onOpenDetail, onD
         { key: "motivos", label: "Motivos" },
         { key: "seller_name", label: "Vendedor" },
     ];
-
-    const defaultHeaders = [
-        { key: "client_name", label: "Cliente" },
-        { key: "total_amount", label: "Valor" },
-        { key: "request_date", label: "Data" },
-        { key: "status", label: "Status" },
-        { key: "motivos", label: "Motivos" },
-        { key: "seller_name", label: "Vendedor" },
-    ];
-    
-    const headers = isProtheus ? protheusHeaders : defaultHeaders;
 
     return (
         <Card>
@@ -64,9 +35,7 @@ const RequestTable = ({ requests, loading, title, description, onOpenDetail, onD
                         <TableHeader>
                             <TableRow>
                                 {headers.map(h => (
-                                    <SortableHeader key={h.key} columnKey={h.key} sortConfig={sortConfig} onSort={isProtheus ? onSort : undefined}>
-                                        {h.label}
-                                    </SortableHeader>
+                                    <TableHead key={h.key}>{h.label}</TableHead>
                                 ))}
                                 <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
@@ -79,7 +48,6 @@ const RequestTable = ({ requests, loading, title, description, onOpenDetail, onD
                             ) : (
                                 requests.map(req => (
                                     <TableRow key={req.id}>
-                                        {isProtheus && <TableCell>{req.document_number}</TableCell>}
                                         <TableCell className="font-medium">{req.client_name}</TableCell>
                                         <TableCell>{formatCurrency(req.total_amount)}</TableCell>
                                         <TableCell>{formatDate(req.request_date, 'dd/MM/yyyy HH:mm')}</TableCell>
@@ -102,7 +70,7 @@ const RequestTable = ({ requests, loading, title, description, onOpenDetail, onD
                                                         <Button variant="success" size="sm" onClick={() => onQuickApprove(req)}>Aprovar</Button>
                                                     </>
                                                 )}
-                                                {canDelete && !isProtheus && onDelete && (
+                                                {canDelete && onDelete && (
                                                     <AlertDialog>
                                                         <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
                                                         <AlertDialogContent>

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -10,19 +9,20 @@ import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatDate, formatPercentage } from '@/lib/utils';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/customSupabaseClient';
 
 
 const RequestDetailsDialog = ({ isOpen, onClose, request, isProcessing, rejectionReason, setRejectionReason, onApprovalAction }) => {
-    const { userRole, supabase, isSupabaseConfigured } = useAuth();
+    const { userContext } = useAuth();
     const { toast } = useToast();
     const [auditLog, setAuditLog] = useState([]);
     const [loadingAudit, setLoadingAudit] = useState(false);
 
-    const isApprover = userRole === 'Nivel 1' || userRole === 'Nivel 2';
+    const isApprover = userContext?.role === 'Nivel 1' || userContext?.role === 'Nivel 2' || userContext?.eh_aprovador;
 
     useEffect(() => {
         const fetchAuditLog = async () => {
-            if (!isOpen || !request || request.source === 'Protheus' || !isSupabaseConfigured) return;
+            if (!isOpen || !request || !request.id) return;
             setLoadingAudit(true);
             try {
                 const { data, error } = await supabase
@@ -41,7 +41,7 @@ const RequestDetailsDialog = ({ isOpen, onClose, request, isProcessing, rejectio
         };
 
         fetchAuditLog();
-    }, [isOpen, request, toast, supabase, isSupabaseConfigured]);
+    }, [isOpen, request, toast, supabase]);
 
 
     if (!request) return null;
@@ -72,7 +72,7 @@ const RequestDetailsDialog = ({ isOpen, onClose, request, isProcessing, rejectio
                             <p><strong>Supervisor:</strong> {request.supervisor_name || 'N/A'}</p>
                             <p><strong>Vendedor:</strong> {request.seller_name || 'N/A'}</p>
                             <p><strong>Valor Total:</strong> {formatCurrency(request.total_amount)}</p>
-                            <p><strong>Percentual sobre Venda:</strong> {formatPercentage(request.percentual)}</p>
+                            <p><strong>Percentual sobre Venda:</strong> {request.percentual ? formatPercentage(request.percentual) : 'N/A'}</p>
                              <div className="flex items-center gap-2">
                                 <strong>Motivos:</strong> 
                                 <div className="flex flex-wrap gap-1">

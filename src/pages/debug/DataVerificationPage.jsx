@@ -1,201 +1,189 @@
 import React, { useState, useCallback } from 'react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
+import { supabase } from '@/lib/customSupabaseClient';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Play, CheckCircle2, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { RPC_MIGRATION_MAP } from '@/config/rpc_migration_map';
 
-// Configuration for the tests
-const STANDARD_PARAMS = {
+const rpcList = [
+  // Predictive Analysis
+  { name: 'get_churn_analysis_data_v3', category: 'Análise Preditiva' },
+  { name: 'get_rfm_analysis', category: 'Análise Preditiva' },
+  { name: 'get_new_client_trends', category: 'Análise Preditiva' },
+  
+  // Performance Analysis
+  { name: 'get_low_performance_clients', category: 'Análise de Desempenho' },
+  { name: 'get_loyalty_analysis', category: 'Análise de Desempenho' },
+
+  // Equipment Analysis
+  { name: 'get_equipment_movement', category: 'Análise de Equipamentos' },
+
+  // Managerial Analysis
+  { name: 'get_supervisor_analytical_data', category: 'Análise Gerencial' },
+  { name: 'get_seller_analytical_data', category: 'Análise Gerencial' },
+  { name  : 'get_supervisor_one_on_one_data', category: 'Análise Gerencial' },
+  
+  // Regional & Group Analysis
+  { name: 'get_regional_summary_v2', category: 'Análise Regional e de Grupo' },
+  { name: 'get_drilldown_data', category: 'Análise Regional e de Grupo' },
+  { name: 'get_group_360_analysis', category: 'Análise Regional e de Grupo' },
+  { name: 'get_group_sales_analysis', category: 'Análise Regional e de Grupo' },
+
+  // Product Analysis
+  { name: 'get_product_basket_analysis_v2', category: 'Análise de Produtos' },
+  { name: 'get_product_mix_analysis', category: 'Análise de Produtos' },
+];
+
+const defaultParams = {
+  p_start_date: '2024-01-01',
+  p_end_date: '2024-03-31',
   p_exclude_employees: true,
   p_supervisors: null,
   p_sellers: null,
   p_customer_groups: null,
   p_regions: null,
   p_clients: null,
-  p_search_term: null
+  p_search_term: null,
+  // Extra parameters for fixed functions
+  p_analysis_type: 'new_clients_90',
+  p_analysis_mode: 'region',
+  p_drilldown_level: 1,
+  p_parent_keys: [],
+  p_show_defined_groups_only: false,
+  p_level: 'root',
+  p_parent_key: null,
+  p_supervisor_name: null 
 };
 
-// Helper to determine record count based on varied RPC response structures
-const getRecordCount = (data) => {
-  if (!data) return 0;
-  if (Array.isArray(data)) return data.length;
-  
-  // Handle specific object structures
-  if (data.kpis) {
-    if (data.data && Array.isArray(data.data)) return data.data.length;
-    if (data.phase1 && Array.isArray(data.phase1)) return data.phase1.length + (data.phase2?.length || 0);
-    if (data.clients && Array.isArray(data.clients)) return data.clients.length;
-    if (data.dailySales && Array.isArray(data.dailySales)) return data.dailySales.length;
-    return 1; // At least returned the KPI object
+const getIconForStatus = (status) => {
+  switch (status) {
+    case 'success':
+      return <CheckCircle className="h-5 w-5 text-green-500" />;
+    case 'error':
+      return <XCircle className="h-5 w-5 text-red-500" />;
+    case 'timeout':
+      return <Clock className="h-5 w-5 text-yellow-500" />;
+    default:
+      return <AlertTriangle className="h-5 w-5 text-gray-500" />;
   }
-  
-  if (data['A'] || data['B'] || data['C']) {
-    let count = 0;
-    Object.values(data).forEach(group => {
-      if (group.client_count) count += group.client_count;
-    });
-    return count;
-  }
-
-  return 1; // Unknown object structure, but data exists
 };
 
 const DataVerificationPage = () => {
-  const navigate = useNavigate();
   const [results, setResults] = useState({});
-  const [isRunning, setIsRunning] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [loading, setLoading] = useState({});
 
-  const pagesToTest = [
-    { name: "Dashboard Comercial", path: "/dashboard", rpc: "get_overview_data_v2", requiresDates: true },
-    { name: "Dashboard Analítico", path: "/analitico-vendas-diarias", rpc: "get_daily_sales_data_v2", requiresDates: true },
-    ...RPC_MIGRATION_MAP.flatMap(group => group.files.map(file => ({
-      name: file.component,
-      path: file.path.replace('src/pages', '').replace('.jsx', '').toLowerCase(),
-      rpc: file.rpc,
-      requiresDates: file.params?.includes('p_start_date')
-    })))
-  ];
-
-  const runDiagnosis = useCallback(async () => {
-    setIsRunning(true);
-    setResults({});
-    setProgress(0);
-
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
-    const endDate = new Date();
-
-    const dateParams = {
-      p_start_date: startDate.toISOString(),
-      p_end_date: endDate.toISOString()
-    };
-
-    let completed = 0;
-
-    for (const page of pagesToTest) {
-      setResults(prev => ({ ...prev, [page.name]: { status: 'loading' } }));
-
-      try {
-        const start = performance.now();
-        const callParams = page.requiresDates ? { ...STANDARD_PARAMS, ...dateParams } : { ...STANDARD_PARAMS };
-        
-        // Skip or handle functions that require specific IDs which we can't easily mock generically
-        if (page.rpc === 'get_group_360_analysis') throw new Error("Requer parâmetro específico (ID do Grupo)");
-        if (page.rpc === 'get_client_360_data_v2') throw new Error("Requer contexto de cliente específico");
-        if (page.rpc === 'get_client_equipments') throw new Error("Requer ID do cliente (p_cliente_id)");
-
-        const { data, error } = await supabase.rpc(page.rpc, callParams);
-        const duration = performance.now() - start;
-
-        if (error) throw error;
-
-        setResults(prev => ({
-          ...prev,
-          [page.name]: { status: 'success', count: getRecordCount(data), duration: duration.toFixed(0) }
-        }));
-
-      } catch (err) {
-        setResults(prev => ({
-          ...prev,
-          [page.name]: { status: 'error', message: err.message || 'Erro desconhecido' }
-        }));
-      } finally {
-        completed++;
-        setProgress((completed / pagesToTest.length) * 100);
+  const testFunction = useCallback(async (funcName) => {
+    setLoading(prev => ({ ...prev, [funcName]: true }));
+    const startTime = Date.now();
+    try {
+      // Adapt params based on function requirements to avoid signature mismatch during test
+      let params = { ...defaultParams };
+      
+      if (funcName === 'get_group_sales_analysis') {
+          // Remove params that cause conflict if function expects specific set
+          delete params.p_start_date;
+          delete params.p_end_date;
       }
-    }
 
-    setIsRunning(false);
+      const { data, error } = await supabase.rpc(funcName, params);
+      const duration = Date.now() - startTime;
+
+      if (error) {
+        if (error.code === '57014' || error.message.includes('timeout')) {
+          setResults(prev => ({ ...prev, [funcName]: { status: 'timeout', data: 'Statement timed out', duration } }));
+        } else {
+          setResults(prev => ({ ...prev, [funcName]: { status: 'error', data: error.message, duration } }));
+        }
+      } else {
+        setResults(prev => ({ ...prev, [funcName]: { status: 'success', data: `Success. Records: ${data?.length ?? 'N/A'}`, duration } }));
+      }
+    } catch (err) {
+      const duration = Date.now() - startTime;
+      setResults(prev => ({ ...prev, [funcName]: { status: 'error', data: err.message, duration } }));
+    } finally {
+      setLoading(prev => ({ ...prev, [funcName]: false }));
+    }
   }, []);
 
-  const getStatusBadge = (result) => {
-    if (!result) return <Badge variant="outline">Pendente</Badge>;
-    if (result.status === 'loading') return <Badge variant="secondary" className="animate-pulse">Testando...</Badge>;
-    if (result.status === 'success') {
-        if (result.count === 0) return <Badge className="bg-yellow-500 hover:bg-yellow-600">Vazio (0)</Badge>;
-        return <Badge className="bg-green-500 hover:bg-green-600">Sucesso</Badge>;
+  const testAllFunctions = async () => {
+    for (const rpc of rpcList) {
+      await testFunction(rpc.name);
     }
-    return <Badge variant="destructive">Erro</Badge>;
   };
 
+  const groupedRpcs = rpcList.reduce((acc, rpc) => {
+    if (!acc[rpc.category]) {
+      acc[rpc.category] = [];
+    }
+    acc[rpc.category].push(rpc);
+    return acc;
+  }, {});
+
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
-            <CheckCircle2 className="h-8 w-8 text-primary" />
-            Verificação de Integridade de Dados
-          </h1>
-          <p className="text-muted-foreground mt-1">Diagnóstico em tempo real de todas as páginas analíticas e suas conexões RPC.</p>
-        </div>
-        <Button size="lg" onClick={runDiagnosis} disabled={isRunning} className="min-w-[200px]">
-          {isRunning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testando {Math.round(progress)}%</> : <><Play className="mr-2 h-4 w-4" /> Iniciar Diagnóstico</>}
-        </Button>
+    <>
+      <Helmet>
+        <title>Verificação de Dados e RPCs</title>
+      </Helmet>
+      <div className="container mx-auto p-4">
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Verificação de Funções RPC</CardTitle>
+                <CardDescription>
+                  Teste a integridade e o desempenho das principais funções de busca de dados do sistema.
+                </CardDescription>
+              </div>
+              <Button onClick={testAllFunctions}>Testar Tudo</Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[65vh] pr-4">
+              <div className="space-y-6">
+                {Object.entries(groupedRpcs).map(([category, rpcs]) => (
+                  <div key={category}>
+                    <h3 className="text-xl font-semibold mb-3">{category}</h3>
+                    <div className="space-y-2">
+                      {rpcs.map((rpc) => (
+                        <div key={rpc.name} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <Button
+                              onClick={() => testFunction(rpc.name)}
+                              disabled={loading[rpc.name]}
+                              size="sm"
+                              variant="outline"
+                            >
+                              {loading[rpc.name] ? 'Testando...' : 'Testar'}
+                            </Button>
+                            <code className="font-mono text-sm">{rpc.name}</code>
+                          </div>
+                          {results[rpc.name] && (
+                            <div className="flex items-center gap-3">
+                              <Badge variant={results[rpc.name].status === 'success' ? 'success' : 'destructive'}>
+                                {results[rpc.name].status.toUpperCase()}
+                              </Badge>
+                              <div className="text-sm text-muted-foreground w-64 truncate" title={results[rpc.name].data}>
+                                {results[rpc.name].data}
+                              </div>
+                              <div className="text-sm font-semibold w-24 text-right">
+                                {results[rpc.name].duration} ms
+                              </div>
+                              {getIconForStatus(results[rpc.name].status)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
       </div>
-
-      {!isRunning && Object.keys(results).length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="bg-green-50 border-green-200">
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-green-700">{Object.values(results).filter(r => r.status === 'success' && r.count > 0).length}</div>
-              <p className="text-sm text-green-600 font-medium">Páginas Operacionais</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-yellow-50 border-yellow-200">
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-yellow-700">{Object.values(results).filter(r => r.status === 'success' && r.count === 0).length}</div>
-              <p className="text-sm text-yellow-600 font-medium">Retorno Vazio (Sem Dados)</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-red-50 border-red-200">
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-red-700">{Object.values(results).filter(r => r.status === 'error').length}</div>
-              <p className="text-sm text-red-600 font-medium">Erros de Execução</p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <Card>
-        <CardHeader><CardTitle>Resultados por Página</CardTitle><CardDescription>Teste realizado considerando período de 30 dias.</CardDescription></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Página / Componente</TableHead>
-                <TableHead>RPC Function</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Registros</TableHead>
-                <TableHead className="text-right">Tempo (ms)</TableHead>
-                <TableHead className="text-right">Detalhes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pagesToTest.map((page, idx) => {
-                const result = results[page.name];
-                return (
-                  <TableRow key={idx}>
-                    <TableCell className="font-medium"><div className="flex flex-col"><span>{page.name}</span><span className="text-xs text-muted-foreground font-mono">{page.path}</span></div></TableCell>
-                    <TableCell><code className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">{page.rpc}</code></TableCell>
-                    <TableCell>{getStatusBadge(result)}</TableCell>
-                    <TableCell className="text-right font-mono">{result?.status === 'success' ? result.count : '-'}</TableCell>
-                    <TableCell className="text-right font-mono text-muted-foreground">{result?.duration ? `${result.duration}ms` : '-'}</TableCell>
-                    <TableCell className="text-right">
-                        {result?.status === 'error' && <div className="text-xs text-red-500 max-w-[200px] truncate" title={result.message}>{result.message}</div>}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+    </>
   );
 };
 

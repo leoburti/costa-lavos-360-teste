@@ -1,0 +1,19 @@
+task: "Consolidate Bonification Module"
+severity: "Critical"
+context: "The Bonificações module is fragmented. Files like 'AnaliticoBonificados.jsx' and 'BonificacoesNovo.jsx' exist in the root, while others are in 'src/pages/bonificacoes'. We need a unified structure."
+files_to_create:
+  - "src/pages/bonificacoes/BonificacoesList.jsx"
+  - "src/pages/bonificacoes/BonificacoesDetalhes.jsx"
+  - "src/pages/bonificacoes/BonificacoesRelatorio.jsx"
+  - "src/pages/bonificacoes/BonificacoesConfiguracao.jsx"
+files_to_move:
+  - "src/pages/bonificacoes/BonificacoesPageV2.jsx -> src/pages/bonificacoes/BonificacoesList.jsx"
+  - "src/pages/bonificacoes/AnaliseBonificacaoPage.jsx -> src/pages/bonificacoes/BonificacoesRelatorio.jsx"
+files_to_modify:
+  - "src/App.jsx"
+  - "src/constants/routes.js"
+requirements:
+  - "Move logic from legacy V2 pages to the new standardized filenames."
+  - "Create a standalone Details page replacing the modal-only approach."
+  - "Implement a new Configuration page for managing bonification limits."
+  - "Update App.jsx to use strict nested routing for /bonificacoes/*."

@@ -65,8 +65,8 @@ const ModulePermissionsDialog = ({ user, onUserUpdated }) => {
       p_user_id: user.user_id,
       p_role: user.role,
       p_can_access_crm: user.can_access_crm,
-      p_supervisor_name: user.supervisor_name,
-      p_seller_name: user.seller_name,
+      p_vinculo_comercial: user.vinculo_comercial,
+      p_tipo_vinculo: user.tipo_vinculo,
       p_module_permissions: permissions,
       p_phone_number: user.phone_number
     });
@@ -76,7 +76,7 @@ const ModulePermissionsDialog = ({ user, onUserUpdated }) => {
     } else {
       toast({ title: 'Sucesso!', description: `Permissões de módulo para ${user.full_name} atualizadas.` });
       onUserUpdated(user.user_id, null, permissions);
-      if (currentUser.id === user.user_id) {
+      if (currentUser && currentUser.id === user.user_id) {
           await forceRoleRefetch();
       }
       setOpen(false);

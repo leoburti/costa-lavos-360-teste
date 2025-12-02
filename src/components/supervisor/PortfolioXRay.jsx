@@ -1,7 +1,7 @@
+
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatCurrency, formatNumber } from '@/lib/utils';
@@ -63,7 +63,7 @@ const PortfolioXRay = ({ data, loading }) => {
   const [activeTab, setActiveTab] = useState('clients');
 
   if (loading) {
-    return <Skeleton className="h-[450px] w-full rounded-xl" />;
+    return <Skeleton className="h-full w-full rounded-xl min-h-[450px]" />;
   }
 
   const maxClient = Math.max(...(data?.topClients?.map(c => c.value) || [0]), 1);
@@ -72,12 +72,12 @@ const PortfolioXRay = ({ data, loading }) => {
   const maxRegion = Math.max(...(data?.regionalStats?.map(r => r.value) || [0]), 1);
 
   return (
-    <Card className="border-0 shadow-sm ring-1 ring-slate-200 bg-white h-full flex flex-col">
+    <Card className="border-0 shadow-sm ring-1 ring-slate-200 bg-white h-full flex flex-col min-h-[500px]">
       <CardHeader className="pb-0 px-6 pt-6">
         <div className="flex items-center justify-between mb-4">
           <div className="space-y-1">
             <CardTitle className="text-lg font-bold text-slate-900">Raio-X da Carteira</CardTitle>
-            <CardDescription>Análise detalhada dos top players</CardDescription>
+            <CardDescription>Detalhamento dos principais indicadores</CardDescription>
           </div>
         </div>
         
@@ -97,31 +97,30 @@ const PortfolioXRay = ({ data, loading }) => {
             </TabsTrigger>
           </TabsList>
 
-          <div className="mt-6 h-[320px]">
-            <TabsContent value="clients" className="h-full mt-0 animate-in fade-in duration-300">
+          <CardContent className="mt-4 p-0 flex-1">
+            <TabsContent value="clients" className="h-[350px] mt-0 animate-in fade-in duration-300">
               <ScrollArea className="h-full pr-2">
                 <XRayList data={data?.topClients} type="client" maxVal={maxClient} />
               </ScrollArea>
             </TabsContent>
-            <TabsContent value="products" className="h-full mt-0 animate-in fade-in duration-300">
+            <TabsContent value="products" className="h-[350px] mt-0 animate-in fade-in duration-300">
               <ScrollArea className="h-full pr-2">
                 <XRayList data={data?.topProducts} type="product" maxVal={maxProduct} />
               </ScrollArea>
             </TabsContent>
-            <TabsContent value="equipment" className="h-full mt-0 animate-in fade-in duration-300">
+            <TabsContent value="equipment" className="h-[350px] mt-0 animate-in fade-in duration-300">
               <ScrollArea className="h-full pr-2">
                 <XRayList data={data?.equipmentStats} type="equipment" maxVal={maxEquipment} />
               </ScrollArea>
             </TabsContent>
-            <TabsContent value="regions" className="h-full mt-0 animate-in fade-in duration-300">
+            <TabsContent value="regions" className="h-[350px] mt-0 animate-in fade-in duration-300">
               <ScrollArea className="h-full pr-2">
                 <XRayList data={data?.regionalStats} type="region" maxVal={maxRegion} />
               </ScrollArea>
             </TabsContent>
-          </div>
+          </CardContent>
         </Tabs>
       </CardHeader>
-      <CardContent />
     </Card>
   );
 };

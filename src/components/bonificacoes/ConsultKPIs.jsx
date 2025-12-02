@@ -30,50 +30,36 @@ const KPICard = ({ title, value, subtext, icon: Icon, loading }) => (
 
 const ConsultKPIs = ({ kpis, loading, onRefresh }) => {
     return (
-        <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Consulta de Bonificações</h1>
-                    <p className="text-muted-foreground">Visualize e gerencie solicitações de bonificação.</p>
-                </div>
-                <div className="flex gap-2 flex-wrap justify-end">
-                    <Button variant="outline" onClick={onRefresh} disabled={loading}>
-                        <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} /> Atualizar
-                    </Button>
-                </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <KPICard
-                    title="Limite Global (Mês)"
-                    value={formatCurrency(kpis.globalLimit)}
-                    subtext={`Baseado em ${formatCurrency(kpis.previousMonthNetSales)}`}
-                    icon={Percent}
-                    loading={loading}
-                />
-                <KPICard
-                    title="Bonificado no Mês"
-                    value={formatCurrency(kpis.bonifiedThisMonth)}
-                    subtext={`Pendente: ${formatCurrency(kpis.pendingThisMonth)}`}
-                    icon={DollarSign}
-                    loading={loading}
-                />
-                <KPICard
-                    title="Aprovações Pendentes"
-                    value={kpis.pendingRequestsCount}
-                    subtext={`Totalizando ${formatCurrency(kpis.pendingRequestsValue)}`}
-                    icon={AlertCircle}
-                    loading={loading}
-                />
-                <KPICard
-                    title="Total de Registros"
-                    value={kpis.totalRecords}
-                    subtext="No período selecionado"
-                    icon={Package}
-                    loading={loading}
-                />
-            </div>
-        </>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <KPICard
+                title="Limite Global (Mês)"
+                value={formatCurrency(kpis.globalLimit)}
+                subtext={`Baseado em ${formatCurrency(kpis.previousMonthNetSales)}`}
+                icon={Percent}
+                loading={loading}
+            />
+            <KPICard
+                title="Bonificado no Mês"
+                value={formatCurrency(kpis.bonifiedThisMonth)}
+                subtext={`Pendente: ${formatCurrency(kpis.pendingThisMonth)}`}
+                icon={DollarSign}
+                loading={loading}
+            />
+            <KPICard
+                title="Aprovações Pendentes"
+                value={kpis.pendingRequestsCount}
+                subtext={`Totalizando ${formatCurrency(kpis.pendingRequestsValue)}`}
+                icon={AlertCircle}
+                loading={loading}
+            />
+            <KPICard
+                title="Total de Registros"
+                value={kpis.totalRecords}
+                subtext="No período selecionado"
+                icon={Package}
+                loading={loading}
+            />
+        </div>
     );
 };
 

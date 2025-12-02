@@ -1,106 +1,125 @@
-
-import React from 'react';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import * as React from "react";
+import { cva } from "class-variance-authority";
+import { Check, X, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
-  CommandList,
-} from '@/components/ui/command';
+} from "@/components/ui/command";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 
-export function MultiSelect({
+const multiSelectVariants = cva(
+  "m-1 border-foreground/10 text-foreground bg-secondary hover:bg-secondary/80",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground",
+        destructive:
+          "border-transparent bg-destructive text-destructive-foreground",
+        outline: "text-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+);
+
+const MultiSelect = ({
   label,
   options,
   selected,
   onChange,
+  placeholder,
   className,
-  loading,
-  placeholder = 'Select options',
   ...props
-}) {
+}) => {
   const [open, setOpen] = React.useState(false);
 
-  const handleSelect = (currentValue) => {
-    const newSelected = selected.includes(currentValue)
-      ? selected.filter((item) => item !== currentValue)
-      : [...selected, currentValue];
-    onChange(newSelected);
-  };
-  
-  const getSelectedLabels = () => {
-    if (!selected || selected.length === 0) return placeholder;
-    
-    const labels = selected
-      .map(value => {
-        const option = options.find(opt => opt.value === value);
-        return option ? option.label : value;
-      })
-      .filter(Boolean);
-
-    if (labels.length === 0) return placeholder;
-    if (labels.length <= 2) return labels.join(', ');
-    
-    return `${labels.length} selecionados`;
+  const handleUnselect = (item) => {
+    onChange(selected.filter((i) => i !== item));
   };
 
   return (
-    <div className="space-y-2">
-      {label && <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{label}</label>}
-      <Popover open={open} onOpenChange={setOpen}>
+    <>
+      {label && <Label>{label}</Label>}
+      <Popover open={open} onOpenChange={setOpen} {...props}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className={cn("w-full justify-between h-10", className)}
-            disabled={loading}
+            className={cn("w-full justify-between", className)}
+            onClick={() => setOpen(!open)}
           >
-            <span className="truncate">
-              {getSelectedLabels()}
-            </span>
-            {loading ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
+            <div className="flex gap-1 flex-wrap">
+              {selected.length > 0 ? (
+                selected.map((item) => (
+                  <Badge
+                    key={item}
+                    variant="secondary"
+                    className={cn("mr-1")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleUnselect(item);
+                    }}
+                  >
+                    {options.find(opt => opt.value === item)?.label || item}
+                    <X className="ml-1 h-3 w-3" />
+                  </Badge>
+                ))
+              ) : (
+                <span>{placeholder || "Select items..."}</span>
+              )}
+            </div>
+            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-          <Command {...props}>
-            <CommandInput placeholder="Buscar..." />
-            <ScrollArea className="max-h-60">
-                <CommandList>
-                <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
-                <CommandGroup>
-                    {options.map((option) => (
-                    <CommandItem
-                        key={option.value}
-                        value={option.value}
-                        onSelect={() => handleSelect(option.value)}
-                        className="cursor-pointer"
-                    >
-                        <Check
-                        className={cn(
-                            'mr-2 h-4 w-4',
-                            selected && selected.includes(option.value) ? 'opacity-100' : 'opacity-0'
-                        )}
-                        />
-                        {option.label}
-                    </CommandItem>
-                    ))}
-                </CommandGroup>
-                </CommandList>
-            </ScrollArea>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+          <Command>
+            <CommandInput placeholder="Search..." />
+            <CommandEmpty>No item found.</CommandEmpty>
+            <CommandGroup className="max-h-64 overflow-auto">
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  onSelect={() => {
+                    if (selected.includes(option.value)) {
+                      handleUnselect(option.value);
+                    } else {
+                      onChange([...selected, option.value]);
+                    }
+                    setOpen(true);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      selected.includes(option.value) ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
           </Command>
         </PopoverContent>
       </Popover>
-    </div>
+    </>
   );
-}
+};
+
+export { MultiSelect };

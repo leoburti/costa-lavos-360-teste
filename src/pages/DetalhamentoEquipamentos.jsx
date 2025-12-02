@@ -28,7 +28,7 @@ const DetalhamentoEquipamentos = () => {
     p_show_defined_groups_only: false
   };
 
-  const { data, loading } = useAnalyticalData('get_detailed_equipment_analysis', params, { enabled: !!startDate && !!endDate });
+  const { data, loading } = useAnalyticalData('rpc:get_detailed_equipment_analysis', params, { enabled: !!startDate && !!endDate });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">

@@ -1,0 +1,38 @@
+---
+error_id: "ERR-ANALYTICS-001"
+category: "B - High"
+page: "/analise-churn"
+component: "AnaliseChurn.jsx"
+severity: "high"
+title: "Churn Analysis Timeout & Performance Issue"
+description: |
+  A página de Análise de Churn realiza cálculos pesados em tempo real via RPC `get_churn_analysis_data_v3`.
+  Em datasets grandes, isso causa timeouts (>10s) e uma experiência de usuário ruim.
+
+root_cause: |
+  A query SQL tenta processar todo o histórico de vendas de todos os clientes ativos de uma vez só para calcular recência e frequência.
+
+impact: |
+  - Página não carrega para usuários com muitos dados.
+  - Timeout de requisição HTTP.
+
+affected_files:
+  - src/pages/AnaliseChurn.jsx
+  - supabase_functions.sql (get_churn_analysis_data_v3)
+
+fix:
+  type: "optimization"
+  priority: "HIGH"
+  files:
+    - path: "src/pages/AnaliseChurn.jsx"
+      action: "modify"
+      description: "Implementar paginação na chamada da RPC e limitar o período de análise padrão para 6 meses se não especificado."
+    - path: "supabase_functions.sql"
+      action: "modify"
+      description: "Otimizar a query SQL para usar índices em 'DT Emissao' e limitar o escopo de clientes processados."
+
+validation:
+  manual:
+    - "Carregar página de Churn"
+    - "Verificar tempo de resposta < 3s"
+---

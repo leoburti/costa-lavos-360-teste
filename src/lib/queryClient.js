@@ -1,30 +1,31 @@
 import { QueryClient } from '@tanstack/react-query';
 
-// Global Query Client Configuration
-// Implements caching strategies requested by user
+// Configuração Global do React Query para UX Fluida
+// Implementa estratégia "Stale-While-Revalidate" agressiva para evitar loadings desnecessários
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Data is fresh for 2 minutes (no auto-refetch during this time)
-      staleTime: 1000 * 60 * 2, 
+      // Dados considerados "frescos" por 5 minutos.
+      // Durante este tempo, navegar entre abas NÃO causará refetch.
+      staleTime: 1000 * 60 * 5, 
       
-      // Keep data in cache for 30 minutes
+      // Manter dados em cache (memória) por 30 minutos antes de garbage collection.
+      // Isso permite que dados "velhos" sejam mostrados instantaneamente enquanto revalidam em background.
       gcTime: 1000 * 60 * 30, 
       
-      // Refetch on window focus to ensure data synchronization when returning from background
-      refetchOnWindowFocus: true, 
+      // Não recarregar ao focar na janela (evita piscadas desnecessárias se o usuário só trocou de aba do navegador)
+      refetchOnWindowFocus: false, 
       
-      // Do not refetch on mount if data is cached and fresh
+      // Não recarregar se o componente remontar e os dados ainda estiverem frescos (staleTime)
       refetchOnMount: false,
       
-      // Retry failed requests once
+      // Tentar novamente 1 vez em caso de erro de rede
       retry: 1,
       
-      // Enable offline support: queries will be paused when offline and resumed when online
+      // Suporte a modo offline
       networkMode: 'offlineFirst',
     },
     mutations: {
-      // Optimistic updates network mode
       networkMode: 'offlineFirst',
     },
   },

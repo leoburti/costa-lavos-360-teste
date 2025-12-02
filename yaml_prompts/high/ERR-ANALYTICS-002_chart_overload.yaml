@@ -1,0 +1,37 @@
+---
+error_id: "ERR-ANALYTICS-002"
+category: "B - High"
+page: "/curva-abc"
+component: "CurvaABC.jsx"
+severity: "high"
+title: "Chart Rendering Performance Degradation"
+description: |
+  Gráficos na Curva ABC e Análise Preditiva tentam renderizar todos os itens retornados (potencialmente milhares), causando travamento do navegador.
+
+root_cause: |
+  Falta de limitação (slice) nos dados passados para a biblioteca Recharts.
+
+impact: |
+  - Travamento da UI (lag extremo).
+  - Browser crash em dispositivos móveis.
+
+affected_files:
+  - src/pages/CurvaABC.jsx
+  - src/pages/AnalisePreditivaVendas.jsx
+
+fix:
+  type: "code_change"
+  priority: "HIGH"
+  files:
+    - path: "src/pages/CurvaABC.jsx"
+      action: "modify"
+      description: "Limitar dados do gráfico para Top 50 items e agrupar restante em 'Outros'."
+    - path: "src/pages/AnalisePreditivaVendas.jsx"
+      action: "modify"
+      description: "Aplicar limitação similar para visualização gráfica."
+
+validation:
+  manual:
+    - "Carregar Curva ABC sem filtros"
+    - "Verificar fluidez da UI"
+---

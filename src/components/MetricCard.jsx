@@ -1,8 +1,8 @@
-
 import React from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from "@/lib/utils";
+import { extractValue } from '@/utils/dataValidator';
 
 const MetricCard = ({ title, value, change, changeType, icon: Icon, subtitle }) => {
   const getTrendInfo = () => {
@@ -18,7 +18,12 @@ const MetricCard = ({ title, value, change, changeType, icon: Icon, subtitle }) 
 
   const trend = getTrendInfo();
   
-  const displayValue = value === null || value === undefined ? 'N/A' : value;
+  // Extract value to ensure no objects are passed to render
+  const rawValue = extractValue(value);
+  const displayValue = rawValue === null || rawValue === undefined ? 'N/A' : rawValue;
+  const safeChange = extractValue(change);
+  const safeSubtitle = extractValue(subtitle);
+  const safeTitle = extractValue(title);
   
   return (
     <motion.div
@@ -28,7 +33,7 @@ const MetricCard = ({ title, value, change, changeType, icon: Icon, subtitle }) 
       className="bg-card p-6 rounded-xl border border-border shadow-sm transition-all duration-300 flex flex-col min-h-[140px]"
     >
       <div className="flex items-start justify-between mb-3">
-         <p className="text-sm font-medium text-muted-foreground">{title}</p>
+         <p className="text-sm font-medium text-muted-foreground">{safeTitle}</p>
          {Icon && 
           <div className="p-2 bg-muted rounded-md text-muted-foreground">
             <Icon size={18} />
@@ -36,17 +41,17 @@ const MetricCard = ({ title, value, change, changeType, icon: Icon, subtitle }) 
          }
       </div>
 
-      <div className="text-2xl font-bold text-foreground mb-1 tracking-tight">{displayValue}</div>
+      <div className="text-2xl font-bold text-foreground mb-1 tracking-tight truncate" title={String(displayValue)}>{displayValue}</div>
       
-      {change && (
+      {safeChange && (
         <div className={cn("flex items-center gap-1 text-xs font-semibold mt-1", trend.color)}>
           {trend.icon}
-          <span>{change}</span>
+          <span>{safeChange}</span>
         </div>
       )}
       
-      {subtitle && (
-         <p className="text-xs text-slate-400 mt-auto pt-2">{subtitle}</p>
+      {safeSubtitle && (
+         <p className="text-xs text-slate-400 mt-auto pt-2">{safeSubtitle}</p>
       )}
     </motion.div>
   );

@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UserPlus, Loader2, Save } from 'lucide-react';
+import { Loader2, Save } from 'lucide-react';
 
-const AddUserDialog = ({ onUserAdded, supervisors, sellers }) => {
-  const [open, setOpen] = useState(false);
+const AddUserDialog = ({ isOpen, onClose, onUserAdded, supervisors = [], sellers = [] }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -21,6 +21,19 @@ const AddUserDialog = ({ onUserAdded, supervisors, sellers }) => {
   const [sellerName, setSellerName] = useState(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setEmail('');
+      setPassword('');
+      setFullName('');
+      setRole('Vendedor');
+      setCanAccessCrm(false);
+      setSupervisorName(null);
+      setSellerName(null);
+    }
+  }, [isOpen]);
 
   const handleAddUser = async () => {
     if (!email || !password || !fullName) {
@@ -53,9 +66,8 @@ const AddUserDialog = ({ onUserAdded, supervisors, sellers }) => {
         toast({ variant: 'destructive', title: 'Erro ao definir permissão', description: `Usuário criado, mas falha ao definir a permissão: ${roleError.message}` });
       } else {
         toast({ title: 'Sucesso!', description: `Usuário ${fullName} criado com a permissão ${role}.` });
-        onUserAdded();
-        setOpen(false);
-        setEmail(''); setPassword(''); setFullName(''); setRole('Vendedor'); setCanAccessCrm(false); setSupervisorName(null); setSellerName(null);
+        if (onUserAdded) onUserAdded();
+        onClose();
       }
     }
     setLoading(false);
@@ -63,14 +75,12 @@ const AddUserDialog = ({ onUserAdded, supervisors, sellers }) => {
   
   const userRoles = ['Nivel 1', 'Nivel 2', 'Nivel 3', 'Supervisor', 'Vendedor', 'Motorista'];
 
+  // Ensure lists are valid arrays to prevent mapping errors
+  const validSupervisors = Array.isArray(supervisors) ? supervisors : [];
+  const validSellers = Array.isArray(sellers) ? sellers : [];
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Adicionar Usuário
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Adicionar Novo Usuário</DialogTitle>
@@ -112,7 +122,7 @@ const AddUserDialog = ({ onUserAdded, supervisors, sellers }) => {
                 <SelectContent>
                   <ScrollArea className="h-[200px]">
                     <SelectItem value='null'>Nenhum</SelectItem>
-                    {supervisors.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+                    {validSupervisors.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
                   </ScrollArea>
                 </SelectContent>
               </Select>
@@ -126,7 +136,7 @@ const AddUserDialog = ({ onUserAdded, supervisors, sellers }) => {
                 <SelectContent>
                   <ScrollArea className="h-[200px]">
                     <SelectItem value='null'>Nenhum</SelectItem>
-                    {sellers.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+                    {validSellers.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
                   </ScrollArea>
                 </SelectContent>
               </Select>

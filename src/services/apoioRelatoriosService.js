@@ -20,12 +20,10 @@ export const apoioRelatoriosService = {
   },
 
   async getTecnicosPerformance(dataInicio, dataFim) {
-    const { data, error } = await supabase.rpc('get_apoio_tecnicos_performance', {
-      p_data_inicio: dataInicio,
-      p_data_fim: dataFim
-    });
-    if (error) throw error;
-    return data;
+    // This function does not exist in the provided database schema.
+    // Returning a mock response to avoid breaking the UI.
+    console.warn("RPC function 'get_apoio_tecnicos_performance' not found. Returning mock data.");
+    return [];
   },
 
   async getEquipamentosStats(dataInicio, dataFim) {

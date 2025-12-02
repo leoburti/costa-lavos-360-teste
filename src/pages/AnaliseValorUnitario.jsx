@@ -1,214 +1,252 @@
-import React, { useState, useMemo, useEffect } from 'react';
+
+import React, { useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { Loader2, DollarSign, TrendingUp, TrendingDown, Info, Maximize2, Minimize2, User, Building2, Store } from 'lucide-react';
+import { 
+  Tag, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  Search,
+  DollarSign,
+  ScatterChart as ScatterIcon
+} from 'lucide-react';
+import { 
+  ScatterChart, 
+  Scatter, 
+  XAxis, 
+  YAxis, 
+  ZAxis, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer,
+  CartesianGrid 
+} from 'recharts';
+
+import AnalyticsTemplate from '@/components/analytics/AnalyticsTemplate';
 import { useFilters } from '@/contexts/FilterContext';
-import AIInsight from '@/components/AIInsight';
-import MetricCard from '@/components/MetricCard';
-import ChartCard from '@/components/ChartCard';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
-import { useAIInsight } from '@/hooks/useAIInsight';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { formatDateForAPI, formatCurrency, formatPercentage } from '@/lib/utils';
 
-const formatCurrency = (value) => {
-  if (value === null || value === undefined || isNaN(value)) return 'N/A';
-  return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+const MotionCard = motion(Card);
 
-const PriceVariationDetails = ({ data }) => {
-  if (!data || data.length === 0) {
-    return <p className="text-center text-muted-foreground p-4">Nenhum dado de variação de preço para exibir.</p>;
-  }
-
-  return (
-    <Accordion type="multiple" className="w-full">
-      {data.map((supervisor, supIndex) => (
-        <AccordionItem value={`supervisor-${supIndex}`} key={supIndex}>
-          <AccordionTrigger className="hover:no-underline p-3 rounded-lg hover:bg-muted transition-colors">
-            <div className="flex justify-between items-center w-full">
-               <div className="flex items-center gap-3">
-                <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="font-semibold text-foreground">{supervisor.name}</span>
-              </div>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="p-2 pl-8 border-l-2 ml-4">
-            <Accordion type="multiple" collapsible>
-              {supervisor.sellers.map((seller, selIndex) => (
-                <AccordionItem value={`seller-${selIndex}`} key={selIndex}>
-                  <AccordionTrigger className="hover:no-underline p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <span className="font-medium text-sm text-foreground">{seller.name}</span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="p-2 pl-8 border-l-2 ml-4">
-                    <Accordion type="multiple" collapsible>
-                      {seller.clients.map((client, cliIndex) => (
-                        <AccordionItem value={`client-${cliIndex}`} key={cliIndex}>
-                          <AccordionTrigger className="hover:no-underline p-2 rounded-lg hover:bg-muted/40 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <Store className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <span className="font-normal text-sm text-foreground">{client.name}</span>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="p-2 pl-6">
-                            <div className="space-y-2">
-                              {client.products.map((product, prodIndex) => (
-                                <div key={prodIndex} className="p-2 bg-background rounded-md border">
-                                  <p className="font-semibold text-xs">{product.product}</p>
-                                  <div className="grid grid-cols-3 gap-2 text-center text-xs mt-1">
-                                    <Badge variant="outline">Min: {formatCurrency(product.minPrice)}</Badge>
-                                    <Badge variant="secondary">Méd: {formatCurrency(product.avgPrice)}</Badge>
-                                    <Badge variant="destructive">Max: {formatCurrency(product.maxPrice)}</Badge>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          </AccordionContent>
-        </AccordionItem>
-      ))}
-    </Accordion>
-  );
-};
-
-const AnaliseValorUnitario = () => {
+export default function AnaliseValorUnitario() {
   const { filters } = useFilters();
-  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [localSearch, setLocalSearch] = useState('');
 
-  // Correct date access and formatting
-  const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
-  const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
-  const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+  const params = useMemo(() => ({
+    p_start_date: formatDateForAPI(filters.dateRange?.[0]),
+    p_end_date: formatDateForAPI(filters.dateRange?.[1]),
+    p_exclude_employees: filters.excludeEmployees,
+    p_supervisors: filters.supervisors?.map(String),
+    p_sellers: filters.sellers?.map(String),
+    p_customer_groups: filters.customerGroups?.map(String),
+    p_regions: filters.regions?.map(String),
+    p_clients: filters.clients?.map(String),
+    p_search_term: filters.searchTerm,
+  }), [filters]);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('[AnaliseValorUnitario] Filters:', filters);
-    console.log('[AnaliseValorUnitario] Dates:', { startDateStr, endDateStr });
-  }, [filters, startDateStr, endDateStr]);
-
-  const params = useMemo(() => {
-    const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
-    return {
-      p_start_date: startDateStr,
-      p_end_date: endDateStr,
-      p_exclude_employees: filters.excludeEmployees,
-      p_supervisors: filters.supervisors,
-      p_sellers: filters.sellers,
-      p_customer_groups: filters.customerGroups,
-      p_regions: filters.regions,
-      p_clients: selectedClients,
-      p_search_term: filters.searchTerm,
-    };
-  }, [filters, startDateStr, endDateStr]);
-
-  const { data: analysisData, loading } = useAnalyticalData(
+  const { data, loading, refetch } = useAnalyticalData(
     'get_price_analysis',
     params,
-    { 
-        enabled: !!startDateStr && !!endDateStr,
-        defaultValue: null
-    }
+    { enabled: !!params.p_start_date }
   );
 
-  const aiContextData = useMemo(() => {
-    if (!analysisData) return null;
-    return {
-      kpis: analysisData.kpis,
-      top_variations: analysisData.priceVariation?.slice(0, 5),
-    };
-  }, [analysisData]);
+  const products = useMemo(() => {
+    if (!data?.priceVariation) return [];
+    let list = data.priceVariation;
+    if (localSearch) {
+        list = list.filter(p => p.product.toLowerCase().includes(localSearch.toLowerCase()));
+    }
+    return list;
+  }, [data, localSearch]);
 
-  const { insight, loading: loadingAI, generateInsights } = useAIInsight('unit_value_analysis', aiContextData);
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-full"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
-  }
-
-  const kpis = analysisData?.kpis || {};
-  const priceVariation = analysisData?.priceVariation || [];
-  const productsToShow = showAllProducts ? priceVariation : priceVariation.slice(0, 10);
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    show: { y: 0, opacity: 1 }
+  };
 
   return (
-    <>
-      <Helmet>
-        <title>Análise de Valor Unitário - Costa Lavos</title>
-        <meta name="description" content="Análise detalhada sobre o valor unitário de venda dos produtos." />
-      </Helmet>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tighter">Análise de Valor Unitário</h1>
-          <p className="text-muted-foreground mt-1">Identifique variações de preços e oportunidades de otimização.</p>
+    <AnalyticsTemplate
+      title="Análise de Valor Unitário"
+      description="Monitoramento de consistência de preços e detecção de anomalias."
+      onRefresh={refetch}
+      loading={loading}
+    >
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
+        
+        {/* KPI Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <MotionCard variants={itemVariants} className="bg-slate-50 border-slate-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-slate-500">Preço Médio Global</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-200 rounded-full"><DollarSign className="h-6 w-6 text-slate-600" /></div>
+                <div>
+                  <div className="text-3xl font-bold text-slate-800">{formatCurrency(data?.kpis?.averageUnitPrice || 0)}</div>
+                  <p className="text-xs text-slate-500">Todos os produtos</p>
+                </div>
+              </div>
+            </CardContent>
+          </MotionCard>
+
+          <MotionCard variants={itemVariants} className="bg-red-50 border-red-100">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-red-600">Maior Variação (+)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-full"><ArrowUpRight className="h-6 w-6 text-red-600" /></div>
+                <div>
+                  <div className="text-3xl font-bold text-red-700">{data?.kpis?.highestVariationPercent?.toFixed(1)}%</div>
+                  <p className="text-xs text-red-600 truncate max-w-[150px]" title={data?.kpis?.productWithHighestVariation}>
+                    {data?.kpis?.productWithHighestVariation || '-'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </MotionCard>
+
+          <MotionCard variants={itemVariants} className="bg-amber-50 border-amber-100">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-amber-600">Maior Desconto (-)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 rounded-full"><ArrowDownRight className="h-6 w-6 text-amber-600" /></div>
+                <div>
+                  <div className="text-3xl font-bold text-amber-700">{formatCurrency(data?.kpis?.highestDiscountValue || 0)}</div>
+                  <p className="text-xs text-amber-600 truncate max-w-[150px]" title={data?.kpis?.clientWithHighestDiscount}>
+                    {data?.kpis?.clientWithHighestDiscount || '-'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </MotionCard>
         </div>
 
-        <AIInsight insight={insight} loading={loadingAI} onRegenerate={generateInsights} />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <MetricCard title="Preço Unitário Médio" value={formatCurrency(kpis.averageUnitPrice)} icon={DollarSign} />
-          <MetricCard title="Maior Variação" value={`${(kpis.highestVariationPercent || 0).toFixed(1)}%`} icon={TrendingUp} subtitle={kpis.productWithHighestVariation || 'N/A'} />
-          <MetricCard title="Maior Desconto (Cliente)" value={formatCurrency(kpis.highestDiscountValue)} icon={TrendingDown} subtitle={kpis.clientWithHighestDiscount || 'N/A'} />
-          <MetricCard title="Produtos Analisados" value={String(kpis.totalProductsAnalyzed || 0)} icon={Info} />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartCard title={showAllProducts ? "Todos os Produtos com Variação de Preço" : "Top 10 Produtos com Maior Variação de Preço"}>
-            <ScrollArea className="h-[400px]">
-              <div className="p-4 space-y-3">
-                {productsToShow.map((item, index) => (
-                  <div key={index} className="p-3 bg-muted/50 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <p className="font-semibold text-sm truncate pr-4">{item.product}</p>
-                      <Badge variant="destructive" className="text-sm">{(item.variationpercent || 0).toFixed(1)}%</Badge>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs mt-2">
-                      <div className="p-1.5 bg-background rounded">
-                        <p className="font-bold">{formatCurrency(item.minprice)}</p>
-                        <p className="text-muted-foreground">Mínimo</p>
-                      </div>
-                      <div className="p-1.5 bg-background rounded">
-                        <p className="font-bold">{formatCurrency(item.avgprice)}</p>
-                        <p className="text-muted-foreground">Médio</p>
-                      </div>
-                      <div className="p-1.5 bg-background rounded">
-                        <p className="font-bold">{formatCurrency(item.maxprice)}</p>
-                        <p className="text-muted-foreground">Máximo</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                 {productsToShow.length === 0 && <p className="text-center text-muted-foreground p-8">Nenhuma variação de preço encontrada.</p>}
-              </div>
-            </ScrollArea>
-            {priceVariation.length > 10 && (
-              <div className="p-4 border-t">
-                <Button onClick={() => setShowAllProducts(!showAllProducts)} variant="outline" className="w-full">
-                  {showAllProducts ? <Minimize2 className="mr-2 h-4 w-4" /> : <Maximize2 className="mr-2 h-4 w-4" />}
-                  {showAllProducts ? "Mostrar Top 10" : `Mostrar Todos (${priceVariation.length})`}
-                </Button>
-              </div>
+        {/* Chart Section */}
+        <MotionCard variants={itemVariants} className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ScatterIcon className="h-5 w-5 text-slate-500" />
+              Dispersão de Preços
+            </CardTitle>
+            <CardDescription>Relação entre Variação de Preço e Volume de Receita</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[450px]">
+            {loading ? <Skeleton className="w-full h-full" /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="category" dataKey="product" name="Produto" tick={false} label={{value: 'Produtos', position: 'insideBottom', offset: -10}} />
+                  <YAxis type="number" dataKey="variationPercent" name="Variação %" unit="%" label={{value: 'Variação %', angle: -90, position: 'insideLeft'}} />
+                  <ZAxis type="number" dataKey="totalRevenue" range={[60, 500]} name="Receita" />
+                  <Tooltip cursor={{ strokeDasharray: '3 3' }} 
+                      content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                              const d = payload[0].payload;
+                              return (
+                                  <div className="bg-white p-3 border border-slate-200 shadow-lg rounded-lg text-sm">
+                                      <p className="font-bold text-slate-800 mb-1">{d.product}</p>
+                                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                        <span className="text-slate-500">Variação:</span>
+                                        <span className="font-semibold text-red-600">{d.variationPercent.toFixed(1)}%</span>
+                                        <span className="text-slate-500">Mínimo:</span>
+                                        <span className="font-mono">{formatCurrency(d.minPrice)}</span>
+                                        <span className="text-slate-500">Máximo:</span>
+                                        <span className="font-mono">{formatCurrency(d.maxPrice)}</span>
+                                        <span className="text-slate-500">Receita:</span>
+                                        <span className="font-mono text-slate-700">{formatCurrency(d.totalRevenue)}</span>
+                                      </div>
+                                  </div>
+                              );
+                          }
+                          return null;
+                      }}
+                  />
+                  <Scatter name="Produtos" data={products.slice(0, 50)} fill="#6366f1" fillOpacity={0.6} stroke="#4f46e5" />
+                </ScatterChart>
+              </ResponsiveContainer>
             )}
-          </ChartCard>
-          <ChartCard title="Variação por Entidade" childClassName="p-2">
-            <ScrollArea className="h-[400px]">
-              <PriceVariationDetails data={analysisData?.priceVariationByEntity} />
-            </ScrollArea>
-          </ChartCard>
-        </div>
-      </motion.div>
-    </>
-  );
-};
+          </CardContent>
+        </MotionCard>
 
-export default AnaliseValorUnitario;
+        {/* Data Table */}
+        <MotionCard variants={itemVariants}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div>
+              <CardTitle>Detalhamento de Preços</CardTitle>
+              <CardDescription>Análise granular por SKU</CardDescription>
+            </div>
+            <div className="relative w-72">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input 
+                  placeholder="Buscar produto..." 
+                  className="pl-9 bg-slate-50 border-slate-200" 
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[500px]">
+              <Table>
+                <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                  <TableRow>
+                    <TableHead className="w-[300px]">Produto</TableHead>
+                    <TableHead className="text-right">Mínimo</TableHead>
+                    <TableHead className="text-right">Médio</TableHead>
+                    <TableHead className="text-right">Máximo</TableHead>
+                    <TableHead className="text-right">Variação</TableHead>
+                    <TableHead className="text-right">Volume</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-8 w-full" /></TableCell></TableRow>
+                    ))
+                  ) : products.slice(0, 100).map((product, idx) => (
+                    <TableRow key={idx} className="hover:bg-slate-50/50">
+                      <TableCell className="font-medium text-slate-700">{product.product}</TableCell>
+                      <TableCell className="text-right font-mono text-xs text-green-600 bg-green-50 rounded px-2 py-1 w-fit inline-block ml-auto">
+                        {formatCurrency(product.minPrice)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm text-slate-600">
+                        {formatCurrency(product.avgPrice)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-red-600 bg-red-50 rounded px-2 py-1 w-fit inline-block ml-auto">
+                        {formatCurrency(product.maxPrice)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={product.variationPercent > 20 ? 'destructive' : 'secondary'} className="font-mono">
+                          {product.variationPercent.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-slate-500 text-sm">
+                        {formatCurrency(product.totalRevenue)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </MotionCard>
+      </motion.div>
+    </AnalyticsTemplate>
+  );
+}

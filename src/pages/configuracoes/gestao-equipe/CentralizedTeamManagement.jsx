@@ -2,40 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Shield, Users, LayoutDashboard, RefreshCw, Download, Network, Activity, Lock } from 'lucide-react';
+import { Shield, Users, LayoutDashboard, RefreshCw, Download, Network, Activity, Lock, Edit } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
-// Absolute imports to prevent path resolution errors
 import UserAccessTable from '@/pages/configuracoes/gestao-acesso/UserAccessTable';
 import AccessDashboard from '@/pages/configuracoes/gestao-acesso/AccessDashboard';
-import PermissionMatrix from '@/pages/configuracoes/gestao-acesso/PermissionMatrix';
 import SyncManager from '@/pages/configuracoes/gestao-acesso/SyncManager';
 import TeamsManager from '@/pages/configuracoes/gestao-acesso/TeamsManager';
 import PersonasTab from '@/pages/configuracoes/gestao-equipe/PersonasTab';
 import SystemDiagnosisPage from '@/pages/configuracoes/SystemDiagnosisPage';
+import UsersPermissionsPage from '@/pages/configuracoes/usuarios/UsersPermissionsPage';
 
 const CentralizedTeamManagement = () => {
   const { toast } = useToast();
   const { userContext, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
   const [personas, setPersonas] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch users with explicit relationship to avoid ambiguity
       const { data: usersData, error: usersError } = await supabase
-        .from('apoio_usuarios')
+        .from('users_unified')
         .select(`
-            *, 
-            persona:apoio_personas(id, nome, permissoes), 
-            equipe:apoio_equipes!fk_usuarios_equipe(id, nome),
-            supervisor:apoio_usuarios!supervisor_id(id, nome)
+            *,
+            persona:apoio_personas(id, nome, permissoes, tipo_uso), 
+            equipe:apoio_equipes!equipe_id(id, nome)
         `)
         .order('nome');
 
@@ -75,10 +73,10 @@ const CentralizedTeamManagement = () => {
       users_summary: users.map(u => ({ 
           id: u.id, 
           email: u.email, 
-          persona: u.persona_id, 
-          level: u.nivel_acesso,
+          role: u.role,
+          persona: u.persona?.nome,
           team: u.equipe?.nome,
-          supervisor: u.supervisor?.nome
+          supervisor_id: u.supervisor_id
       }))
     };
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
@@ -92,15 +90,18 @@ const CentralizedTeamManagement = () => {
     toast({ title: 'Configuração exportada', description: 'O arquivo JSON foi baixado com sucesso.' });
   };
 
-  // Access Control Check - Only Level 1/Admin can access this page
-  if (!authLoading && userContext?.role !== 'Nivel 1' && userContext?.role !== 'Admin') {
+  if (authLoading) {
+    return <div className="p-8 flex justify-center items-center h-full"><LoadingSpinner /></div>;
+  }
+
+  if (!userContext || !['Nivel 1', 'Admin', 'Nivel 5'].includes(userContext.role)) {
       return (
           <div className="p-8 flex justify-center">
               <Alert variant="destructive" className="max-w-2xl">
                   <Lock className="h-4 w-4" />
                   <AlertTitle>Acesso Negado</AlertTitle>
                   <AlertDescription>
-                      Este módulo é restrito a administradores (Nível 5). Por favor, contate o suporte se acredita que isso é um erro.
+                      Este módulo é restrito a administradores. Por favor, contate o suporte se acredita que isso é um erro.
                   </AlertDescription>
               </Alert>
           </div>
@@ -166,11 +167,11 @@ const CentralizedTeamManagement = () => {
         <TabsContent value="teams" className="space-y-4 animate-in fade-in-50 duration-300">
           <TeamsManager />
         </TabsContent>
-
+        
         <TabsContent value="permissions" className="space-y-4 animate-in fade-in-50 duration-300">
-          <PermissionMatrix personas={personas} onRefresh={fetchData} />
+          <UsersPermissionsPage />
         </TabsContent>
-
+        
         <TabsContent value="sync" className="space-y-4 animate-in fade-in-50 duration-300">
           <SyncManager localUsers={users} onSyncComplete={fetchData} />
         </TabsContent>

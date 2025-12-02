@@ -9,9 +9,19 @@ export const usePerfis = () => {
   const fetchPerfis = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('apoio_perfis').select('*, usuarios:apoio_usuarios(count)');
+      const { data, error } = await supabase
+        .from('apoio_perfis')
+        .select('*, usuarios_unified:users_unified(count)')
+        .order('nome');
+
       if (error) throw error;
-      return data;
+      
+      const mappedData = data.map(p => ({
+        ...p,
+        usuarios: p.usuarios_unified
+      }));
+
+      return mappedData;
     } catch (error) {
       toast({ variant: 'destructive', title: 'Erro ao buscar perfis', description: error.message });
       return [];
@@ -67,7 +77,7 @@ export const usePerfis = () => {
   const deletePerfil = useCallback(async (id) => {
     setLoading(true);
     try {
-      const { count, error: countError } = await supabase.from('apoio_usuarios').select('*', { count: 'exact' }).eq('perfil_id', id);
+      const { count, error: countError } = await supabase.from('users_unified').select('*', { count: 'exact' }).eq('perfil_id', id);
       if (countError) throw countError;
       if (count > 0) {
         toast({ variant: 'destructive', title: 'Ação não permitida', description: 'Não é possível excluir um perfil que está em uso por um ou mais usuários.' });

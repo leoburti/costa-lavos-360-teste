@@ -3,15 +3,15 @@ import { supabase } from '@/lib/customSupabaseClient';
 // Limpa a sessão do Supabase do localStorage
 const clearAuthSession = () => {
     console.log('[AuthService] Limpando sessão de autenticação do localStorage.');
-    Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-') && key.includes('-auth-token')) {
-            localStorage.removeItem(key);
-        }
-        // Also clear user context cache
-        if (key === 'costa_lavos_user_context') {
-            localStorage.removeItem(key);
-        }
-    });
+    try {
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('sb-') && key.includes('auth-token')) {
+                localStorage.removeItem(key);
+            }
+        });
+    } catch (e) {
+        console.error("Erro ao limpar localStorage:", e);
+    }
 };
 
 // Função para lidar com erros de autenticação
@@ -28,7 +28,6 @@ export const handleAuthError = (error) => {
 
     if (isCriticalAuthError) {
         clearAuthSession();
-        // Force reload to login page to ensure clean state
         if (window.location.pathname !== '/login') {
             window.location.href = '/login';
         }
@@ -49,13 +48,7 @@ export const signIn = async (email, password) => {
 export const logout = async () => {
     console.log('[AuthService] Realizando logout...');
     try {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-            // Supress session_not_found error as it effectively means we are already logged out
-            if (error.message && !error.message.includes('session_not_found')) {
-                console.error('[AuthService] Erro durante o logout:', error.message);
-            }
-        }
+        await supabase.auth.signOut();
     } catch (e) {
         console.error('[AuthService] Exceção durante logout:', e);
     } finally {

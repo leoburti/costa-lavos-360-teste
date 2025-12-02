@@ -2,7 +2,6 @@ import { supabase } from '@/lib/customSupabaseClient';
 
 export const crmTeamService = {
   async getLeaderboard() {
-    // Use the new RPC for better performance and to avoid relationship issues
     const { data, error } = await supabase.rpc('get_leaderboard', { limit_count: 10 });
     
     if (error) {
@@ -10,8 +9,7 @@ export const crmTeamService = {
       return [];
     }
     
-    // Map to expected format if necessary
-    return data.map(item => ({
+    return (data || []).map(item => ({
       id: item.id,
       name: item.full_name || 'Usuário',
       points: item.total_points,

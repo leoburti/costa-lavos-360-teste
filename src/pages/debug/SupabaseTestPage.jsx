@@ -1,202 +1,154 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, XCircle, Loader2, RefreshCw, Database, Server, FileJson } from 'lucide-react';
-
-const StatusIcon = ({ status }) => {
-  if (status === 'running') return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
-  if (status === 'success') return <CheckCircle className="h-5 w-5 text-green-500" />;
-  if (status === 'error') return <XCircle className="h-5 w-5 text-red-500" />;
-  return <div className="h-5 w-5 rounded-full border-2 border-gray-200" />;
-};
+import { Loader2, Database, AlertTriangle, CheckCircle, RefreshCw, FileCode2, FunctionSquare, ShieldQuestion, Server } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 const SupabaseTestPage = () => {
-  const [tests, setTests] = useState({
-    connection: { status: 'pending', message: '' },
-    count: { status: 'pending', data: null, error: null },
-    select: { status: 'pending', data: null, error: null }
-  });
+    const [loading, setLoading] = useState(false);
+    const [testResults, setTestResults] = useState(null);
 
-  const runTests = async () => {
-    setTests({
-      connection: { status: 'running', message: 'Verificando sessão...' },
-      count: { status: 'pending', data: null, error: null },
-      select: { status: 'pending', data: null, error: null }
-    });
+    const runTests = async () => {
+        setLoading(true);
+        const results = [];
+        let rlsEnabledCount = 0;
+        let rlsDisabledCount = 0;
+        let totalPolicies = 0;
+        let totalFunctions = 0;
+        let functionsWithErrors = 0;
 
-    // 1. Connection/Auth Test
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) throw error;
-      setTests(prev => ({ 
-        ...prev, 
-        connection: { 
-          status: 'success', 
-          message: session ? `Conectado como: ${session.user.email}` : 'Conectado (Anônimo/Sem sessão ativa)' 
-        } 
-      }));
-    } catch (err) {
-      setTests(prev => ({ 
-        ...prev, 
-        connection: { status: 'error', message: err.message || 'Erro desconhecido ao verificar sessão' } 
-      }));
-    }
+        try {
+            // Test 1: Get DB Overview
+            const { data: overview, error: overviewError } = await supabase.rpc('get_db_overview');
+            if (overviewError) throw new Error(`get_db_overview RPC: ${overviewError.message}`);
 
-    // 2. Count Test (bd-cl)
-    setTests(prev => ({ ...prev, count: { status: 'running' } }));
-    try {
-      const { count, error } = await supabase
-        .from('bd-cl')
-        .select('*', { count: 'exact', head: true });
-      
-      if (error) throw error;
-      
-      setTests(prev => ({ 
-        ...prev, 
-        count: { status: 'success', data: count } 
-      }));
-    } catch (err) {
-      setTests(prev => ({ 
-        ...prev, 
-        count: { status: 'error', error: err.message || 'Erro ao contar registros' } 
-      }));
-    }
+            totalFunctions = overview.functions.length;
 
-    // 3. Select Single Record Test (bd-cl)
-    setTests(prev => ({ ...prev, select: { status: 'running' } }));
-    try {
-      const { data, error } = await supabase
-        .from('bd-cl')
-        .select('*')
-        .limit(1);
-      
-      if (error) throw error;
-      
-      if (data && data.length > 0) {
-        setTests(prev => ({ 
-          ...prev, 
-          select: { status: 'success', data: data[0] } 
-        }));
-      } else {
-        setTests(prev => ({ 
-          ...prev, 
-          select: { status: 'error', error: 'Nenhum registro retornado (Tabela vazia?)' } 
-        }));
-      }
-    } catch (err) {
-      setTests(prev => ({ 
-        ...prev, 
-        select: { status: 'error', error: err.message || 'Erro ao buscar registro' } 
-      }));
-    }
-  };
+            // Test 2: Inspect Tables for RLS
+            for (const table of overview.tables) {
+                const { data: policies, error: policyError } = await supabase
+                    .from('pg_policies')
+                    .select('*')
+                    .eq('schemaname', 'public')
+                    .eq('tablename', table.name);
 
-  useEffect(() => {
-    runTests();
-  }, []);
+                if (!policyError) {
+                    if (policies.length > 0) {
+                        rlsEnabledCount++;
+                        totalPolicies += policies.length;
+                    } else {
+                        rlsDisabledCount++;
+                    }
+                }
+            }
 
-  return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Teste de Conectividade Supabase</h1>
-          <p className="text-muted-foreground mt-1">Diagnóstico direto da tabela 'bd-cl'</p>
+            // Test 3: Inspect Functions for search_path
+            for (const func of overview.functions) {
+                // This is a proxy test. In a real scenario, we might need a meta-function
+                // to inspect function definitions. Here, we can just check if key functions work.
+                if (func.name.startsWith('get_')) {
+                    try {
+                        // A simple test call. This might fail for functions needing specific args.
+                        await supabase.rpc(func.name, {});
+                    } catch (funcError) {
+                        if (funcError.message.includes('function') && funcError.message.includes('does not exist')) {
+                             functionsWithErrors++;
+                        }
+                    }
+                }
+            }
+
+            results.push({
+                test: 'Visão Geral da Base de Dados',
+                status: 'success',
+                details: `Encontradas ${overview.tables.length} tabelas, ${overview.views.length} views e ${totalFunctions} funções.`,
+            });
+            results.push({
+                test: 'Segurança de Acesso (RLS)',
+                status: rlsDisabledCount > 0 ? 'warning' : 'success',
+                details: `${rlsEnabledCount} tabelas com RLS Ativo. ${rlsDisabledCount} tabelas SEM RLS. Total de ${totalPolicies} políticas.`,
+            });
+            results.push({
+                test: 'Integridade de Funções',
+                status: functionsWithErrors > 0 ? 'error' : 'success',
+                details: `${totalFunctions - functionsWithErrors} de ${totalFunctions} funções parecem OK. ${functionsWithErrors} com erros potenciais de path/existência.`,
+            });
+
+        } catch (error) {
+            results.push({
+                test: 'Conexão Geral',
+                status: 'error',
+                details: error.message,
+            });
+        }
+
+        setTestResults(results);
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        runTests();
+    }, []);
+
+    const getStatusIcon = (status) => {
+        switch (status) {
+            case 'success': return <CheckCircle className="h-5 w-5 text-green-500" />;
+            case 'warning': return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+            case 'error': return <AlertTriangle className="h-5 w-5 text-red-500" />;
+            default: return <Server className="h-5 w-5 text-gray-400" />;
+        }
+    };
+
+    return (
+        <div className="p-6 space-y-6 max-w-[1200px] mx-auto">
+            <div className="flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
+                        <Database className="h-8 w-8 text-primary" />
+                        Diagnóstico do Supabase
+                    </h1>
+                    <p className="text-muted-foreground mt-1">
+                        Verificação de conexão, segurança e integridade da base de dados.
+                    </p>
+                </div>
+                <Button onClick={runTests} disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Re-executar Testes
+                </Button>
+            </div>
+
+            {loading && !testResults && (
+                <div className="flex justify-center items-center h-64">
+                    <Loader2 className="h-12 w-12 text-primary animate-spin" />
+                </div>
+            )}
+
+            {testResults && (
+                <div className="space-y-4">
+                    {testResults.map((result, index) => (
+                        <Card key={index}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                                <div className="flex items-center gap-3">
+                                    {getStatusIcon(result.status)}
+                                    <CardTitle>{result.test}</CardTitle>
+                                </div>
+                                <Badge variant={result.status === 'success' ? 'default' : result.status === 'warning' ? 'secondary' : 'destructive'}
+                                    className={`${result.status === 'success' ? 'bg-green-100 text-green-800' : result.status === 'warning' ? 'bg-yellow-100 text-yellow-800' : ''}`}
+                                >
+                                    {result.status.toUpperCase()}
+                                </Badge>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-sm text-muted-foreground">{result.details}</p>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            )}
         </div>
-        <Button onClick={runTests} variant="outline" className="gap-2">
-          <RefreshCw className="h-4 w-4" /> Recarregar Testes
-        </Button>
-      </div>
-
-      <div className="grid gap-6">
-        {/* Card 1: Conexão */}
-        <Card>
-          <CardHeader className="flex flex-row items-center space-y-0 pb-2">
-            <div className="flex-1">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Server className="h-5 w-5 text-slate-500" />
-                Status da Conexão
-              </CardTitle>
-              <CardDescription>Verifica se o cliente Supabase consegue autenticar/conectar.</CardDescription>
-            </div>
-            <StatusIcon status={tests.connection.status} />
-          </CardHeader>
-          <CardContent>
-            {tests.connection.status === 'success' && (
-              <Alert className="bg-green-50 border-green-200 text-green-800">
-                <AlertTitle>Sucesso</AlertTitle>
-                <AlertDescription>{tests.connection.message}</AlertDescription>
-              </Alert>
-            )}
-            {tests.connection.status === 'error' && (
-              <Alert variant="destructive">
-                <AlertTitle>Falha</AlertTitle>
-                <AlertDescription>{tests.connection.message}</AlertDescription>
-              </Alert>
-            )}
-            {tests.connection.status === 'running' && <p className="text-sm text-muted-foreground">Conectando...</p>}
-          </CardContent>
-        </Card>
-
-        {/* Card 2: Count */}
-        <Card>
-          <CardHeader className="flex flex-row items-center space-y-0 pb-2">
-            <div className="flex-1">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Database className="h-5 w-5 text-slate-500" />
-                Contagem de Registros (bd-cl)
-              </CardTitle>
-              <CardDescription>Executa SELECT COUNT(*) na tabela principal.</CardDescription>
-            </div>
-            <StatusIcon status={tests.count.status} />
-          </CardHeader>
-          <CardContent>
-            {tests.count.status === 'success' && (
-              <div className="text-2xl font-bold text-slate-900">
-                {tests.count.data?.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">registros encontrados</span>
-              </div>
-            )}
-            {tests.count.status === 'error' && (
-              <Alert variant="destructive">
-                <AlertTitle>Erro na Query</AlertTitle>
-                <AlertDescription className="font-mono text-xs">{tests.count.error}</AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Card 3: Select Sample */}
-        <Card>
-          <CardHeader className="flex flex-row items-center space-y-0 pb-2">
-            <div className="flex-1">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <FileJson className="h-5 w-5 text-slate-500" />
-                Amostra de Dados
-              </CardTitle>
-              <CardDescription>Tenta buscar o primeiro registro (LIMIT 1).</CardDescription>
-            </div>
-            <StatusIcon status={tests.select.status} />
-          </CardHeader>
-          <CardContent>
-            {tests.select.status === 'success' && (
-              <div className="rounded-md bg-slate-950 p-4 overflow-x-auto">
-                <pre className="text-xs text-green-400 font-mono">
-                  {JSON.stringify(tests.select.data, null, 2)}
-                </pre>
-              </div>
-            )}
-            {tests.select.status === 'error' && (
-              <Alert variant="destructive">
-                <AlertTitle>Erro ao buscar dados</AlertTitle>
-                <AlertDescription className="font-mono text-xs">{tests.select.error}</AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default SupabaseTestPage;

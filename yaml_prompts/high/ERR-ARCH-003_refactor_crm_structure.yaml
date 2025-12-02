@@ -1,0 +1,22 @@
+task: "Refactor CRM Module Structure"
+severity: "High"
+context: "The CRM module currently uses a nested directory structure and routing (src/pages/crm/team, src/pages/crm/reports). It needs to be flattened to match the 'Bonificações' pattern (CrmList, CrmDetails, etc.)."
+files_to_create:
+  - "src/pages/crm/CrmClientes.jsx"
+  - "src/pages/crm/CrmContatos.jsx"
+  - "src/pages/crm/CrmOportunidades.jsx"
+  - "src/pages/crm/CrmPipeline.jsx"
+  - "src/pages/crm/CrmAtividades.jsx"
+  - "src/pages/crm/CrmRelatorio.jsx"
+  - "src/pages/crm/CrmConfiguracao.jsx"
+files_to_move:
+  - "src/pages/crm/ClientsPage.jsx -> src/pages/crm/CrmClientes.jsx"
+  - "src/pages/crm/Contacts.jsx -> src/pages/crm/CrmContatos.jsx"
+  - "src/pages/crm/Pipeline.jsx -> src/pages/crm/CrmPipeline.jsx"
+files_to_modify:
+  - "src/App.jsx"
+  - "src/constants/routes.js"
+requirements:
+  - "Rename files to standard Crm*.jsx convention."
+  - "Update App.jsx to use flat routes /crm-* instead of nested /crm/*."
+  - "Ensure all internal links are updated."

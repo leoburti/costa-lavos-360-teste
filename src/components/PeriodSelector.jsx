@@ -1,11 +1,4 @@
 import React, { useState } from 'react';
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,80 +6,90 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { getDateRange } from "@/lib/utils";
 import { useFilters } from "@/contexts/FilterContext";
+import { getDateRange } from "@/lib/utils";
 
 const PeriodSelector = () => {
   const { dateRange, setDateRange } = useFilters();
-  const [isOpen, setIsOpen] = useState(false);
-  const [label, setLabel] = useState("Este Mês");
+  const [customPopoverOpen, setCustomPopoverOpen] = useState(false);
 
-  const handlePreset = (preset, labelText) => {
-    const range = getDateRange(preset);
-    setDateRange(range);
-    setLabel(labelText);
-    setIsOpen(false);
-  };
-
-  const handleCustomSelect = (range) => {
-    setDateRange(range);
-    if (range?.from && range?.to) {
-      setLabel(`${format(range.from, "dd/MM")} - ${format(range.to, "dd/MM")}`);
-    } else if (range?.from) {
-      setLabel(format(range.from, "dd/MM/yyyy"));
+  const handlePresetSelect = (preset) => {
+    const newRange = getDateRange(preset);
+    if (newRange) {
+      setDateRange(newRange);
     }
   };
+  
+  const handleCustomDateSelect = (range) => {
+    setDateRange(range);
+    if (range?.from && range?.to) {
+        setCustomPopoverOpen(false);
+    }
+  }
+
+  const from = dateRange?.from;
+  const to = dateRange?.to;
+
+  let displayLabel = "Selecione o período";
+
+  if (from && to && isValid(from) && isValid(to)) {
+    if (format(from, 'yyyy-MM-dd') === format(to, 'yyyy-MM-dd')) {
+      displayLabel = format(from, "dd 'de' MMM, yyyy", { locale: ptBR });
+    } else {
+      displayLabel = `${format(from, "dd/MM/yy", { locale: ptBR })} - ${format(to, "dd/MM/yy", { locale: ptBR })}`;
+    }
+  } else if (from && isValid(from)) {
+     displayLabel = format(from, "dd 'de' MMM, yyyy", { locale: ptBR });
+  }
 
   return (
     <div className="flex items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-[180px] justify-between bg-white border-gray-200 shadow-sm hover:bg-gray-50">
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4 text-blue-600" />
-              <span className="truncate text-gray-700">{label}</span>
+          <Button variant="outline" className="w-[240px] justify-between font-normal">
+            <div className="flex items-center">
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              <span className="truncate">{displayLabel}</span>
             </div>
             <ChevronDown className="h-4 w-4 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-[200px]">
-          <DropdownMenuItem onClick={() => handlePreset('today', 'Hoje')}>
-            Hoje
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handlePreset('this_week', 'Esta Semana')}>
-            Esta Semana
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handlePreset('this_month', 'Este Mês')}>
-            Este Mês
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handlePreset('last_month', 'Mês Anterior')}>
-            Mês Anterior
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handlePreset('this_year', 'Este Ano')}>
-            Este Ano
-          </DropdownMenuItem>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => handlePresetSelect('today')}>Hoje</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handlePresetSelect('this_week')}>Esta semana</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handlePresetSelect('this_month')}>Este mês</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handlePresetSelect('last_30_days')}>Últimos 30 dias</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handlePresetSelect('last_month')}>Mês passado</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handlePresetSelect('this_year')}>Este ano</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <Popover open={isOpen} onOpenChange={setIsOpen}>
-            <PopoverTrigger asChild>
-              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                Personalizado...
-              </DropdownMenuItem>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end" side="left">
-              <Calendar
-                initialFocus
-                mode="range"
-                defaultMonth={dateRange?.from}
-                selected={dateRange}
-                onSelect={handleCustomSelect}
-                numberOfMonths={2}
-                locale={ptBR}
-              />
-            </PopoverContent>
-          </Popover>
+            <Popover open={customPopoverOpen} onOpenChange={setCustomPopoverOpen}>
+                <PopoverTrigger asChild>
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        Personalizado...
+                    </DropdownMenuItem>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={handleCustomDateSelect}
+                    numberOfMonths={2}
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+            </Popover>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

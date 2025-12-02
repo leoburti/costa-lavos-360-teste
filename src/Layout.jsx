@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Home, Settings, Package, Percent, FileText } from 'lucide-react';
-import { cn } from './lib/utils';
 import {
   Tooltip,
   TooltipContent,

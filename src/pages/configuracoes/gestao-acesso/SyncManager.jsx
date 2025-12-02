@@ -7,9 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { RefreshCw, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
+import { useUsuarios } from '@/hooks/useUsuarios';
 
 const SyncManager = ({ localUsers, onSyncComplete }) => {
   const { toast } = useToast();
+  const { createUsuario } = useUsuarios();
   const [loading, setLoading] = useState(false);
   const [authUsers, setAuthUsers] = useState([]);
   const [discrepancies, setDiscrepancies] = useState([]);
@@ -17,10 +19,11 @@ const SyncManager = ({ localUsers, onSyncComplete }) => {
   const fetchAuthUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_all_users_with_roles');
+      const { data: { users }, error } = await supabase.auth.admin.listUsers();
       if (error) throw error;
-      setAuthUsers(data || []);
-      analyzeDiscrepancies(data || [], localUsers);
+      const activeUsers = users.filter(u => u.email.endsWith('@costalavos.com.br'));
+      setAuthUsers(activeUsers || []);
+      analyzeDiscrepancies(activeUsers || [], localUsers);
     } catch (error) {
       console.error("Error fetching auth users:", error);
       toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao buscar usuários de autenticação.' });
@@ -34,26 +37,27 @@ const SyncManager = ({ localUsers, onSyncComplete }) => {
     const localMap = new Map(localList.map(u => [u.email.toLowerCase(), u]));
     const authMap = new Map(authList.map(u => [u.email.toLowerCase(), u]));
 
-    // Check Auth users missing in Local
+    // Check Auth users missing in Local unified profile
     authList.forEach(au => {
       if (!localMap.has(au.email.toLowerCase())) {
         issues.push({
           type: 'missing_local',
           email: au.email,
-          name: au.full_name,
-          details: 'Usuário existe no Auth mas não no perfil Apoio.'
+          name: au.user_metadata?.full_name,
+          auth_id: au.id,
+          details: 'Usuário existe no Auth mas não no perfil unificado.'
         });
       }
     });
 
-    // Check Local users missing in Auth
+    // Check Local unified profiles missing in Auth
     localList.forEach(lu => {
       if (!authMap.has(lu.email.toLowerCase())) {
         issues.push({
           type: 'missing_auth',
           email: lu.email,
           name: lu.nome,
-          details: 'Perfil Apoio existe mas sem conta de login.'
+          details: 'Perfil unificado existe mas sem conta de login ativa.'
         });
       }
     });
@@ -72,18 +76,19 @@ const SyncManager = ({ localUsers, onSyncComplete }) => {
     setLoading(true);
     try {
       if (issue.type === 'missing_local') {
-        // Create local profile
-        const { error } = await supabase.from('apoio_usuarios').insert({
+        const result = await createUsuario({
+          id: issue.auth_id,
           email: issue.email,
           nome: issue.name || issue.email.split('@')[0],
           status: 'ativo',
-          nivel_acesso: 1
+          role: 'Vendedor' // Default role
         });
-        if (error) throw error;
-        toast({ title: 'Sincronizado', description: `Perfil criado para ${issue.email}` });
+        if (result) {
+            toast({ title: 'Sincronizado', description: `Perfil criado para ${issue.email}` });
+        } else {
+            throw new Error("Falha ao criar usuário no hook useUsuarios");
+        }
       }
-      // Refresh data
-      await fetchAuthUsers();
       onSyncComplete();
     } catch (error) {
       toast({ variant: 'destructive', title: 'Erro na sincronização', description: error.message });
@@ -100,7 +105,7 @@ const SyncManager = ({ localUsers, onSyncComplete }) => {
           <CardContent><div className="text-2xl font-bold">{authUsers.length}</div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Perfis Apoio</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Perfis Unificados</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">{localUsers.length}</div></CardContent>
         </Card>
         <Card>
@@ -131,7 +136,7 @@ const SyncManager = ({ localUsers, onSyncComplete }) => {
               <CheckCircle2 className="h-4 w-4 text-green-600" />
               <AlertTitle className="text-green-800">Tudo Sincronizado</AlertTitle>
               <AlertDescription className="text-green-700">
-                Todos os usuários de autenticação possuem perfis correspondentes no sistema.
+                Todos os usuários de autenticação possuem perfis unificados correspondentes.
               </AlertDescription>
             </Alert>
           ) : (
@@ -163,7 +168,7 @@ const SyncManager = ({ localUsers, onSyncComplete }) => {
                           </Button>
                         )}
                         {issue.type === 'missing_auth' && (
-                          <Badge variant="outline">Requer Convite</Badge>
+                          <Badge variant="outline">Requer Convite Manual</Badge>
                         )}
                       </TableCell>
                     </TableRow>

@@ -1,25 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useFilters } from '@/contexts/FilterContext';
 import { useClientEquipments } from '@/hooks/useClientEquipments';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import ClientSearch from '@/components/ClientSearch'; // Updated import
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { HardHat, ServerCrash, PackageSearch } from 'lucide-react';
+import { HardHat, ServerCrash, PackageSearch, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO } from 'date-fns';
+import PageSkeleton from '@/components/PageSkeleton';
+import { EmptyState } from '@/components/common';
 
 const EquipmentsTable = ({ data, loading, error }) => {
-  if (loading) {
-    return (
-      <div className="space-y-2 mt-4">
-        {[...Array(5)].map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
-  }
+  if (loading) return null; 
 
   if (error) {
     return (
@@ -36,7 +28,7 @@ const EquipmentsTable = ({ data, loading, error }) => {
       <div className="flex flex-col items-center justify-center text-center py-10 px-4 bg-muted/50 rounded-lg">
         <PackageSearch className="h-12 w-12 text-muted-foreground mb-4" />
         <p className="text-lg font-semibold text-foreground">Nenhum equipamento encontrado</p>
-        <p className="text-sm text-muted-foreground">Este cliente não possui equipamentos registrados.</p>
+        <p className="text-sm text-muted-foreground">Este cliente não possui equipamentos registrados ou nenhum cliente foi selecionado.</p>
       </div>
     );
   }
@@ -54,8 +46,8 @@ const EquipmentsTable = ({ data, loading, error }) => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {data.map((equip) => (
-          <TableRow key={equip.id}>
+        {data.map((equip, idx) => (
+          <TableRow key={equip.id || idx}>
             <TableCell>{equip.nome}</TableCell>
             <TableCell>{equip.modelo}</TableCell>
             <TableCell>{equip.serie}</TableCell>
@@ -81,62 +73,60 @@ const EquipmentsTable = ({ data, loading, error }) => {
 
 const EquipamentosEmCampo = () => {
   const { filters } = useFilters();
-  const [selectedClient, setSelectedClient] = useState(null);
-
-  const clientParams = useMemo(() => ({
-    ...filters,
-    p_cliente_id: selectedClient ? `${selectedClient.cliente_id}-${selectedClient.loja}` : null,
-  }), [filters, selectedClient]);
   
-  const { data, loading, error } = useClientEquipments(clientParams.p_cliente_id);
+  // Only use the FIRST client if multiple are selected, as the RPC/Component is designed for single client view.
+  // This is a limitation of the current RPC structure which we preserve.
+  const selectedClientId = filters.clients && filters.clients.length > 0 ? filters.clients[0] : null;
+
+  const { data, loading, error } = useClientEquipments(selectedClientId);
+
+  if (loading) return <PageSkeleton />;
 
   return (
-    <>
+    <div className="space-y-6 p-4 sm:p-6 lg:p-8 animate-in fade-in duration-500">
       <Helmet>
         <title>Equipamentos em Campo - Costa Lavos</title>
       </Helmet>
-      <div className="space-y-6 p-4 md:p-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-            <div className="mb-4 md:mb-0">
-                <h1 className="text-3xl font-bold tracking-tight">Equipamentos em Campo</h1>
-                <p className="text-muted-foreground">Consulte os equipamentos instalados por cliente.</p>
-            </div>
-        </div>
-
-        <Card>
-            <CardHeader>
-              <CardTitle>Filtro por Cliente</CardTitle>
-              <CardDescription>Busque e selecione um cliente para visualizar a lista de equipamentos vinculados a ele.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="max-w-md">
-                <ClientSearch 
-                  selectedValue={selectedClient}
-                  onSelect={setSelectedClient} 
-                  placeholder="Selecione um cliente..."
-                />
-              </div>
-            </CardContent>
-        </Card>
-        
-        {selectedClient && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <HardHat className="mr-2 h-5 w-5" />
-                Equipamentos de: <span className="ml-2 font-semibold text-primary">{selectedClient.nome_fantasia || selectedClient.razao_social}</span>
-              </CardTitle>
-              <CardDescription>
-                Lista de todos os equipamentos (ERP e locais) associados ao cliente selecionado.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <EquipmentsTable data={data} loading={loading} error={error} />
-            </CardContent>
-          </Card>
-        )}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+          <div>
+              <h1 className="text-3xl font-bold tracking-tight">Equipamentos em Campo</h1>
+              <p className="text-muted-foreground">Consulte os equipamentos instalados por cliente.</p>
+          </div>
       </div>
-    </>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <HardHat className="h-5 w-5" />
+            {selectedClientId ? (
+               <>Equipamentos do Cliente: <span className="text-primary">{selectedClientId}</span></>
+            ) : (
+               "Selecione um Cliente"
+            )}
+          </CardTitle>
+          <CardDescription>
+            {selectedClientId 
+              ? "Lista de equipamentos (ERP e locais) vinculados." 
+              : "Utilize o filtro global no cabeçalho para selecionar um cliente e visualizar seus equipamentos."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+            {!selectedClientId ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="bg-blue-50 p-4 rounded-full mb-4">
+                        <Users className="h-8 w-8 text-blue-500" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-1">Nenhum Cliente Selecionado</h3>
+                    <p className="text-slate-500 max-w-md">
+                        Para visualizar os equipamentos em campo, por favor selecione um cliente específico usando o filtro global (ícone de filtros no topo à direita).
+                    </p>
+                </div>
+            ) : (
+                <EquipmentsTable data={data} loading={loading} error={error} />
+            )}
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

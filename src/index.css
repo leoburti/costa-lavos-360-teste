@@ -4,91 +4,65 @@
  
 @layer base {
   :root {
-    /* Base Colors - Warm Palette */
-    --background: 40 20% 98%; /* #FAF9F6 Warm White */
-    --foreground: 20 10% 15%; /* #2C2420 Dark Warm Gray */
-
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+ 
     --card: 0 0% 100%;
-    --card-foreground: 20 10% 15%;
+    --card-foreground: 222.2 84% 4.9%;
  
     --popover: 0 0% 100%;
-    --popover-foreground: 20 10% 15%;
+    --popover-foreground: 222.2 84% 4.9%;
  
-    /* Costa Lavos Brand Colors */
-    /* Primary: #6B2C2C (Reddish Brown) */
-    --primary: 0 42% 30%; 
-    /* Primary Foreground: White */
-    --primary-foreground: 0 0% 100%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
  
-    /* Secondary: #F5E6D3 (Warm Beige) */
-    --secondary: 34 57% 89%; 
-    /* Secondary Foreground: Primary Color */
-    --secondary-foreground: 0 42% 30%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
  
-    --muted: 34 20% 96%;
-    --muted-foreground: 20 5% 45%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
  
-    /* Accent: #D4A373 (Muted Orange/Gold) */
-    --accent: 30 53% 64%; 
-    --accent-foreground: 0 0% 100%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
  
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 100%;
-
-    /* Status Colors */
-    --info: 217 91% 60%; /* Blue-500 */
-    --info-foreground: 0 0% 100%;
-
-    --success: 142 71% 45%; /* Green-500 */
-    --success-foreground: 0 0% 100%;
-
-    --warning: 38 92% 50%; /* Amber-500 */
-    --warning-foreground: 0 0% 100%;
-
-    --border: 34 20% 90%;
-    --input: 34 20% 90%;
-    --ring: 0 42% 30%;
+    --destructive-foreground: 210 40% 98%;
+ 
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
  
     --radius: 0.5rem;
   }
  
   .dark {
-    --background: 20 10% 10%;
-    --foreground: 40 20% 98%;
-
-    --card: 20 10% 12%;
-    --card-foreground: 40 20% 98%;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
  
-    --popover: 20 10% 12%;
-    --popover-foreground: 40 20% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
  
-    --primary: 0 42% 40%; /* Lighter brown for dark mode */
-    --primary-foreground: 0 0% 100%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
  
-    --secondary: 34 30% 20%; 
-    --secondary-foreground: 40 20% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
  
-    --muted: 20 10% 20%;
-    --muted-foreground: 30 5% 60%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
  
-    --accent: 30 53% 50%;
-    --accent-foreground: 0 0% 100%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+ 
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
  
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --info: 217 91% 60%;
-    --info-foreground: 0 0% 100%;
-
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --destructive-foreground: 210 40% 98%;
  
-    --border: 20 10% 20%;
-    --input: 20 10% 20%;
-    --ring: 0 42% 40%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
   }
 }
  
@@ -98,72 +72,33 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-
-  /* Scrollbar Webkit (Chrome, Safari, Edge) */
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent; /* Makes the track transparent */
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: hsl(var(--secondary)); /* Cor do side menu (secondary) - Beige */
-    border-radius: 5px;
-    border: 2px solid transparent; /* Prevents border from making thumb thinner */
-    background-clip: padding-box; /* Ensures background color respects padding box */
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--accent)); /* Accent color for hover */
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-
-  /* Firefox */
-  * {
-    scrollbar-color: hsl(var(--secondary)) transparent; /* thumb track */
-    scrollbar-width: thin;
   }
 }
 
-@layer components {
-  .prose {
-    @apply max-w-none;
-  }
+/* 
+  Acessibilidade: Classe para ocultar elementos visualmente 
+  mas mantê-los disponíveis para leitores de tela (Screen Readers)
+  Conforme WCAG 2.1
+*/
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 
-  .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
-      @apply text-card-foreground;
-  }
-
-  .prose a {
-      @apply text-primary;
-  }
-
-  .prose blockquote {
-      @apply border-l-primary;
-  }
-
-  /* Typography Hierarchy Utilities */
-  .page-title {
-    @apply text-3xl font-bold tracking-tight text-foreground;
-  }
-  
-  .page-subtitle {
-    @apply text-muted-foreground mt-1;
-  }
-
-  .section-title {
-    @apply text-xl font-semibold tracking-tight mb-4 text-foreground;
-  }
-
-  /* Table Utilities */
-  .table-sticky-first-col th:first-child,
-  .table-sticky-first-col td:first-child {
-    @apply sticky left-0 z-10 bg-background border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)];
-  }
+.sr-only-focusable:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
 }

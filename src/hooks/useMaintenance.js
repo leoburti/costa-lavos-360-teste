@@ -1,13 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 
+/**
+ * Hook para gerenciar estado de manutenção.
+ * Prioriza dados do banco de dados (via RPC), mas aceita fallback via variáveis de ambiente.
+ */
 export const useMaintenance = () => {
+  const envMaintenance = import.meta.env.VITE_MAINTENANCE_MODE === 'true';
+  const envMessage = import.meta.env.VITE_MAINTENANCE_MESSAGE;
+  const envReturnDate = import.meta.env.VITE_MAINTENANCE_RETURN_DATE;
+
   const [maintenanceStatus, setMaintenanceStatus] = useState({
-    isActive: false,
-    message: '',
-    endTime: null,
+    isActive: envMaintenance,
+    message: envMessage || '',
+    endTime: envReturnDate || null,
     startTime: null
   });
+  
   const [loading, setLoading] = useState(true);
   const isLoadedOnce = useRef(false);
 
@@ -17,25 +26,33 @@ export const useMaintenance = () => {
     }
     try {
       const { data, error } = await supabase.rpc('get_maintenance_status');
+      
       if (error) throw error;
       
       if (data) {
         setMaintenanceStatus({
-          isActive: data.is_active,
-          message: data.message,
-          endTime: data.maintenance_end,
+          isActive: data.is_active, 
+          message: data.message || envMessage,
+          endTime: data.maintenance_end || envReturnDate,
           startTime: data.maintenance_start
         });
       }
     } catch (err) {
-      console.error('Error checking maintenance status:', err);
+      console.warn('Warning: Could not fetch maintenance status from DB, using ENV fallback.', err.message);
+      // Fallback silencioso para ENV
+      setMaintenanceStatus({ 
+        isActive: envMaintenance, 
+        message: envMessage || 'Sistema em manutenção (Modo de Segurança)', 
+        endTime: envReturnDate, 
+        startTime: null 
+      });
     } finally {
       if (!isLoadedOnce.current) {
         setLoading(false);
         isLoadedOnce.current = true;
       }
     }
-  }, []);
+  }, [envMaintenance, envMessage, envReturnDate]);
 
   useEffect(() => {
     fetchStatus();
@@ -61,26 +78,9 @@ export const useMaintenance = () => {
     };
   }, [fetchStatus]);
 
-  const toggleMaintenance = async (active, endTime = null, message = null) => {
-    try {
-      const { error } = await supabase.rpc('set_maintenance_mode', {
-        p_active: active,
-        p_end_time: endTime,
-        p_message: message
-      });
-      
-      if (error) throw error;
-      return { success: true };
-    } catch (error) {
-      console.error('Error toggling maintenance mode:', error);
-      return { success: false, error };
-    }
-  };
-
   return {
     maintenanceStatus,
     loading,
-    toggleMaintenance,
     refreshStatus: fetchStatus
   };
 };

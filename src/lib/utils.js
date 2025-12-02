@@ -1,5 +1,5 @@
-import { clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 import { 
   startOfDay, 
   endOfDay, 
@@ -12,17 +12,18 @@ import {
   subDays, 
   subMonths, 
   subYears,
-  format
-} from "date-fns"
-import { ptBR } from "date-fns/locale"
+  format as formatFn,
+  isValid
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export function cn(...inputs) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 export const formatCurrency = (value) => {
   const amount = Number(value);
-  if (isNaN(amount) || amount === null) return 'R$ 0,00';
+  if (isNaN(amount)) return 'R$ 0,00';
   
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -34,18 +35,15 @@ export const formatCurrency = (value) => {
 
 export const formatNumber = (value) => {
   const num = Number(value);
-  if (isNaN(num) || num === null) return '0';
+  if (isNaN(num)) return '0';
   return new Intl.NumberFormat('pt-BR').format(num);
 };
 
 export const formatLargeNumberCompact = (num) => {
-  if (num === undefined || num === null) return 'R$ 0';
   const amount = Number(num);
-  if (isNaN(amount)) return 'R$ 0';
+  if (isNaN(amount)) return '0';
 
   return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
     notation: 'compact',
     compactDisplay: 'short',
     maximumFractionDigits: 1,
@@ -53,8 +51,8 @@ export const formatLargeNumberCompact = (num) => {
 };
 
 export const formatPercentage = (value) => {
-  const num = parseFloat(value);
-  if (isNaN(num) || num === null) return '0,00%';
+  const num = Number(value);
+  if (isNaN(num)) return '0,00%';
   
   return new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: 2,
@@ -64,36 +62,32 @@ export const formatPercentage = (value) => {
 
 export const formatDate = (date, formatString = 'dd/MM/yyyy') => {
   if (!date) return '-';
+  
   try {
-    return format(new Date(date), formatString, { locale: ptBR });
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    if (!isValid(dateObj)) return '-';
+    return formatFn(dateObj, formatString, { locale: ptBR });
   } catch (error) {
-    console.error('Error formatting date:', error);
+    console.error('Error formatting date:', date, error);
     return '-';
   }
 };
 
-/**
- * Creates a comparator function for sorting arrays of objects.
- * Handles null/undefined values by pushing them to the end.
- */
-export const sortByProperty = (property, direction = 'ascending') => {
-  return (a, b) => {
-    const valueA = a[property];
-    const valueB = b[property];
+export const formatDateForAPI = (date) => {
+  if (!date) return null;
+  
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date;
+  }
 
-    // Handle nulls/undefined: always push to bottom regardless of direction
-    if (valueA === valueB) return 0;
-    if (valueA === null || valueA === undefined) return 1;
-    if (valueB === null || valueB === undefined) return -1;
-
-    if (valueA < valueB) {
-      return direction === 'ascending' ? -1 : 1;
-    }
-    if (valueA > valueB) {
-      return direction === 'ascending' ? 1 : -1;
-    }
-    return 0;
-  };
+  try {
+    const d = date instanceof Date ? date : new Date(date);
+    if (!isValid(d)) return null;
+    return formatFn(d, 'yyyy-MM-dd');
+  } catch (error) {
+    console.error('Error formatting date for API:', date, error);
+    return null;
+  }
 };
 
 export const getDateRange = (preset) => {
@@ -101,63 +95,18 @@ export const getDateRange = (preset) => {
   
   switch (preset) {
     case 'today':
-      return {
-        from: startOfDay(today),
-        to: endOfDay(today)
-      };
+      return { from: startOfDay(today), to: endOfDay(today) };
     case 'yesterday':
       const yesterday = subDays(today, 1);
-      return {
-        from: startOfDay(yesterday),
-        to: endOfDay(yesterday)
-      };
+      return { from: startOfDay(yesterday), to: endOfDay(yesterday) };
     case 'this_week':
-      return {
-        from: startOfWeek(today, { weekStartsOn: 0 }),
-        to: endOfWeek(today, { weekStartsOn: 0 })
-      };
-    case 'last_week':
-      const lastWeek = subDays(today, 7);
-      return {
-        from: startOfWeek(lastWeek, { weekStartsOn: 0 }),
-        to: endOfWeek(lastWeek, { weekStartsOn: 0 })
-      };
+      return { from: startOfWeek(today, { weekStartsOn: 0 }), to: endOfWeek(today, { weekStartsOn: 0 }) };
     case 'this_month':
-      return {
-        from: startOfMonth(today),
-        to: endOfMonth(today)
-      };
+      return { from: startOfMonth(today), to: endOfMonth(today) };
     case 'last_month':
       const lastMonth = subMonths(today, 1);
-      return {
-        from: startOfMonth(lastMonth),
-        to: endOfMonth(lastMonth)
-      };
-    case 'this_year':
-      return {
-        from: startOfYear(today),
-        to: endOfYear(today)
-      };
-    case 'last_year':
-      const lastYear = subYears(today, 1);
-      return {
-        from: startOfYear(lastYear),
-        to: endOfYear(lastYear)
-      };
-    case 'last_30_days':
-      return {
-        from: subDays(today, 30),
-        to: endOfDay(today)
-      };
-    case 'last_90_days':
-      return {
-        from: subDays(today, 90),
-        to: endOfDay(today)
-      };
+      return { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) };
     default:
-      return {
-        from: startOfMonth(today),
-        to: endOfMonth(today)
-      };
+      return { from: startOfMonth(today), to: endOfMonth(today) };
   }
 };

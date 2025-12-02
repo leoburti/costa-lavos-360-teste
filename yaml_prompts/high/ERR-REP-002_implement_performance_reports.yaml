@@ -1,0 +1,14 @@
+task: "Implement Performance Reports Group"
+severity: "High"
+context: "The Performance Reports group (7 pages) is missing. These reports analyze efficiency of sellers, supervisors, and regions."
+files_to_create:
+  - "src/pages/relatorios/desempenho/RelatorioDesempenhoVendedor.jsx"
+  - "src/pages/relatorios/desempenho/RelatorioDesempenhoSupervisor.jsx"
+  - "src/pages/relatorios/desempenho/RelatorioDesempenhoRegiao.jsx"
+  - "src/pages/relatorios/desempenho/RelatorioDesempenhoMeta.jsx"
+  - "src/pages/relatorios/desempenho/RelatorioDesempenhoKpi.jsx"
+  - "src/pages/relatorios/desempenho/RelatorioDesempenhoRanking.jsx"
+  - "src/pages/relatorios/desempenho/RelatorioDesempenhoEvolucao.jsx"
+requirements:
+  - "Focus on visual charts (Bar, Line, Radar) for performance comparison."
+  - "Implement ranking logic."

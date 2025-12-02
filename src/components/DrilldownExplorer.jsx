@@ -1,388 +1,504 @@
-import React, { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { Loader2, ChevronRight, MapPin, Building2, User, Users, Store, Calendar, ShoppingCart, Package, CreditCard, TrendingUp, TrendingDown, Minus, Home } from 'lucide-react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useToast } from '@/components/ui/use-toast';
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { cn } from '@/lib/utils';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
+  Treemap 
+} from 'recharts';
+import { 
+  ChevronRight, ArrowLeft, TrendingUp, TrendingDown, 
+  LayoutGrid, List, Maximize2, Minimize2, ChevronLeft, Eye, EyeOff, BarChart2
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import { useFilters } from '@/contexts/FilterContext';
+import { formatCurrency, formatNumber, formatPercentage, formatDateForAPI } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const formatCurrency = (value) => {
-  if (typeof value !== 'number') return 'R$ 0,00';
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+// Mapeamento de níveis para breadcrumbs e títulos
+const HIERARCHY_LABELS = {
+  supervisor: ['Supervisor', 'Vendedor', 'Cliente', 'Produto'],
+  region: ['Região', 'Supervisor', 'Vendedor', 'Cliente', 'Produto'],
+  customerGroup: ['Grupo', 'Cliente', 'Produto'],
+  seller: ['Vendedor', 'Cliente', 'Produto'],
+  product: ['Produto', 'Cliente', 'Vendedor']
 };
 
-const iconMapping = {
-  region: MapPin,
-  supervisor: Building2,
-  seller: User,
-  customerGroup: Users,
-  client: Store,
-  date: Calendar,
-  order: ShoppingCart,
-  product: Package,
-};
+// Cores para gráficos
+const CHART_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#0ea5e9'];
 
-const analysisConfig = {
-  region: {
-    dimensions: ['region', 'supervisor', 'seller', 'customerGroup', 'client', 'date', 'order', 'product'],
-    dimensionLabels: ["Regiões", "Supervisores", "Vendedores", "Grupos de Clientes", "Clientes", "Datas", "Pedidos", "Produtos"],
-  },
-  customerGroup: {
-    dimensions: ['customerGroup', 'supervisor', 'seller', 'region', 'client', 'date', 'order', 'product'],
-    dimensionLabels: ["Grupos de Clientes", "Supervisores", "Vendedores", "Regiões", "Clientes", "Datas", "Pedidos", "Produtos"],
-  },
-  seller: {
-    dimensions: ['region', 'customerGroup', 'client', 'date', 'order', 'product'],
-    dimensionLabels: ["Regiões", "Grupos de Clientes", "Clientes", "Datas", "Pedidos", "Produtos"],
-  },
-  supervisor: {
-    dimensions: ['seller', 'region', 'customerGroup', 'client', 'date', 'order', 'product'],
-    dimensionLabels: ["Vendedores", "Regiões", "Grupos de Clientes", "Clientes", "Datas", "Pedidos", "Produtos"],
+const CustomTooltip = React.memo(({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white/95 backdrop-blur-sm p-3 border border-slate-200 shadow-xl rounded-lg text-sm z-50">
+        <p className="font-bold text-slate-800 mb-1">{data.name || 'Sem Nome'}</p>
+        <div className="space-y-1">
+          <div className="flex justify-between gap-4 text-xs">
+            <span className="text-slate-500">Vendas:</span>
+            <span className="font-mono font-medium text-slate-900">{formatCurrency(data.value)}</span>
+          </div>
+          {data.growth !== undefined && (
+             <div className="flex justify-between gap-4 text-xs">
+              <span className="text-slate-500">Crescimento:</span>
+              <span className={cn("font-mono font-medium", data.growth >= 0 ? "text-green-600" : "text-red-600")}>
+                {data.growth > 0 ? '+' : ''}{formatPercentage(data.growth)}
+              </span>
+            </div>
+          )}
+          {data.margin !== undefined && (
+             <div className="flex justify-between gap-4 text-xs">
+              <span className="text-slate-500">Margem Est.:</span>
+              <span className="font-mono font-medium text-emerald-600">{formatCurrency(data.margin)}</span>
+            </div>
+          )}
+          <div className="flex justify-between gap-4 text-xs">
+            <span className="text-slate-500">Partic.:</span>
+            <span className="font-mono font-medium text-slate-900">{data.percentage ? formatPercentage(data.percentage) : '-'}</span>
+          </div>
+          {data.quantity !== undefined && (
+            <div className="flex justify-between gap-4 text-xs">
+              <span className="text-slate-500">Qtd:</span>
+              <span className="font-mono font-medium text-slate-900">{formatNumber(data.quantity)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
-};
+  return null;
+});
 
-const PriceDifferenceIndicator = ({ unitPrice, avgPrice }) => {
-  if (!unitPrice || !avgPrice || avgPrice === 0) return <Minus className="h-3 w-3 text-slate-400" />;
-  const difference = ((unitPrice - avgPrice) / avgPrice) * 100;
-  if (Math.abs(difference) < 1) return <Minus className="h-3 w-3 text-slate-400" />;
-  if (difference > 0) return <TrendingUp className="h-3 w-3 text-emerald-500" />;
-  return <TrendingDown className="h-3 w-3 text-red-500" />;
-};
+const CustomizedTreemapContent = React.memo((props) => {
+  const { x, y, width, height, name, value, index, growth } = props;
+  if (width < 60 || height < 40) return null;
+  
+  // Ensure name is a string to prevent .length crash
+  const displayName = typeof name === 'string' ? name : 'Sem Nome';
+  
+  // Lógica de cor baseada no crescimento se disponível
+  let fillColor = CHART_COLORS[index % CHART_COLORS.length];
+  if (growth !== undefined) {
+      // Simple Green/Red logic for growth visualization
+      fillColor = growth >= 0 ? '#22c55e' : '#ef4444'; 
+  }
 
-const ProductDetails = ({ products, isLoading }) => (
-  <div className="p-2">
-    <h4 className="font-semibold text-xs uppercase tracking-wider text-slate-500 mb-3 px-3 pt-3 flex items-center gap-2">
-      <Package className="h-4 w-4" />
-      Produtos do Pedido
-    </h4>
-    {isLoading ? (
-      <div className="flex items-center justify-center flex-1">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-      </div>
-    ) : products && products.length > 0 ? (
-      <div className="space-y-2 px-2 pb-2">
-        {products.map((child, index) => (
-          <div key={child.key || `prod-${index}`} className="p-3 text-sm bg-white rounded-lg border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="flex justify-between items-start">
-              <span className="font-semibold text-slate-800 flex-1 pr-2 leading-tight">{child.name}</span>
-              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-100 font-bold">
-                {formatCurrency(child.value)}
-              </Badge>
-            </div>
-            <div className="mt-2 pt-2 border-t border-slate-50 grid grid-cols-2 gap-2 text-xs text-slate-500">
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase text-slate-400">Quantidade</span>
-                <span className="font-medium text-slate-700">{child.quantity} un.</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase text-slate-400">Preço Unit.</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium text-slate-700">{formatCurrency(child.unit_price)}</span>
-                  <span className={cn("flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full", child.unit_price > child.avg_unit_price ? 'bg-emerald-100 text-emerald-700' : child.unit_price < child.avg_unit_price ? 'bg-slate-100 text-slate-600' : 'bg-slate-100 text-slate-600')}>
-                    <PriceDifferenceIndicator unitPrice={child.unit_price} avgPrice={child.avg_unit_price} />
-                    {child.avg_unit_price ? `${Math.abs(((child.unit_price - child.avg_unit_price) / child.avg_unit_price) * 100).toFixed(0)}%` : '-'}
-                  </span>
-                </div>
-              </div>
-            </div>
-            {child.payment_condition && (
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded w-fit">
-                <CreditCard className="h-3 w-3" /> {child.payment_condition}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    ) : (
-      <div className="text-center text-sm text-slate-400 p-8 flex flex-col items-center justify-center h-full">
-        <Package className="h-8 w-8 mb-2 text-slate-300" />
-        Nenhum produto encontrado.
-      </div>
-    )}
-  </div>
-);
-
-const Panel = forwardRef(({ title, items, onSelect, selectedKey, level, icon, isLoading }, ref) => {
-  const Icon = icon;
   return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="bg-white border-r border-slate-200 min-w-[320px] max-w-[320px] flex-shrink-0 flex flex-col h-full relative z-10"
-    >
-      <div className="p-4 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-20">
-        <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500 flex items-center gap-2">
-          {Icon && <Icon className="h-4 w-4 text-indigo-500" />}
-          {title}
-        </h3>
-      </div>
-      <ScrollArea className="flex-grow bg-white">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-40">
-            <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
-          </div>
-        ) : items && items.length > 0 ? (
-          <div className="p-2 space-y-1">
-            {items.map((item, index) => (
-              <button
-                key={item.key || `${level}-${index}`}
-                onClick={() => onSelect(item)}
-                className={cn(
-                  "w-full text-left px-3 py-3 rounded-lg flex justify-between items-center transition-all duration-200 group border border-transparent",
-                  selectedKey === item.key 
-                    ? "bg-indigo-50 border-indigo-100 shadow-sm" 
-                    : "hover:bg-slate-50 hover:border-slate-100"
-                )}
-              >
-                <div className="min-w-0 flex-1 mr-3">
-                  <p className={cn("text-sm font-medium truncate", selectedKey === item.key ? "text-indigo-700" : "text-slate-700 group-hover:text-slate-900")}>
-                    {item.name}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={cn("text-xs font-bold", selectedKey === item.key ? "text-indigo-600" : "text-slate-500")}>
-                    {formatCurrency(item.value)}
-                  </span>
-                  {selectedKey === item.key && <ChevronRight className="h-3 w-3 text-indigo-500" />}
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center text-sm text-slate-400 py-12 px-4">
-            Nenhum dado disponível para este nível.
-          </div>
-        )}
-      </ScrollArea>
-    </motion.div>
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{
+          fill: fillColor,
+          stroke: '#fff',
+          strokeWidth: 2,
+          opacity: 0.9,
+        }}
+      />
+      <text
+        x={x + width / 2}
+        y={y + height / 2 - 7}
+        textAnchor="middle"
+        fill="#fff"
+        fontSize={14}
+        fontWeight="bold"
+        style={{ pointerEvents: 'none', textShadow: '0px 1px 2px rgba(0,0,0,0.3)' }}
+      >
+        {width > 80 ? (displayName.length > 15 ? displayName.substring(0, 12) + '...' : displayName) : ''}
+      </text>
+      <text
+        x={x + width / 2}
+        y={y + height / 2 + 12}
+        textAnchor="middle"
+        fill="#fff"
+        fontSize={12}
+        style={{ pointerEvents: 'none', textShadow: '0px 1px 2px rgba(0,0,0,0.3)' }}
+      >
+        {formatCurrency(value)}
+      </text>
+    </g>
   );
 });
 
-const formatDateToAPI = (date) => (date ? format(new Date(date), 'yyyy-MM-dd') : null);
+const DrilldownExplorer = ({ analysisMode = 'supervisor', rpcName = 'get_drilldown_data', initialFilters = {} }) => {
+  const { filters } = useFilters();
+  // Merge initial filters with context filters, prioritizing context
+  const activeFilters = { ...initialFilters, ...filters };
+  
+  const [drillPath, setDrillPath] = useState([]);
+  const [chartType, setChartType] = useState('treemap');
+  const [showChart, setShowChart] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
-const DrilldownExplorer = ({ analysisMode = 'region', filters: initialFilters = {} }) => {
-  const [panels, setPanels] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [productDetails, setProductDetails] = useState({ isLoading: false, data: [] });
-  const containerRef = useRef(null);
-  const { toast } = useToast();
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [drillPath, activeFilters]);
 
-  const config = analysisConfig[analysisMode];
+  const currentLevel = drillPath.length + 1;
+  const currentLabel = HIERARCHY_LABELS[analysisMode]?.[currentLevel - 1] || 'Detalhes';
+  const parentKeys = useMemo(() => drillPath.map(item => item.key), [drillPath]);
 
-  const { data: initialResponse, loading: initialLoading } = useAnalyticalData(
-    'get_treemap_data', 
-    { ...initialFilters, p_analysis_mode: analysisMode, p_show_defined_groups_only: false },
-    { enabled: panels.length === 0 }
+  const queryParams = useMemo(() => {
+    const startDate = activeFilters.dateRange?.from || activeFilters.dateRange?.[0];
+    const endDate = activeFilters.dateRange?.to || activeFilters.dateRange?.[1];
+
+    return {
+      p_start_date: formatDateForAPI(startDate),
+      p_end_date: formatDateForAPI(endDate),
+      p_analysis_mode: analysisMode,
+      p_exclude_employees: activeFilters.excludeEmployees,
+      p_supervisors: activeFilters.supervisors,
+      p_sellers: activeFilters.sellers,
+      p_customer_groups: activeFilters.customerGroups,
+      p_regions: activeFilters.regions,
+      p_clients: activeFilters.clients,
+      p_search_term: activeFilters.searchTerm,
+      p_drilldown_level: currentLevel,
+      p_parent_keys: parentKeys.length > 0 ? parentKeys : null
+    };
+  }, [activeFilters, analysisMode, currentLevel, parentKeys]);
+
+  const { data, loading, error } = useAnalyticalData(
+    rpcName, 
+    queryParams,
+    { enabled: !!queryParams.p_start_date }
   );
 
-  useEffect(() => {
-    if (!initialLoading && initialResponse) {
-      const initialData = initialResponse || [];
-      const items = initialData.map(d => ({ key: d.name, name: d.name, value: d.size || d.value }));
-      setPanels([{
-          title: config.dimensionLabels[0],
-          items: items,
-          selectedKey: null,
-          isLoading: false,
-      }]);
-      setLoading(false);
-    }
-  }, [initialResponse, initialLoading, config.dimensionLabels, analysisMode]);
-
-  const handleSelect = useCallback(async (panelIndex, item) => {
-    const currentPanel = panels[panelIndex];
-    if (currentPanel.selectedKey === item.key) return;
-
-    let newPanels = panels.slice(0, panelIndex + 1);
-    newPanels[panelIndex] = { ...newPanels[panelIndex], selectedKey: item.key };
-    setProductDetails({ isLoading: false, data: [] });
-
-    const nextLevelIndex = panelIndex + 1;
-    if (nextLevelIndex >= config.dimensions.length) return;
-
-    const nextDrilldownLevel = nextLevelIndex + 1;
+  const handleDrilldown = useCallback((item) => {
+    const levels = HIERARCHY_LABELS[analysisMode];
+    // Robust check to prevent accessing length of undefined
+    if (!levels || currentLevel >= levels.length) return;
     
-    // 1. Get keys from PREVIOUS panels
-    const parentKeys = panels.slice(0, panelIndex).map(p => p.selectedKey).filter(Boolean);
-    
-    // 2. Add the CURRENTLY clicked item's key
-    const newParentKeys = [...parentKeys, item.key];
+    setDrillPath(prev => [...prev, { key: item.key, name: item.name }]);
+  }, [currentLevel, analysisMode]);
 
-    // CRITICAL: Logging before the RPC call
-    console.log("DEBUG - DrilldownExplorer: Chamada RPC 'get_drilldown_data'");
-    console.log("  1) panelIndex:", panelIndex);
-    console.log("  2) item.key:", item.key);
-    console.log("  3) parentKeys (array completo):", newParentKeys);
-    console.log("  4) nextDrilldownLevel:", nextDrilldownLevel);
+  const handleBreadcrumbClick = useCallback((index) => {
+    setDrillPath(prev => prev.slice(0, index));
+  }, []);
 
-    const defaultStart = startOfMonth(new Date());
-    const defaultEnd = endOfMonth(new Date());
+  const handleBack = useCallback(() => {
+    setDrillPath(prev => prev.slice(0, -1));
+  }, []);
 
-    const drilldownParams = {
-        p_analysis_mode: analysisMode,
-        p_start_date: formatDateToAPI(initialFilters.dateRange?.from || defaultStart),
-        p_end_date: formatDateToAPI(initialFilters.dateRange?.to || defaultEnd),
-        p_exclude_employees: initialFilters.excludeEmployees,
-        p_supervisors: initialFilters.supervisors,
-        p_sellers: initialFilters.sellers,
-        p_customer_groups: initialFilters.customerGroups,
-        p_regions: initialFilters.regions,
-        p_clients: initialFilters.clients,
-        p_search_term: initialFilters.searchTerm,
-        p_show_defined_groups_only: false,
-        p_drilldown_level: nextDrilldownLevel,
-        p_parent_keys: newParentKeys,
-    };
+  const chartData = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
+    // Ensure items have a name for the chart
+    return [...data]
+      .map(item => ({ ...item, name: item.name || 'Sem Nome' }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 20); 
+  }, [data]);
 
-    setPanels([...newPanels, { title: config.dimensionLabels[nextLevelIndex], items: [], selectedKey: null, isLoading: true }]);
-    
-    const { data: response, error } = await supabase.rpc('get_drilldown_data', drilldownParams);
-    
-    if (error) {
-        toast({ variant: "destructive", title: `Erro ao detalhar`, description: error.message });
-        console.error("DEBUG: Erro da RPC get_drilldown_data para o nível " + config.dimensionLabels[nextLevelIndex] + ":", { error, params: drilldownParams });
-    }
+  const tableData = useMemo(() => {
+    if (!data || !Array.isArray(data)) return [];
+    const sorted = [...data].sort((a, b) => b.value - a.value);
+    return sorted.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  }, [data, currentPage]);
 
-    if (response?.debug_info) {
-      console.log("DEBUG: Informações de depuração da RPC 'get_drilldown_data':", response.debug_info);
-      toast({
-        variant: "default",
-        title: "Depuração RPC",
-        description: "Informações de depuração foram registradas no console do navegador.",
-        duration: 10000,
-      });
-    }
-    
-    const finalChildren = response?.data || [];
+  const totalItems = Array.isArray(data) ? data.length : 0;
+  const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
 
-    if (config.dimensions[nextLevelIndex] === 'product') {
-        setPanels(newPanels); // Don't add a new panel for products
-        setProductDetails({ isLoading: false, data: finalChildren });
-    } else {
-        setPanels(prevPanels => {
-          const updatedPanels = [...prevPanels];
-          const targetPanelIndex = panelIndex + 1;
-          if (updatedPanels[targetPanelIndex]) {
-            updatedPanels[targetPanelIndex] = {
-              ...updatedPanels[targetPanelIndex],
-              items: finalChildren,
-              isLoading: false,
-            };
-          }
-          return updatedPanels;
-        });
-    }
+  const totalValue = useMemo(() => {
+    if (!data || !Array.isArray(data)) return 0;
+    return data.reduce((acc, item) => acc + (item.value || 0), 0);
+  }, [data]);
 
-  }, [panels, config, analysisMode, initialFilters, toast]);
-
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({
-        left: containerRef.current.scrollWidth,
-        behavior: 'smooth'
-      });
-    }
-  }, [panels.length, productDetails.data?.length]);
-  
-  const getBreadcrumbs = () => {
-    const crumbs = [];
-    panels.forEach((p, i) => {
-        const selectedItem = p.items.find(it => it.key === p.selectedKey);
-        if (selectedItem) {
-            crumbs.push({ name: selectedItem.name, index: i });
-        }
-    });
-    return crumbs;
-  };
-
-  const breadcrumbs = getBreadcrumbs();
-
-  const handleBreadcrumbClick = (index) => {
-    const newPanels = panels.slice(0, index + 1);
-    newPanels[index] = {...newPanels[index], selectedKey: null};
-    setPanels(newPanels);
-    setProductDetails({ isLoading: false, data: [] });
-  };
-
-  const handleHomeClick = () => {
-    setPanels(panels.slice(0, 1).map(p => ({...p, selectedKey: null})));
-    setProductDetails({ isLoading: false, data: [] });
-  };
-
-  const lastPanel = panels[panels.length - 1];
-  const isLastLevelProducts = config.dimensions[config.dimensions.length - 1] === 'product';
-  const showProductDetails = lastPanel && lastPanel.selectedKey && panels.length === (config.dimensions.length - (isLastLevelProducts ? 1 : 0));
-
-  if (loading) {
-    return <div className="flex flex-col items-center justify-center h-[500px] bg-white rounded-xl border border-slate-200 shadow-sm"><Loader2 className="h-10 w-10 animate-spin text-indigo-600 mb-3" /><p className="text-sm text-slate-500 font-medium">Carregando explorador...</p></div>;
-  }
+  // Detect available columns from first data item
+  const hasGrowth = data?.[0]?.growth !== undefined;
+  const hasClients = data?.[0]?.clients !== undefined;
+  const hasTicket = data?.[0]?.average_ticket !== undefined;
+  const hasConversion = data?.[0]?.conversion_rate !== undefined;
+  const hasMargin = data?.[0]?.margin !== undefined;
 
   return (
-    <div className="flex flex-col h-[650px] bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-1 p-3 border-b border-slate-100 bg-white text-sm text-slate-500 overflow-x-auto no-scrollbar">
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full hover:bg-indigo-50 hover:text-indigo-600" onClick={handleHomeClick}>
-          <Home className="h-4 w-4" />
-        </Button>
-        
-        {breadcrumbs.length > 0 && <ChevronRight className="h-4 w-4 text-slate-300 flex-shrink-0" />}
-        
-        {breadcrumbs.map((crumb, i) => (
-            <React.Fragment key={i}>
-                <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                    "h-8 px-3 rounded-full font-medium transition-colors flex-shrink-0 max-w-[200px] truncate",
-                    i === breadcrumbs.length - 1 ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50 text-slate-600"
-                )}
-                onClick={() => handleBreadcrumbClick(crumb.index)}
+    <div className={cn("flex flex-col h-full transition-all duration-300 bg-white rounded-lg", isExpanded ? "fixed inset-0 z-50 p-6 overflow-auto" : "")}>
+      
+      <div className="flex flex-col space-y-4 border-b border-slate-100 pb-4 mb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className={cn("h-8 px-2", drillPath.length === 0 ? "font-bold text-primary" : "text-muted-foreground")}
+              onClick={() => setDrillPath([])}
+              disabled={drillPath.length === 0}
+            >
+              Visão Geral
+            </Button>
+            
+            {drillPath.map((item, index) => (
+              <React.Fragment key={index}>
+                <ChevronRight className="h-4 w-4 text-slate-300" />
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={cn("h-8 px-2 max-w-[150px] truncate", index === drillPath.length - 1 ? "font-bold text-primary" : "text-muted-foreground")}
+                  onClick={() => handleBreadcrumbClick(index + 1)}
+                  disabled={index === drillPath.length - 1}
                 >
-                <span className="truncate">{crumb.name}</span>
+                  {item.name}
                 </Button>
-                {i < breadcrumbs.length - 1 && <ChevronRight className="h-4 w-4 text-slate-300 flex-shrink-0" />}
-            </React.Fragment>
-        ))}
+              </React.Fragment>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 px-2 text-xs", showChart ? "bg-white shadow-sm text-primary" : "text-muted-foreground")}
+              onClick={() => setShowChart(!showChart)}
+              title={showChart ? "Ocultar Gráfico" : "Mostrar Gráfico"}
+            >
+              {showChart ? <Eye className="h-3.5 w-3.5 mr-1.5"/> : <EyeOff className="h-3.5 w-3.5 mr-1.5"/>}
+              {showChart ? "Gráfico" : "Oculto"}
+            </Button>
+
+            {showChart && (
+              <>
+                <div className="w-px h-4 bg-slate-300 mx-1" />
+                <Tabs value={chartType} onValueChange={setChartType} className="h-7">
+                  <TabsList className="h-7">
+                    <TabsTrigger value="treemap" className="h-6 px-2 text-xs"><LayoutGrid className="h-3.5 w-3.5"/></TabsTrigger>
+                    <TabsTrigger value="bar" className="h-6 px-2 text-xs"><BarChart2 className="h-3.5 w-3.5"/></TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </>
+            )}
+
+            <div className="w-px h-4 bg-slate-300 mx-1" />
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsExpanded(!isExpanded)}>
+              {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
       </div>
 
-      <div ref={containerRef} className="flex flex-grow overflow-x-auto scroll-smooth">
-        <AnimatePresence initial={false} mode="popLayout">
-          {panels.map((panel, index) => (
-            <Panel
-              key={`panel-${index}`}
-              title={panel.title}
-              icon={iconMapping[config.dimensions[index]]}
-              items={panel.items}
-              selectedKey={panel.selectedKey}
-              level={index}
-              isLoading={panel.isLoading}
-              onSelect={(item) => handleSelect(index, item)}
-            />
-          ))}
-        </AnimatePresence>
-        
-        {showProductDetails && (
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            transition={{ duration: 0.3, ease: 'easeOut' }}
-            className="bg-slate-50 border-l border-slate-200 min-w-[380px] max-w-[400px] flex-shrink-0 flex flex-col shadow-inner"
-          >
-            <ScrollArea className="flex-grow h-full">
-              <ProductDetails products={productDetails.data} isLoading={productDetails.isLoading} />
-            </ScrollArea>
-          </motion.div>
-        )}
-      </div>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Skeleton className="h-[300px] w-full rounded-xl" />
+          <p className="mt-4 text-muted-foreground animate-pulse">Carregando dados...</p>
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center py-12 text-destructive text-center">
+          <TrendingDown className="h-12 w-12 mb-4 opacity-20" />
+          <h3 className="text-lg font-semibold">Erro ao carregar dados</h3>
+          <p className="text-sm opacity-80 max-w-md mt-2">{error.message}</p>
+        </div>
+      ) : !data || data.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground text-center border-2 border-dashed border-slate-100 rounded-xl">
+          <TrendingUp className="h-12 w-12 mb-4 opacity-20" />
+          <h3 className="text-lg font-semibold text-slate-700">Sem dados para exibir</h3>
+          <p className="text-sm opacity-80 max-w-md mt-2">Nenhum registro encontrado para os filtros selecionados.</p>
+          {drillPath.length > 0 && (
+            <Button variant="outline" onClick={handleBack} className="mt-4">
+              <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col space-y-6">
+          <AnimatePresence>
+            {showChart && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="w-full border rounded-xl p-4 bg-slate-50/50"
+              >
+                <div className="h-[400px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {chartType === 'treemap' ? (
+                      <Treemap
+                        data={chartData}
+                        dataKey="value"
+                        aspectRatio={4 / 3}
+                        stroke="#fff"
+                        fill="#8884d8"
+                        content={<CustomizedTreemapContent />}
+                        onClick={(node) => {
+                           if(node && node.name) handleDrilldown({ key: node.key || node.name, name: node.name });
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <Tooltip content={<CustomTooltip />} />
+                      </Treemap>
+                    ) : (
+                      <BarChart
+                        data={chartData}
+                        layout="vertical"
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        onClick={(state) => {
+                          if (state && state.activePayload) {
+                            handleDrilldown(state.activePayload[0].payload);
+                          }
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                        <XAxis type="number" hide />
+                        <YAxis 
+                          dataKey="name" 
+                          type="category" 
+                          width={150} 
+                          tick={{ fontSize: 12, fill: '#64748b' }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f1f5f9' }} />
+                        <Bar 
+                          dataKey="value" 
+                          fill="#6366f1" 
+                          radius={[0, 4, 4, 0]}
+                          barSize={24}
+                          animationDuration={800}
+                        />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+                {hasGrowth && (
+                    <div className="flex items-center justify-center gap-4 mt-2 text-xs text-muted-foreground">
+                        <span className="flex items-center"><div className="w-3 h-3 bg-green-500 mr-1 rounded-sm"></div> Crescimento Positivo</span>
+                        <span className="flex items-center"><div className="w-3 h-3 bg-red-500 mr-1 rounded-sm"></div> Crescimento Negativo</span>
+                    </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="border rounded-lg overflow-hidden flex flex-col bg-white shadow-sm">
+            <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center shrink-0">
+              <span className="font-semibold text-sm text-slate-700">Lista Detalhada: {currentLabel}</span>
+              <Badge variant="secondary">{totalItems} registros</Badge>
+            </div>
+            <div className="flex-1 overflow-auto min-h-0">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-white sticky top-0 z-10 shadow-sm">
+                  <tr>
+                    <th className="px-4 py-3 font-medium text-slate-500 w-[30%]">Nome</th>
+                    <th className="px-4 py-3 font-medium text-slate-500 text-right">Vendas</th>
+                    {hasGrowth && <th className="px-4 py-3 font-medium text-slate-500 text-right">Crescimento</th>}
+                    {hasClients && <th className="px-4 py-3 font-medium text-slate-500 text-right">Clientes</th>}
+                    {hasTicket && <th className="px-4 py-3 font-medium text-slate-500 text-right">Ticket Médio</th>}
+                    {hasConversion && <th className="px-4 py-3 font-medium text-slate-500 text-right">Taxa Conv.</th>}
+                    {hasMargin && <th className="px-4 py-3 font-medium text-slate-500 text-right">Margem Est.</th>}
+                    <th className="px-4 py-3 font-medium text-slate-500 text-right">Partic. (%)</th>
+                    <th className="px-4 py-3 font-medium text-slate-500 text-center">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {tableData.map((row, idx) => (
+                    <tr 
+                      key={`${row.key}-${idx}`} 
+                      className="hover:bg-slate-50 transition-colors cursor-pointer group"
+                      onClick={() => handleDrilldown(row)}
+                    >
+                      <td className="px-4 py-3 font-medium text-slate-700 group-hover:text-primary transition-colors">
+                        {row.name || 'Sem Nome'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-600">
+                        {formatCurrency(row.value)}
+                      </td>
+                      {hasGrowth && (
+                        <td className={cn("px-4 py-3 text-right font-mono", row.growth >= 0 ? "text-green-600" : "text-red-600")}>
+                            {row.growth > 0 ? '+' : ''}{formatPercentage(row.growth)}
+                        </td>
+                      )}
+                      {hasClients && (
+                        <td className="px-4 py-3 text-right font-mono text-slate-600">
+                            {formatNumber(row.clients)}
+                        </td>
+                      )}
+                      {hasTicket && (
+                        <td className="px-4 py-3 text-right font-mono text-slate-600">
+                            {formatCurrency(row.average_ticket)}
+                        </td>
+                      )}
+                      {hasConversion && (
+                        <td className="px-4 py-3 text-right font-mono text-slate-600">
+                            {formatPercentage(row.conversion_rate)}
+                        </td>
+                      )}
+                      {hasMargin && (
+                        <td className="px-4 py-3 text-right font-mono text-emerald-600">
+                            {formatCurrency(row.margin)}
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-slate-500 w-12">{formatPercentage((row.value / totalValue) * 100)}</span>
+                          <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary rounded-full" 
+                              style={{ width: `${Math.min(((row.value / totalValue) * 100), 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ChevronRight className="h-4 w-4 text-slate-400" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50 font-semibold">
+                  <tr>
+                    <td className="px-4 py-3">Total (Página)</td>
+                    <td className="px-4 py-3 text-right font-mono">
+                      {formatCurrency(tableData.reduce((acc, curr) => acc + (curr.value || 0), 0))}
+                    </td>
+                    {hasGrowth && <td className="px-4 py-3"></td>}
+                    {hasClients && <td className="px-4 py-3 text-right font-mono">{formatNumber(tableData.reduce((acc, curr) => acc + (curr.clients || 0), 0))}</td>}
+                    {hasTicket && <td className="px-4 py-3"></td>}
+                    {hasConversion && <td className="px-4 py-3"></td>}
+                    {hasMargin && <td className="px-4 py-3 text-right font-mono">{formatCurrency(tableData.reduce((acc, curr) => acc + (curr.margin || 0), 0))}</td>}
+                    <td className="px-4 py-3 text-right">-</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            
+            {totalPages > 1 && (
+              <div className="bg-white border-t px-4 py-3 flex items-center justify-between shrink-0">
+                <div className="text-xs text-muted-foreground">
+                  Mostrando {((currentPage - 1) * ITEMS_PER_PAGE) + 1} até {Math.min(currentPage * ITEMS_PER_PAGE, totalItems)} de {totalItems}
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default DrilldownExplorer;
+export default React.memo(DrilldownExplorer);

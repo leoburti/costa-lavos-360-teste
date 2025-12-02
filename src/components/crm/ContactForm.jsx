@@ -17,7 +17,7 @@ import InputMask from 'react-input-mask';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { fetchCompanyData, mapApiDataToForm } from '@/services/senhorLavosService';
 import { fetchCreditDossier } from '@/services/creditService';
-import { getCommercialHierarchy } from '@/services/apoioSyncService';
+import apoioSyncService from '@/services/apoioSyncService';
 import CreditDossierTemplate from '@/components/crm/CreditDossierTemplate';
 import { generatePDF } from '@/utils/pdfGenerator';
 import { useFormStatePersistence } from '@/hooks/useFormStatePersistence';
@@ -251,7 +251,7 @@ const ContactForm = ({ contactData, onSaveSuccess }) => {
                 if (userError) throw userError;
                 setInternalUsers(sysUsers || []);
 
-                const hierarchyData = await getCommercialHierarchy();
+                const hierarchyData = await apoioSyncService.getCommercialHierarchy();
                 setHierarchy(hierarchyData || []);
 
             } catch (error) {

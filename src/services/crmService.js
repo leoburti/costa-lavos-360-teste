@@ -4,8 +4,6 @@ export const getContactBreadVolume = async (contactName) => {
     if (!contactName) return null;
     
     try {
-        // Try to find the client in bd-cl to get "Quant Dia/KG"
-        // Using text search on Name or Fantasy Name
         const { data, error } = await supabase
             .from('bd-cl')
             .select('"Quant Dia/KG"')
@@ -27,8 +25,6 @@ export const getContactBreadVolume = async (contactName) => {
 
 export const uploadQualificationPhoto = async (file, path) => {
     try {
-        // Using 'manutencao' bucket as a fallback since it's known to exist and allow uploads based on previous context
-        // Ideally this should be 'crm-uploads'
         const bucketName = 'Manutencao'; 
         const fileExt = file.name.split('.').pop();
         const fileName = `${path}/${Math.random()}.${fileExt}`;

@@ -15,7 +15,6 @@ export const getOverviewDataV2 = async (
   showDefinedGroupsOnly
 ) => {
   try {
-    // Using POST request to RPC if payload is large, or standard Supabase SDK call
     const { data, error } = await supabase.rpc('get_overview_data_v2', {
       p_start_date: startDate,
       p_end_date: endDate,
@@ -32,11 +31,10 @@ export const getOverviewDataV2 = async (
     });
 
     if (error) {
-        console.error("RPC Error:", error);
+        console.error("RPC Error in getOverviewDataV2:", error);
         throw error;
     }
     
-    // Validate structure to prevent frontend crashes
     return data || { kpi: {}, dailySales: [], rankings: {} };
   } catch (error) {
     console.error('Error fetching overview data:', error);
@@ -44,7 +42,6 @@ export const getOverviewDataV2 = async (
   }
 };
 
-// --- Legacy / Placeholder functions ---
 export const getDadosCliente = async (clienteId) => {
   return {
     limiteCredito: 10000,

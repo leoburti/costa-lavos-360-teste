@@ -1,36 +1,30 @@
-
 import React, { useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { motion } from 'framer-motion';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useFilters } from '@/contexts/FilterContext';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { TrendingUp, TrendingDown, ChevronsRight, UserPlus, AlertCircle, BarChart } from "lucide-react";
 import LoadingSpinner from '@/components/LoadingSpinner';
-import MetricCard from '@/components/MetricCard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { TrendingUp, TrendingDown, ArrowRight, UserCheck, UserPlus, UserX } from 'lucide-react';
-import AIInsight from '@/components/AIInsight';
-
-const formatCurrency = (value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const reasonConfig = {
-  'AUMENTO_EXPRESSIVO': { label: 'Aumento Expressivo', color: 'bg-emerald-500', icon: TrendingUp },
-  'AUMENTO': { label: 'Aumento', color: 'bg-green-500', icon: TrendingUp },
-  'ESTABILIDADE': { label: 'Estabilidade', color: 'bg-blue-500', icon: ArrowRight },
-  'QUEDA_ACENTUADA': { label: 'Queda Acentuada', color: 'bg-orange-500', icon: TrendingDown },
-  'RISCO_CHURN': { label: 'Risco de Churn', color: 'bg-red-600', icon: TrendingDown },
-  'PROMISSOR': { label: 'Promissor', color: 'bg-sky-500', icon: UserPlus },
-  'INDEFINIDO': { label: 'Indefinido', color: 'bg-gray-500', icon: UserX },
+  'AUMENTO_EXPRESSIVO': { text: 'Aumento Expressivo', color: 'bg-green-500', icon: <TrendingUp className="h-4 w-4" /> },
+  'AUMENTO': { text: 'Aumento', color: 'bg-emerald-500', icon: <TrendingUp className="h-4 w-4" /> },
+  'PROMISSOR': { text: 'Promissor', color: 'bg-sky-500', icon: <UserPlus className="h-4 w-4" /> },
+  'ESTABILIDADE': { text: 'Estabilidade', color: 'bg-slate-500', icon: <ChevronsRight className="h-4 w-4" /> },
+  'QUEDA_ACENTUADA': { text: 'Queda Acentuada', color: 'bg-yellow-500', icon: <TrendingDown className="h-4 w-4" /> },
+  'RISCO_CHURN': { text: 'Risco de Churn', color: 'bg-red-500', icon: <TrendingDown className="h-4 w-4" /> },
+  'INDEFINIDO': { text: 'Indefinido', color: 'bg-gray-400', icon: <BarChart className="h-4 w-4" /> },
 };
 
 const TendenciaVendas = ({ isTab = false }) => {
   const { filters } = useFilters();
   
   const dateRange = useMemo(() => filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }, [filters.dateRange]);
-  
+
   const params = useMemo(() => {
     const selectedClients = filters.clients ? filters.clients.map(c => c.value) : null;
     return {
@@ -43,118 +37,104 @@ const TendenciaVendas = ({ isTab = false }) => {
       p_regions: filters.regions,
       p_clients: selectedClients,
       p_search_term: filters.searchTerm,
-      p_analysis_type: 'all_clients', // Default analysis type
+      p_analysis_type: 'new_clients_90', 
     };
   }, [filters, dateRange]);
 
-  const { data, loading, error } = useAnalyticalData('get_new_client_trends', params, { enabled: !!params.p_start_date && !!params.p_end_date, defaultValue: [] });
+  const { data, loading, error } = useAnalyticalData('get_new_client_trends', params, { enabled: !!params.p_start_date && !!params.p_end_date });
 
-  const kpis = useMemo(() => {
-    if (!data) return { growing: 0, stable: 0, declining: 0, totalChange: 0 };
-    let growing = 0, stable = 0, declining = 0, totalChange = 0;
-    data.forEach(item => {
-      totalChange += item.trendChange;
-      if (item.reason === 'AUMENTO_EXPRESSIVO' || item.reason === 'AUMENTO') growing++;
-      else if (item.reason === 'ESTABILIDADE' || item.reason === 'PROMISSOR') stable++;
-      else declining++;
-    });
-    return { growing, stable, declining, totalChange };
+  const summary = useMemo(() => {
+    if (!data) return {};
+    return data.reduce((acc, item) => {
+      const reason = item.reason || 'INDEFINIDO';
+      if (!acc[reason]) {
+        acc[reason] = 0;
+      }
+      acc[reason]++;
+      return acc;
+    }, {});
   }, [data]);
 
-  const pageContent = (
-    <div className="space-y-6">
+  const content = (
+     <div className="space-y-6">
       {!isTab && (
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tendência de Vendas por Cliente</h1>
-          <p className="text-muted-foreground">Compare o desempenho de vendas entre dois períodos para identificar tendências.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Tendência de Novos Clientes</h1>
+          <p className="text-muted-foreground">Análise de comportamento de clientes nos últimos 90 dias.</p>
         </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center items-center h-96">
-          <LoadingSpinner message="Analisando tendências..." />
-        </div>
-      ) : error ? (
-        <div className="text-red-500 text-center">Erro ao carregar dados: {error.message}</div>
-      ) : data ? (
+      {loading && <LoadingSpinner message="Analisando tendências..." />}
+      {error && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Erro na Análise</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+
+      {!loading && !error && data && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <MetricCard title="Variação Total" value={formatCurrency(kpis.totalChange)} icon={kpis.totalChange > 0 ? TrendingUp : TrendingDown} subtitle="Soma das variações de receita" />
-            <MetricCard title="Clientes em Crescimento" value={kpis.growing.toString()} icon={TrendingUp} subtitle="Receita aumentou no período" />
-            <MetricCard title="Clientes Estáveis" value={kpis.stable.toString()} icon={ArrowRight} subtitle="Receita se manteve" />
-            <MetricCard title="Clientes em Queda" value={kpis.declining.toString()} icon={TrendingDown} subtitle="Receita diminuiu no período" />
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {Object.entries(summary).sort(([a], [b]) => a.localeCompare(b)).map(([reason, count]) => {
+              const config = reasonConfig[reason] || reasonConfig['INDEFINIDO'];
+              return (
+                <Card key={reason}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">{config.text}</CardTitle>
+                    <div className={`${config.color} p-1.5 rounded-full text-white`}>{config.icon}</div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{count}</div>
+                    <p className="text-xs text-muted-foreground">Clientes</p>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>Detalhes da Tendência por Cliente</CardTitle>
+              <CardTitle>Detalhes dos Clientes</CardTitle>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[500px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Vendedor</TableHead>
-                      <TableHead>Tendência</TableHead>
-                      <TableHead className="text-right">Variação (R$)</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.map((item, index) => {
-                      const config = reasonConfig[item.reason] || reasonConfig['INDEFINIDO'];
-                      return (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{item.clientName}</TableCell>
-                          <TableCell>{item.seller}</TableCell>
-                          <TableCell>
-                            <Badge className={config.color}>
-                              <config.icon className="h-3 w-3 mr-1" />
-                              {config.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className={`text-right font-semibold ${item.trendChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(item.trendChange)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Vendedor</TableHead>
+                    <TableHead className="text-right">Variação de Receita</TableHead>
+                    <TableHead>Tendência</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.map((item, index) => {
+                    const config = reasonConfig[item.reason] || reasonConfig['INDEFINIDO'];
+                    return (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">{item.clientName}</TableCell>
+                        <TableCell>{item.seller}</TableCell>
+                        <TableCell className={`text-right font-semibold ${item.trendChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {item.trendChange.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${config.color} text-white`}>{config.text}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
-
-          <AIInsight 
-            context="Análise de Tendência de Vendas"
-            data={data}
-            question="Com base nos dados de tendência, quais são as 3 principais ações para clientes em queda e para potencializar clientes em crescimento?"
-          />
         </>
-      ) : (
-        <div className="text-center py-12">Nenhum dado encontrado para os filtros selecionados.</div>
       )}
     </div>
   );
 
-  if (isTab) {
-    return pageContent;
-  }
+  if (isTab) return content;
 
   return (
-    <>
+    <div className="p-4 sm:p-6 lg:p-8">
       <Helmet>
         <title>Tendência de Vendas - Costa Lavos</title>
       </Helmet>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="p-4 sm:p-6"
-      >
-        {pageContent}
-      </motion.div>
-    </>
+      {content}
+    </div>
   );
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import {
@@ -16,26 +16,25 @@ import { Loader2, Search, Plus, Trash2, Edit } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import AddUserDialog from '@/components/settings/AddUserDialog';
 import EditUserDialog from '@/components/settings/EditUserDialog';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useDebounce } from '@/hooks/useDebounce';
 
 const UserManagementPage = () => {
-  const { hasPermission, userRole } = useAuth();
+  const { user: currentUser } = useAuth();
   const { toast } = useToast();
   
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      // Ensure we call the RPC correctly
       const { data, error } = await supabase.rpc('get_all_users_with_roles');
-      
       if (error) throw error;
-      
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -50,26 +49,24 @@ const UserManagementPage = () => {
   }, [toast]);
 
   useEffect(() => {
-    const abortController = new AbortController();
-    
-    if (hasPermission('configuracoes', 'view')) {
-        fetchUsers();
-    } else {
-        setLoading(false);
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const filteredUsers = useMemo(() => {
+    if (!debouncedSearchTerm) return users;
+    return users.filter(u => 
+      u.full_name?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      u.email?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+    );
+  }, [users, debouncedSearchTerm]);
+
+
+  const handleDeleteUser = async (userId, userEmail) => {
+     if (currentUser && currentUser.id === userId) {
+      toast({ variant: 'destructive', title: 'Ação não permitida', description: 'Você não pode excluir sua própria conta.' });
+      return;
     }
-
-    return () => {
-        abortController.abort();
-    };
-  }, [fetchUsers, hasPermission]);
-
-  const filteredUsers = users.filter(u => 
-    u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.')) return;
+    if (!window.confirm(`Tem certeza que deseja excluir o usuário ${userEmail}? Esta ação não pode ser desfeita.`)) return;
 
     try {
       const { error } = await supabase.rpc('delete_user_by_admin', { p_user_id: userId });
@@ -86,9 +83,6 @@ const UserManagementPage = () => {
     }
   };
 
-  if (!hasPermission('configuracoes', 'view')) {
-    return <div className="p-8 text-center text-muted-foreground">Você não tem permissão para ver esta página.</div>;
-  }
 
   return (
     <div className="space-y-6">
@@ -97,15 +91,18 @@ const UserManagementPage = () => {
           <h2 className="text-2xl font-bold tracking-tight">Gestão de Usuários</h2>
           <p className="text-muted-foreground">Gerencie contas, permissões e papéis de acesso.</p>
         </div>
-        <Button onClick={() => setIsAddDialogOpen(true)} className="bg-brand-primary hover:bg-brand-primary/90">
+        <Button onClick={() => setIsAddDialogOpen(true)} className="bg-primary hover:bg-primary/90">
           <Plus className="mr-2 h-4 w-4" /> Novo Usuário
         </Button>
       </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <div className="relative w-full md:max-w-sm">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <CardDescription>
+                Visualize e gerencie todos os usuários cadastrados na plataforma.
+            </CardDescription>
+          <div className="relative w-full md:max-w-sm pt-4">
+            <Search className="absolute left-2 top-6 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar por nome ou email..."
               className="pl-8"
@@ -117,7 +114,7 @@ const UserManagementPage = () => {
         <CardContent>
           {loading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : (
             <div className="rounded-md border">
@@ -147,7 +144,7 @@ const UserManagementPage = () => {
                         <TableCell>
                           <Badge variant="outline" className={
                             u.role === 'Admin' ? 'bg-red-100 text-red-800 hover:bg-red-100' : 
-                            u.role.includes('Nivel 1') ? 'bg-purple-100 text-purple-800 hover:bg-purple-100' :
+                            u.role?.includes('Nivel 1') ? 'bg-purple-100 text-purple-800 hover:bg-purple-100' :
                             'bg-blue-100 text-blue-800 hover:bg-blue-100'
                           }>
                             {u.role}
@@ -164,7 +161,7 @@ const UserManagementPage = () => {
                             <Button variant="ghost" size="icon" onClick={() => setEditingUser(u)}>
                               <Edit className="h-4 w-4 text-blue-500" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(u.user_id)}>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(u.user_id, u.email)}>
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           </div>

@@ -1,0 +1,39 @@
+---
+error_id: "ERR-DASH-005"
+category: "C - Medium"
+page: "/dashboard"
+component: "DashboardPage.jsx"
+severity: "medium"
+title: "Dashboard Tab State Not Persistent"
+description: |
+  Ao navegar entre abas (Comercial vs Analítico) e atualizar a página, o usuário sempre retorna para a aba padrão (Comercial), perdendo o contexto de navegação.
+
+root_cause: |
+  Estado `activeTab` é gerenciado apenas via `useState` local, sem sincronização com URL Search Params.
+
+impact: |
+  - Experiência do usuário degradada
+  - Dificuldade em compartilhar links para visualizações específicas
+
+affected_files:
+  - src/pages/DashboardPage.jsx
+
+fix:
+  type: "code_change"
+  priority: "MEDIUM"
+  files:
+    - path: "src/pages/DashboardPage.jsx"
+      action: "modify"
+      description: "Implementar useSearchParams para gerenciar estado da aba"
+
+validation:
+  manual:
+    - "Navegar para aba Analítico"
+    - "Atualizar página (F5)"
+    - "Verificar se aba Analítico permanece ativa"
+
+dependencies: []
+rollback:
+  instructions: "Revert to simple useState"
+  risk_level: "low"
+---

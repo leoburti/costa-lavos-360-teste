@@ -1,0 +1,15 @@
+task: "Refactor Monolithic Pipeline Component"
+severity: "High"
+context: "src/pages/crm/Pipeline.jsx is over 700 lines long, making it hard to maintain. It needs to be broken down."
+files_to_modify:
+  - "src/pages/crm/CrmPipeline.jsx" (after move)
+files_to_create:
+  - "src/pages/crm/components/PipelineBoard.jsx"
+  - "src/pages/crm/components/PipelineColumn.jsx"
+  - "src/pages/crm/components/PipelineCard.jsx"
+  - "src/pages/crm/components/PipelineFilters.jsx"
+requirements:
+  - "Extract the drag-and-drop board logic to PipelineBoard."
+  - "Extract column rendering to PipelineColumn."
+  - "Extract deal card rendering to PipelineCard."
+  - "Keep the main page file for state management and data fetching only."

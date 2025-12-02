@@ -1,0 +1,16 @@
+task: "Implement Sales Reports Group"
+severity: "High"
+context: "The Sales Reports group (8 pages) is missing. These reports provide granular analysis of daily, monthly, and annual sales."
+files_to_create:
+  - "src/pages/relatorios/vendas/RelatorioVendasDiario.jsx"
+  - "src/pages/relatorios/vendas/RelatorioVendasMensal.jsx"
+  - "src/pages/relatorios/vendas/RelatorioVendasAnual.jsx"
+  - "src/pages/relatorios/vendas/RelatorioVendasVendedor.jsx"
+  - "src/pages/relatorios/vendas/RelatorioVendasRegiao.jsx"
+  - "src/pages/relatorios/vendas/RelatorioVendasCliente.jsx"
+  - "src/pages/relatorios/vendas/RelatorioVendasProduto.jsx"
+  - "src/pages/relatorios/vendas/RelatorioVendasComparativo.jsx"
+requirements:
+  - "Use shared ReportLayout and ReportFilters components."
+  - "Implement specific data fetching using useAnalyticalData hook."
+  - "Include Export to PDF/Excel functionality."

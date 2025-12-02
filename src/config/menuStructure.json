@@ -1,0 +1,162 @@
+[
+  {
+    "id": "analytics",
+    "title": "Analytics",
+    "description": "Dashboards e relatórios de vendas",
+    "icon": "BarChart2",
+    "color": "#2563EB",
+    "pages": [
+      { "path": "/dashboard", "title": "Dashboard Principal", "icon": "LayoutDashboard", "description": "KPIs e visão geral de vendas" },
+      { "path": "/visao-360-cliente", "title": "Visão 360°", "icon": "Search", "description": "Busca detalhada de cliente", "badge": { "type": "count", "value": "360" } },
+      { "path": "/analitico-supervisor", "title": "Analítico Supervisor", "icon": "Users", "description": "Performance por equipe" },
+      { "path": "/analitico-vendedor", "title": "Analítico Vendedor", "icon": "User", "description": "Performance individual" },
+      { "path": "/analitico-regiao", "title": "Analítico Região", "icon": "Map", "description": "Análise geográfica" },
+      { "path": "/analitico-grupo-clientes", "title": "Analítico Grupos", "icon": "Building2", "description": "Redes e grupos econômicos" },
+      { "path": "/analitico-produto", "title": "Analítico Produtos", "icon": "Package", "description": "Mix e penetração" },
+      { "path": "/analitico-vendas-diarias", "title": "Vendas Diárias", "icon": "Calendar", "description": "Acompanhamento diário" },
+      { "path": "/analise-preditiva-vendas", "title": "Previsão de Vendas", "icon": "LineChart", "description": "Forecast e tendências" },
+      { "path": "/curva-abc", "title": "Curva ABC", "icon": "BarChart", "description": "Classificação Pareto" },
+      { "path": "/analise-valor-unitario", "title": "Valor Unitário", "icon": "Tag", "description": "Variação de preços" },
+      { "path": "/analise-desempenho-fidelidade", "title": "Desempenho & Fidelidade", "icon": "Heart", "description": "Retenção e RFM" },
+      { "path": "/analise-sazonalidade", "title": "Sazonalidade", "icon": "Sun", "description": "Padrões temporais" },
+      { "path": "/analise-margem", "title": "Análise de Margem", "icon": "Percent", "description": "Lucratividade por item" },
+      { "path": "/analise-churn", "title": "Análise de Churn", "icon": "UserMinus", "description": "Risco de perda" },
+      { "path": "/relatorio-dashboard", "title": "Central de Relatórios", "icon": "FileText", "description": "Hub de relatórios" },
+      { "path": "/relatorio-buscador", "title": "Buscador Avançado", "icon": "Search", "description": "Query builder" },
+      { "path": "/relatorio-vendas-diario", "title": "Rel. Vendas Diário", "icon": "FileText", "description": "Detalhe dia a dia" },
+      { "path": "/relatorio-vendas-mensal", "title": "Rel. Vendas Mensal", "icon": "FileText", "description": "Consolidado mês" },
+      { "path": "/relatorio-vendas-anual", "title": "Rel. Vendas Anual", "icon": "FileText", "description": "Consolidado ano" },
+      { "path": "/relatorio-vendas-por-vendedor", "title": "Rel. Por Vendedor", "icon": "UserCheck", "description": "Vendas por representante" },
+      { "path": "/relatorio-vendas-por-regiao", "title": "Rel. Por Região", "icon": "MapPin", "description": "Vendas por área" },
+      { "path": "/relatorio-vendas-por-cliente", "title": "Rel. Por Cliente", "icon": "User", "description": "Vendas por carteira" },
+      { "path": "/relatorio-vendas-por-produto", "title": "Rel. Por Produto", "icon": "Box", "description": "Vendas por item" },
+      { "path": "/relatorio-vendas-comparativo", "title": "Rel. Comparativo", "icon": "GitCompare", "description": "Períodos x Períodos" },
+      { "path": "/relatorio-desempenho-ranking", "title": "Ranking Performance", "icon": "Trophy", "description": "Classificação geral", "badge": { "type": "new", "value": "Novo" } },
+      { "path": "/relatorio-financeiro-receita", "title": "Rel. Receita", "icon": "DollarSign", "description": "Entradas financeiras" },
+      { "path": "/relatorio-financeiro-margem", "title": "Rel. Margem", "icon": "PieChart", "description": "Margem bruta/líquida" }
+    ]
+  },
+  {
+    "id": "crm",
+    "title": "CRM",
+    "description": "Gestão de relacionamento com cliente",
+    "icon": "Users2",
+    "color": "#EC4899",
+    "pages": [
+      { "path": "/crm-dashboard", "title": "Dashboard CRM", "icon": "LayoutDashboard", "description": "Funil e atividades" },
+      { "path": "/crm-pipeline", "title": "Pipeline de Vendas", "icon": "Kanban", "description": "Gestão visual de oportunidades" },
+      { "path": "/crm-clientes", "title": "Base de Clientes", "icon": "Users", "description": "Cadastro e histórico" },
+      { "path": "/crm-contatos", "title": "Contatos", "icon": "Contact2", "description": "Pessoas chave" },
+      { "path": "/crm-oportunidades", "title": "Oportunidades", "icon": "Briefcase", "description": "Negócios em andamento" },
+      { "path": "/crm-atividades", "title": "Atividades", "icon": "CheckSquare", "description": "Tarefas e follow-ups" },
+      { "path": "/crm-relatorio", "title": "Relatórios CRM", "icon": "FileBarChart", "description": "Conversão e performance" },
+      { "path": "/crm/automations", "title": "Automações", "icon": "Zap", "description": "Fluxos automáticos" },
+      { "path": "/crm/team", "title": "Equipe CRM", "icon": "UserCog", "description": "Gestão de time" },
+      { "path": "/crm/comodato-contracts", "title": "Contratos Comodato", "icon": "FileSignature", "description": "Gestão contratual" }
+    ]
+  },
+  {
+    "id": "delivery",
+    "title": "Delivery",
+    "description": "Logística e entregas",
+    "icon": "Truck",
+    "color": "#F59E0B",
+    "pages": [
+      { "path": "/delivery/dashboard", "title": "Painel Logístico", "icon": "LayoutDashboard", "description": "KPIs de entrega" },
+      { "path": "/entregas", "title": "Lista de Entregas", "icon": "List", "description": "Gerenciamento de pedidos" },
+      { "path": "/entregas/nova", "title": "Nova Entrega", "icon": "PlusCircle", "description": "Cadastro manual" },
+      { "path": "/entregas/rotas", "title": "Rotas", "icon": "Map", "description": "Gestão de rotas" },
+      { "path": "/entregas/rotas/planejamento", "title": "Planejamento", "icon": "MapPin", "description": "Roteirização" },
+      { "path": "/entregas/rotas/otimizacao", "title": "Otimização", "icon": "Zap", "description": "IA de rotas" },
+      { "path": "/entregas/rastreamento", "title": "Rastreamento", "icon": "Radar", "description": "Tempo real" },
+      { "path": "/entregas/historico", "title": "Histórico", "icon": "History", "description": "Registro completo" },
+      { "path": "/admin/delivery-management/drivers", "title": "Motoristas", "icon": "User", "description": "Cadastro de condutores" },
+      { "path": "/admin/delivery-management/customers", "title": "Pontos de Entrega", "icon": "MapPin", "description": "Locais cadastrados" },
+      { "path": "/admin/delivery-management/disputes", "title": "Disputas", "icon": "AlertTriangle", "description": "Ocorrências" },
+      { "path": "/admin/delivery-management/delivery-receipts", "title": "Comprovantes", "icon": "FileCheck", "description": "Canhotos digitais" },
+      { "path": "/admin/delivery-management/settings", "title": "Configuração Delivery", "icon": "Settings", "description": "Parâmetros logísticos" }
+    ]
+  },
+  {
+    "id": "apoio",
+    "title": "Apoio",
+    "description": "Suporte técnico e serviços",
+    "icon": "LifeBuoy",
+    "color": "#10B981",
+    "pages": [
+      { "path": "/apoio/dashboard", "title": "Dashboard Apoio", "icon": "LayoutDashboard", "description": "KPIs de serviço" },
+      { "path": "/apoio/chamados", "title": "Chamados", "icon": "Ticket", "description": "Gestão de tickets" },
+      { "path": "/apoio/agenda", "title": "Agenda Técnica", "icon": "Calendar", "description": "Escala de técnicos" },
+      { "path": "/apoio/geolocalizacao", "title": "Geolocalização", "icon": "Map", "description": "Mapa de técnicos" },
+      { "path": "/apoio/comodato/clientes", "title": "Clientes Comodato", "icon": "Users", "description": "Base instalada" },
+      { "path": "/apoio/comodato/estoque", "title": "Estoque Comodato", "icon": "Box", "description": "Ativos em clientes" },
+      { "path": "/apoio/comodato/modelos", "title": "Modelos Equip.", "icon": "Component", "description": "Catálogo técnico" },
+      { "path": "/apoio/base-conhecimento", "title": "Base Conhecimento", "icon": "Book", "description": "Manuais e guias" },
+      { "path": "/apoio/faqs", "title": "FAQs", "icon": "HelpCircle", "description": "Perguntas frequentes" },
+      { "path": "/apoio/notificacoes", "title": "Notificações", "icon": "Bell", "description": "Alertas do sistema" },
+      { "path": "/apoio/status", "title": "Status Serviços", "icon": "Activity", "description": "Uptime e saúde" },
+      { "path": "/apoio/relatorios", "title": "Relatórios Apoio", "icon": "FileText", "description": "Métricas de suporte" },
+      { "path": "/apoio/personas", "title": "Personas", "icon": "UserCircle", "description": "Perfis de atendimento" }
+    ]
+  },
+  {
+    "id": "equipment",
+    "title": "Equipment",
+    "description": "Gestão de ativos e manutenção",
+    "icon": "Wrench",
+    "color": "#8B5CF6",
+    "pages": [
+      { "path": "/equipamentos-lista", "title": "Inventário", "icon": "List", "description": "Lista completa" },
+      { "path": "/equipamentos-manutencao", "title": "Manutenção", "icon": "Tool", "description": "Ordens de serviço" },
+      { "path": "/equipamentos-custos", "title": "Custos", "icon": "DollarSign", "description": "TCO e despesas" },
+      { "path": "/equipamentos-performance", "title": "Performance", "icon": "Activity", "description": "Eficiência de ativos" },
+      { "path": "/equipamentos-historico", "title": "Histórico", "icon": "History", "description": "Timeline completa" },
+      { "path": "/equipamentos-relatorio", "title": "Relatórios", "icon": "FileText", "description": "Análises técnicas" },
+      { "path": "/equipamentos-em-campo", "title": "Em Campo", "icon": "MapPin", "description": "Mapa de ativos" },
+      { "path": "/movimentacao-equipamentos", "title": "Movimentação", "icon": "ArrowLeftRight", "description": "Entradas e saídas" },
+      { "path": "/analitico-equipamento", "title": "Analítico Equip.", "icon": "BarChart", "description": "BI de equipamentos" }
+    ]
+  },
+  {
+    "id": "bonificacoes",
+    "title": "Bonificações",
+    "description": "Gestão de benefícios e campanhas",
+    "icon": "Gift",
+    "color": "#F43F5E",
+    "pages": [
+      { "path": "/bonificacoes", "title": "Dashboard", "icon": "LayoutDashboard", "description": "Visão geral" },
+      { "path": "/bonificacoes-lista", "title": "Solicitações", "icon": "List", "description": "Lista de pedidos" },
+      { "path": "/bonificacoes-novo", "title": "Nova Solicitação", "icon": "PlusCircle", "description": "Criar pedido" },
+      { "path": "/bonificacoes-regras", "title": "Regras", "icon": "Scale", "description": "Configuração" },
+      { "path": "/bonificacoes-relatorio", "title": "Relatórios", "icon": "FileText", "description": "Performance" },
+      { "path": "/bonificacoes-historico", "title": "Histórico", "icon": "History", "description": "Log de pagamentos" },
+      { "path": "/bonificacoes-calculadora", "title": "Calculadora", "icon": "Calculator", "description": "Simulador" },
+      { "path": "/produtos-bonificados", "title": "Produtos", "icon": "Package", "description": "Itens elegíveis" },
+      { "path": "/analitico-bonificados", "title": "Analítico", "icon": "PieChart", "description": "BI de bonificação" }
+    ]
+  },
+  {
+    "id": "config",
+    "title": "Config",
+    "description": "Administração do sistema",
+    "icon": "Settings",
+    "color": "#64748B",
+    "pages": [
+      { "path": "/configuracoes", "title": "Geral", "icon": "Settings", "description": "Parâmetros globais" },
+      { "path": "/configuracoes/perfil", "title": "Meu Perfil", "icon": "User", "description": "Dados pessoais" },
+      { "path": "/configuracoes/usuarios", "title": "Usuários", "icon": "Users", "description": "Gestão de acesso" },
+      { "path": "/configuracoes/acessos", "title": "Permissões", "icon": "Shield", "description": "Roles e claims" },
+      { "path": "/configuracoes/aprovadores", "title": "Aprovadores", "icon": "UserCheck", "description": "Fluxo de aprovação" },
+      { "path": "/configuracoes/auditoria", "title": "Auditoria", "icon": "Eye", "description": "Logs de segurança" },
+      { "path": "/configuracoes/logs", "title": "Logs do Sistema", "icon": "Terminal", "description": "Debug técnico" },
+      { "path": "/configuracoes/sistema", "title": "System Health", "icon": "Activity", "description": "Status do servidor" },
+      { "path": "/configuracoes/integracoes", "title": "Integrações", "icon": "Plug", "description": "APIs externas" },
+      { "path": "/configuracoes/notificacoes", "title": "Notificações", "icon": "Bell", "description": "Templates e regras" },
+      { "path": "/configuracoes/faturamento", "title": "Faturamento", "icon": "CreditCard", "description": "Dados de cobrança" },
+      { "path": "/configuracoes/privacidade", "title": "Privacidade", "icon": "Lock", "description": "LGPD e compliance" },
+      { "path": "/configuracoes/sobre", "title": "Sobre", "icon": "Info", "description": "Versão e info" },
+      { "path": "/configuracoes/backup", "title": "Backup", "icon": "Database", "description": "Snapshots" },
+      { "path": "/configuracoes/diagnostico", "title": "Diagnóstico", "icon": "Stethoscope", "description": "Ferramentas de teste" }
+    ]
+  }
+]

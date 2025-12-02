@@ -23,45 +23,41 @@ const TeamsManager = () => {
   const [loading, setLoading] = useState(true);
   const [loadingCommercial, setLoadingCommercial] = useState(false);
   
-  // States for Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState(null);
   
-  // State for Form
   const [editingTeam, setEditingTeam] = useState(null);
   const [formData, setFormData] = useState({ nome: '', supervisor_id: '', descricao: '' });
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [searchMember, setSearchMember] = useState('');
 
-  // State for Import
   const [selectedHierarchy, setSelectedHierarchy] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch existing teams with supervisor and member count
       const { data: teamsData, error: teamsError } = await supabase
         .from('apoio_equipes')
-        .select(`
-          *,
-          supervisor:apoio_usuarios!supervisor_id(id, nome),
-          members:apoio_usuarios!fk_usuarios_equipe(id, nome)
-        `);
-      
+        .select(`*, supervisor:users_unified!supervisor_id(id, nome)`);
       if (teamsError) throw teamsError;
 
-      // 2. Fetch all potential users (supervisors and sellers)
       const { data: usersData, error: usersError } = await supabase
-        .from('apoio_usuarios')
-        .select('id, nome, email, equipe_id, supervisor_id, status')
+        .from('users_unified')
+        .select('id, nome, email, equipe_id, supervisor_id, status, role')
         .eq('status', 'ativo')
         .order('nome');
 
       if (usersError) throw usersError;
 
-      setTeams(teamsData || []);
+      // Manually attach members to teams
+      const teamsWithMembers = teamsData.map(team => ({
+          ...team,
+          members: usersData.filter(u => u.equipe_id === team.id)
+      }));
+
+      setTeams(teamsWithMembers || []);
       setUsers(usersData || []);
     } catch (error) {
       console.error("Error fetching teams:", error);
@@ -87,14 +83,12 @@ const TeamsManager = () => {
     fetchData();
   }, []);
 
-  // Filter available members based on search
   const filteredUsers = users.filter(u => 
     u.nome.toLowerCase().includes(searchMember.toLowerCase())
   );
 
   const handleSave = async () => {
     try {
-      // Validation: Check if supervisor already leads another team (unless it's the same team)
       if (formData.supervisor_id) {
           const existingTeam = teams.find(t => t.supervisor_id === formData.supervisor_id);
           if (existingTeam && (!editingTeam || existingTeam.id !== editingTeam.id)) {
@@ -127,21 +121,16 @@ const TeamsManager = () => {
         toast({ title: 'Equipe criada com sucesso' });
       }
 
-      // Update Members Logic
       if (teamId) {
-          // 1. Reset members who were removed (set equipe_id to null)
-          // In a real scenario, we might want to be more careful, but for now logic is:
-          // Get current members of this team -> if not in selectedMembers -> remove
           const currentMembers = users.filter(u => u.equipe_id === teamId).map(u => u.id);
           const membersToRemove = currentMembers.filter(id => !selectedMembers.includes(id));
           
           if (membersToRemove.length > 0) {
-              await supabase.from('apoio_usuarios').update({ equipe_id: null }).in('id', membersToRemove);
+              await supabase.from('users_unified').update({ equipe_id: null }).in('id', membersToRemove);
           }
 
-          // 2. Add new members
           if (selectedMembers.length > 0) {
-              await supabase.from('apoio_usuarios').update({ equipe_id: teamId }).in('id', selectedMembers);
+              await supabase.from('users_unified').update({ equipe_id: teamId }).in('id', selectedMembers);
           }
       }
 
@@ -162,10 +151,8 @@ const TeamsManager = () => {
     if (!teamToDelete) return;
 
     try {
-        // First, unlink members
-        await supabase.from('apoio_usuarios').update({ equipe_id: null }).eq('equipe_id', teamToDelete.id);
+        await supabase.from('users_unified').update({ equipe_id: null }).eq('equipe_id', teamToDelete.id);
         
-        // Then delete team
         const { error } = await supabase.from('apoio_equipes').delete().eq('id', teamToDelete.id);
         if (error) throw error;
 
@@ -181,7 +168,6 @@ const TeamsManager = () => {
   const openModal = (team = null) => {
     setEditingTeam(team);
     
-    // If editing, pre-select current members
     const currentMembers = team ? users.filter(u => u.equipe_id === team.id).map(u => u.id) : [];
     setSelectedMembers(currentMembers);
 
@@ -196,13 +182,12 @@ const TeamsManager = () => {
   const openImportModal = (hierarchyItem) => {
       setSelectedHierarchy(hierarchyItem);
       
-      // Try to find fuzzy match for supervisor
       const supervisorMatch = users.find(u => 
+          u.role === 'Supervisor' && (
           u.nome.toLowerCase().includes(hierarchyItem.supervisor_nome.toLowerCase()) ||
-          hierarchyItem.supervisor_nome.toLowerCase().includes(u.nome.toLowerCase())
+          hierarchyItem.supervisor_nome.toLowerCase().includes(u.nome.toLowerCase()))
       );
 
-      // Try to find fuzzy matches for sellers
       const suggestedMembers = [];
       hierarchyItem.vendedores.forEach(vendedorName => {
           const match = users.find(u => 
@@ -212,7 +197,7 @@ const TeamsManager = () => {
           if (match) suggestedMembers.push(match.id);
       });
 
-      setEditingTeam(null); // Create new
+      setEditingTeam(null);
       setFormData({
           nome: `Equipe ${hierarchyItem.supervisor_nome}`,
           supervisor_id: supervisorMatch ? supervisorMatch.id : '',
@@ -225,15 +210,15 @@ const TeamsManager = () => {
 
   const handleImportConfirm = () => {
       setIsImportModalOpen(false);
-      setIsModalOpen(true); // Open the main modal to verify/save
+      setIsModalOpen(true);
   };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h2 className="text-lg font-semibold">Equipes Operacionais</h2>
-            <p className="text-sm text-muted-foreground">Gerencie a estrutura de vendas e supervisão.</p>
+            <h2 className="text-lg font-semibold">Equipes Operacionais e Comerciais</h2>
+            <p className="text-sm text-muted-foreground">Gerencie a estrutura de vendas, supervisão e técnica.</p>
         </div>
         <Button onClick={() => openModal()}>
           <Plus className="mr-2 h-4 w-4" /> Nova Equipe Manual
@@ -340,7 +325,6 @@ const TeamsManager = () => {
         </TabsContent>
       </Tabs>
 
-      {/* MODAL DE CRIAÇÃO/EDIÇÃO */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
@@ -350,7 +334,6 @@ const TeamsManager = () => {
           
           <ScrollArea className="flex-1 pr-4">
             <div className="space-y-6 py-4">
-                {/* Dados Básicos */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <Label>Nome da Equipe <span className="text-red-500">*</span></Label>
@@ -358,17 +341,14 @@ const TeamsManager = () => {
                     </div>
                     <div className="space-y-2">
                         <Label>Supervisor Responsável</Label>
-                        <Select value={formData.supervisor_id} onValueChange={v => setFormData({...formData, supervisor_id: v})}>
+                        <Select value={formData.supervisor_id || ''} onValueChange={v => setFormData({...formData, supervisor_id: v})}>
                             <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                             <SelectContent>
-                            {users.map(u => (
-                                <SelectItem key={u.id} value={u.id}>
-                                    {u.nome} {u.supervisor_id ? '(Já reporta a alguém)' : ''}
-                                </SelectItem>
+                            {users.filter(u => u.role === 'Supervisor' || u.role === 'Nivel 1' || u.role === 'Admin').map(u => (
+                                <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                             ))}
                             </SelectContent>
                         </Select>
-                        <p className="text-[10px] text-muted-foreground">O supervisor lidera a equipe.</p>
                     </div>
                 </div>
                 
@@ -377,7 +357,6 @@ const TeamsManager = () => {
                     <Input value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value})} />
                 </div>
 
-                {/* Seleção de Membros */}
                 <div className="border-t pt-4">
                     <Label className="mb-2 block">Membros da Equipe</Label>
                     <div className="flex items-center gap-2 mb-2">
@@ -395,7 +374,6 @@ const TeamsManager = () => {
                             {filteredUsers.map(user => {
                                 const isSelected = selectedMembers.includes(user.id);
                                 const isSupervisor = user.id === formData.supervisor_id;
-                                // Hide if user is the selected supervisor
                                 if (isSupervisor) return null;
 
                                 return (
@@ -439,7 +417,6 @@ const TeamsManager = () => {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL DE IMPORTAÇÃO */}
       <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
           <DialogContent>
               <DialogHeader>
@@ -475,7 +452,6 @@ const TeamsManager = () => {
           </DialogContent>
       </Dialog>
 
-      {/* ALERT DIALOG PARA DELETAR */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

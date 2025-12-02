@@ -1,0 +1,49 @@
+---
+error_id: "ERR-DASH-004"
+category: "B - High"
+page: "/dashboard"
+component: "DashboardAnalytico.jsx"
+severity: "high"
+title: "Performance Degradation due to Client-Side Aggregation"
+description: |
+  O componente DashboardAnalytico realiza uma query direta na tabela 'bd-cl' buscando até 5.000 registros e processando agregações (somas, agrupamentos) no thread principal do JavaScript.
+  Isso causa travamentos na UI em dispositivos mais lentos e consumo excessivo de dados.
+
+root_cause: |
+  Uso de `supabase.from('bd-cl').select(...)` seguido de processamento manual em `chartsData` useMemo hook, em vez de utilizar uma RPC do banco de dados para retornar dados já agregados.
+
+impact: |
+  - Tempo de renderização elevado (> 2s para processar dados)
+  - Transferência de dados desnecessária (JSON grande)
+  - Risco de timeout na requisição
+
+affected_files:
+  - src/pages/DashboardAnalytico.jsx
+
+fix:
+  type: "refactor"
+  priority: "HIGH"
+  files:
+    - path: "src/pages/DashboardAnalytico.jsx"
+      action: "modify"
+      description: "Substituir query direta por chamada RPC `get_analytical_summary` (ou similar)"
+    - path: "supabase_functions.sql"
+      action: "create"
+      description: "Criar função RPC para agregação de dados analíticos"
+
+validation:
+  manual:
+    - "Carregar Dashboard Analítico"
+    - "Verificar tempo de carregamento"
+    - "Verificar payload da rede (deve ser pequeno, apenas totais)"
+  automated:
+    - "Check Network tab size < 50kb"
+
+dependencies:
+  breaks_if_changed: []
+  must_be_applied_with: ["Database Migration"]
+
+rollback:
+  instructions: "Revert changes to DashboardAnalytico.jsx"
+  risk_level: "medium"
+---

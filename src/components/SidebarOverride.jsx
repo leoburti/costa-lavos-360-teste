@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -6,7 +5,11 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, ChevronDown, LayoutDashboard, MessageSquare, BarChart2, Users, MapPin, TrendingUp, Gift, Wrench, Briefcase, CheckSquare, Truck, FileText, LifeBuoy, Calendar, Settings, Shield, Link as LinkIcon, HeartHandshake, Zap } from 'lucide-react';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  ChevronDown, 
+} from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import {
   DropdownMenu,
@@ -24,135 +27,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-
-// Define menu structure locally to ensure stability and no external dependency breakage
-const allMenuItems = [
-  { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, moduleId: 'dashboard_comercial' },
-  { id: 'ai-chat', label: 'AI Chat', path: '/ai-chat', icon: MessageSquare, moduleId: 'senhor_lavos' },
-  {
-    id: 'analitico',
-    label: 'Analítico',
-    icon: BarChart2,
-    moduleId: 'analytics',
-    subItems: [
-      { id: 'analitico-supervisor', label: 'Supervisor', path: '/analitico-supervisor', icon: Users },
-      { id: 'analitico-vendedor', label: 'Vendedor', path: '/analitico-vendedor', icon: Users },
-      { id: 'analitico-regiao', label: 'Região', path: '/analitico-regiao', icon: MapPin },
-      { id: 'analitico-grupo', label: 'Grupo Clientes', path: '/analitico-grupo-clientes', icon: Users },
-      { id: 'analitico-produto', label: 'Produto', path: '/analitico-produto', icon: BarChart2 },
-      { id: 'visao-360', label: 'Visão 360 Cliente', path: '/visao-360-cliente', icon: Users },
-    ]
-  },
-  {
-    id: 'comercial',
-    label: 'Comercial',
-    icon: TrendingUp,
-    moduleId: 'commercial-analysis',
-    subItems: [
-      { id: 'vendas-diarias', label: 'Vendas Diárias', path: '/analitico-vendas-diarias', icon: BarChart2 },
-      { id: 'analise-preditiva', label: 'Análise Preditiva de Vendas', path: '/analise-preditiva-vendas', icon: Zap },
-      { id: 'curva-abc', label: 'Curva ABC', path: '/curva-abc', icon: BarChart2 },
-      { id: 'valor-unitario', label: 'Valor Unitário', path: '/analise-valor-unitario', icon: BarChart2 },
-      { id: 'analise-desempenho-fidelidade', label: 'Desempenho e Fidelidade', path: '/analise-desempenho-fidelidade', icon: TrendingUp },
-    ]
-  },
-  {
-    id: 'equipamentos',
-    label: 'Equipamentos',
-    icon: Wrench,
-    moduleId: 'commercial-analysis',
-    subItems: [
-      { id: 'movimentacao', label: 'Movimentação', path: '/movimentacao-equipamentos', icon: TrendingUp },
-      { id: 'por-cliente', label: 'Por Cliente', path: '/analitico-equipamentos-cliente', icon: BarChart2 },
-      { id: 'por-equipamento', label: 'Por Equipamento', path: '/analitico-equipamento', icon: Wrench },
-      { id: 'em-campo', label: 'Em Campo', path: '/equipamentos-em-campo', icon: MapPin },
-    ]
-  },
-  {
-    id: 'gestao',
-    label: 'Gestão',
-    icon: Briefcase,
-    moduleId: 'managerial-analysis',
-    subItems: [
-      { id: 'raio-x-supervisor', label: 'Raio-X Supervisor', path: '/raio-x-supervisor', icon: Users },
-      { id: 'raio-x-vendedor', label: 'Raio-X Vendedor', path: '/raio-x-vendedor', icon: Users },
-    ]
-  },
-  { id: 'bonificacoes', label: 'Bonificações', path: '/bonificacoes', icon: Gift, moduleId: 'bonificacoes' },
-  { id: 'tarefas', label: 'Tarefas', path: '/tarefas', icon: CheckSquare, moduleId: 'tarefas' },
-  {
-    id: 'delivery',
-    label: 'Entregas',
-    icon: Truck,
-    moduleId: 'delivery',
-    subItems: [
-      { id: 'delivery-dash', label: 'Dashboard', path: '/admin/delivery-management', icon: LayoutDashboard },
-      { id: 'delivery-list', label: 'Entregas', path: '/admin/delivery-management/deliveries', icon: Truck },
-      { id: 'delivery-drivers', label: 'Motoristas', path: '/admin/delivery-management/drivers', icon: Users },
-      { id: 'delivery-routes', label: 'Rotas', path: '/admin/delivery-management/route-optimization', icon: MapPin },
-      { id: 'delivery-customers', label: 'Clientes', path: '/admin/delivery-management/customers', icon: Users },
-      { id: 'delivery-disputes', label: 'Disputas', path: '/admin/delivery-management/disputes', icon: FileText },
-      { id: 'delivery-reports', label: 'Relatórios', path: '/admin/delivery-management/reports', icon: BarChart2 },
-      { id: 'delivery-receipts', label: 'Comprovantes', path: '/admin/delivery-management/delivery-receipts', icon: FileText },
-      { id: 'delivery-settings', label: 'Configurações', path: '/admin/delivery-management/settings', icon: Settings },
-    ]
-  },
-  {
-    id: 'crm',
-    label: 'CRM',
-    icon: Users,
-    crmRequired: true,
-    moduleId: 'crm',
-    subItems: [
-      { id: 'crm-pipeline', label: 'Pipeline', path: '/crm/pipeline', icon: TrendingUp },
-      { id: 'crm-relationship', label: 'Relacionamento', path: '/crm/relationship', icon: HeartHandshake },
-      { id: 'crm-contacts', label: 'Contatos', path: '/crm/contacts', icon: Users },
-      { id: 'crm-contracts', label: 'Contratos', path: '/crm/comodato-contracts', icon: FileText },
-      { id: 'crm-automations', label: 'Automações', path: '/crm/automations', icon: Settings },
-      { id: 'crm-reports', label: 'Relatórios', path: '/crm/reports', icon: BarChart2 },
-      { id: 'crm-team', label: 'Equipe', path: '/crm/team', icon: Users },
-    ]
-  },
-  {
-    id: 'apoio',
-    label: 'Apoio',
-    icon: LifeBuoy,
-    moduleId: 'apoio',
-    subItems: [
-      { id: 'apoio-chamados', label: 'Chamados', path: '/admin/apoio/chamados', icon: MessageSquare },
-      { id: 'apoio-comodato', label: 'Comodato', path: '/admin/apoio/comodato', icon: FileText },
-      { id: 'apoio-agenda', label: 'Agenda', path: '/admin/apoio/agenda', icon: Calendar },
-      { id: 'apoio-geo', label: 'Geolocalização', path: '/admin/apoio/geolocalizacao', icon: MapPin },
-      { id: 'apoio-manutencao', label: 'Manutenção', path: '/admin/apoio/manutencao-equipamentos', icon: Wrench },
-      { id: 'apoio-relatorios', label: 'Relatórios', path: '/admin/apoio/relatorios', icon: BarChart2 },
-    ]
-  },
-  {
-    id: 'configuracoes',
-    label: 'Configurações',
-    icon: Settings,
-    moduleId: 'configuracoes',
-    subItems: [
-      { id: 'conf-perfil', label: 'Perfil', path: '/configuracoes/perfil', icon: Users },
-      { id: 'conf-equipe', label: 'Gestão de Equipe', path: '/configuracoes/gestao-equipe', icon: Users },
-      { id: 'conf-seguranca', label: 'Segurança', path: '/configuracoes/seguranca', icon: Shield },
-      { id: 'conf-integracoes', label: 'Integrações', path: '/configuracoes/integracoes', icon: LinkIcon },
-      { id: 'conf-notificacoes', label: 'Notificações', path: '/configuracoes/notificacoes', icon: MessageSquare },
-      { id: 'conf-faturamento', label: 'Faturamento', path: '/configuracoes/faturamento', icon: FileText },
-      { id: 'conf-backup', label: 'Backup', path: '/configuracoes/backup', icon: FileText },
-      { id: 'conf-logs', label: 'Logs', path: '/configuracoes/logs', icon: FileText },
-      { id: 'conf-diagnostico', label: 'Diagnóstico', path: '/configuracoes/diagnostico', icon: Wrench },
-    ]
-  }
-];
+import { menuStructure } from '@/config/menuStructure';
 
 // Safe Permission Filtering
-const filterMenuByPermissions = (menu, userContext) => {
-    if (!userContext) return [];
+const filterMenuByPermissions = (menu, user) => {
+    if (!user) return [];
     
-    const { role, canAccessCrm, modulePermissions } = userContext;
+    const role = user.role;
+    const canAccessCrm = user.can_access_crm; 
+    const modulePermissions = user.module_permissions || user.permissions || {};
     
-    // Normalize admin roles for permission check
     const isAdmin = ['admin', 'nivel 1', 'nível 1', 'nivel 5', 'nível 5'].includes(role?.toLowerCase());
 
     const filter = (items) => items.map(item => {
@@ -164,9 +48,17 @@ const filterMenuByPermissions = (menu, userContext) => {
             return item;
         }
 
-        const moduleMatch = !item.moduleId || (modulePermissions && modulePermissions[item.moduleId]);
+        let moduleMatch = false;
+        if (!item.moduleId) {
+            moduleMatch = true;
+        } else {
+            if (Array.isArray(modulePermissions)) {
+                moduleMatch = modulePermissions.includes(item.moduleId);
+            } else {
+                moduleMatch = !!modulePermissions[item.moduleId];
+            }
+        }
 
-        // IMPORTANT: If canAccessCrm is undefined, assume false to be safe
         const crmAccessMatch = !item.crmRequired || (canAccessCrm === true);
 
         if (!moduleMatch || (item.crmRequired && !crmAccessMatch)) return null;
@@ -315,20 +207,18 @@ const SidebarSubItemDropdown = ({ item }) => {
 
 const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpen }) => {
     const location = useLocation();
-    const { userContext, loading } = useAuth();
+    const { user, loading } = useAuth();
     const [openGroups, setOpenGroups] = useState([]);
 
     const menuItems = useMemo(() => {
-        // Only return empty if loading AND we absolutely have no user data
-        // This prevents flickering if userContext updates slowly
-        if (loading && !userContext) return [];
+        if (loading && !user) return [];
         try {
-            return filterMenuByPermissions(allMenuItems, userContext || {});
+            return filterMenuByPermissions(menuStructure, user || {});
         } catch (error) {
             console.error("Error filtering menu items:", error);
             return [];
         }
-    }, [userContext, loading]);
+    }, [user, loading]);
 
     const toggleGroup = (id) => {
         setOpenGroups(prev =>
@@ -350,8 +240,9 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
         return false;
     };
 
-    // Force refresh of displayed role to ensure it's not hardcoded
-    const displayRole = userContext?.role || '...';
+    const displayName = user?.fullName || user?.email || 'Usuário';
+    const displayRole = user?.role || '...';
+    const displayInitial = displayName.charAt(0).toUpperCase();
 
     const SidebarContent = () => (
         <div className="flex flex-col h-full bg-[#6B2C2C] text-white border-r border-[#7D3E3E]">
@@ -361,22 +252,13 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
             )}>
                 {!isCollapsed ? (
                     <div className="flex items-center gap-3 overflow-hidden">
-                        <img
-                            src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png"
-                            alt="Logo"
-                            className="h-8 w-auto object-contain"
-                        />
                         <div className="flex flex-col">
                             <span className="font-bold text-white text-sm leading-tight whitespace-nowrap">Costa Lavos</span>
-                            <span className="text-[10px] text-[#F5E6D3]/80 leading-tight">360°</span>
+                            <span className="text-[10px] text-[#F5E6D3]/80 leading-tight">360° Enterprise</span>
                         </div>
                     </div>
                 ) : (
-                    <img
-                        src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png"
-                        alt="Logo"
-                        className="h-8 w-auto object-contain"
-                    />
+                    <span className="font-bold text-white text-lg">CL</span>
                 )}
 
                 <Button
@@ -407,13 +289,15 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
             <div className="p-4 border-t border-[#7D3E3E] mt-auto bg-[#6B2C2C]">
                  {!isCollapsed ? (
                     <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-[#F5E6D3]/20 flex items-center justify-center text-[#F5E6D3] border border-[#F5E6D3]/30">
+                        <div className="h-8 w-8 rounded-full bg-[#F5E6D3]/20 flex items-center justify-center text-[#F5E6D3] border border-[#F5E6D3]/30 shrink-0">
                             <span className="text-xs font-bold">
-                                {userContext?.fullName?.charAt(0) || 'U'}
+                                {displayInitial}
                             </span>
                         </div>
-                        <div className="flex flex-col overflow-hidden">
-                            <span className="text-sm font-medium text-white truncate" title={userContext?.fullName}>{userContext?.fullName || 'Usuário'}</span>
+                        <div className="flex flex-col overflow-hidden min-w-0">
+                            <span className="text-sm font-medium text-white truncate" title={displayName}>
+                                {displayName}
+                            </span>
                             <span className="text-xs text-[#F5E6D3]/80 truncate" title={displayRole}>
                                 {displayRole}
                             </span>
@@ -421,9 +305,9 @@ const SidebarOverride = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpe
                     </div>
                  ) : (
                     <div className="flex justify-center">
-                        <div className="h-8 w-8 rounded-full bg-[#F5E6D3]/20 flex items-center justify-center text-[#F5E6D3] border border-[#F5E6D3]/30">
+                        <div className="h-8 w-8 rounded-full bg-[#F5E6D3]/20 flex items-center justify-center text-[#F5E6D3] border border-[#F5E6D3]/30 shrink-0" title={`${displayName} (${displayRole})`}>
                             <span className="text-xs font-bold">
-                                {userContext?.fullName?.charAt(0) || 'U'}
+                                {displayInitial}
                             </span>
                         </div>
                     </div>

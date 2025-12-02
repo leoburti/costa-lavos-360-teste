@@ -1,0 +1,23 @@
+[
+  {
+    "id": "analytics",
+    "title": "Analytics",
+    "pages": [
+      { "path": "/dashboard", "title": "Dashboard Principal" },
+      { "path": "/visao-360-cliente", "title": "Visão 360°" },
+      { "path": "/analitico-supervisor", "title": "Analítico Supervisor" },
+      { "path": "/analitico-vendedor", "title": "Analítico Vendedor" },
+      { "path": "/analitico-regiao", "title": "Analítico Região" },
+      { "path": "/analitico-grupo-clientes", "title": "Analítico Grupos" },
+      { "path": "/analitico-produto", "title": "Analítico Produtos" },
+      { "path": "/analitico-vendas-diarias", "title": "Vendas Diárias" },
+      { "path": "/analise-preditiva-vendas", "title": "Previsão de Vendas" },
+      { "path": "/curva-abc", "title": "Curva ABC" },
+      { "path": "/analise-valor-unitario", "title": "Valor Unitário" },
+      { "path": "/analise-desempenho-fidelidade", "title": "Desempenho & Fidelidade" },
+      { "path": "/analise-sazonalidade", "title": "Sazonalidade" },
+      { "path": "/analise-margem", "title": "Análise de Margem" },
+      { "path": "/analise-churn", "title": "Análise de Churn" }
+    ]
+  }
+]

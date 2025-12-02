@@ -1,0 +1,38 @@
+---
+error_id: "ERR-VISAO-001"
+category: "B - High"
+page: "/visao-360-cliente"
+component: "Visao360ClientePage.jsx"
+severity: "high"
+title: "Charts Crash on Empty Dataset"
+description: |
+  Gráficos de vendas falham ao tentar renderizar quando o array de dados está vazio ou contém valores nulos, causando erro na biblioteca Recharts ou renderização visual quebrada.
+
+root_cause: |
+  Falta de verificação de `data.length > 0` antes de renderizar componentes `<ResponsiveContainer>` ou `<LineChart>`.
+
+impact: |
+  - Página quebra ou exibe espaços em branco feios
+  - Usuário perde confiança na ferramenta
+
+affected_files:
+  - src/pages/dashboard/Visao360ClientePage.jsx
+
+fix:
+  type: "code_change"
+  priority: "HIGH"
+  files:
+    - path: "src/pages/dashboard/Visao360ClientePage.jsx"
+      action: "modify"
+      description: "Adicionar condicional EmptyState antes dos gráficos"
+
+validation:
+  manual:
+    - "Acessar cliente sem vendas"
+    - "Verificar exibição de mensagem 'Sem dados para exibir'"
+
+dependencies: []
+rollback:
+  instructions: "Remove conditional check"
+  risk_level: "low"
+---

@@ -3,35 +3,42 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { LogOut, Construction, Clock, AlertTriangle } from 'lucide-react';
-import { format, differenceInSeconds } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { LogOut, Construction, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
+import { calculateTimeRemaining, getMaintenanceInfo } from '@/utils/maintenance';
 import { Helmet } from 'react-helmet-async';
 
 const MaintenancePage = ({ endTime, message }) => {
   const { signOut } = useAuth();
-  const [timeLeft, setTimeLeft] = useState('');
+  const maintenanceInfo = getMaintenanceInfo();
+  
+  // Use props or fallback to utils
+  const targetDate = endTime || maintenanceInfo.returnDate;
+  const displayMessage = message || maintenanceInfo.message;
+
+  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [formattedTime, setFormattedTime] = useState('');
 
   useEffect(() => {
-    if (!endTime) return;
+    const updateTime = () => {
+        const time = calculateTimeRemaining(targetDate);
+        setTimeLeft(time);
+        
+        if (time.total <= 0) {
+            setFormattedTime('Em instantes...');
+        } else {
+            // Format: 05d 03h 30m 45s
+            const d = time.days > 0 ? `${String(time.days).padStart(2, '0')}d ` : '';
+            const h = `${String(time.hours).padStart(2, '0')}h `;
+            const m = `${String(time.minutes).padStart(2, '0')}m `;
+            const s = `${String(time.seconds).padStart(2, '0')}s`;
+            setFormattedTime(`${d}${h}${m}${s}`);
+        }
+    };
 
-    const interval = setInterval(() => {
-      const end = new Date(endTime);
-      const now = new Date();
-      const diff = differenceInSeconds(end, now);
-
-      if (diff <= 0) {
-        setTimeLeft('Em instantes...');
-      } else {
-        const hours = Math.floor(diff / 3600);
-        const minutes = Math.floor((diff % 3600) / 60);
-        const seconds = diff % 60;
-        setTimeLeft(`${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`);
-      }
-    }, 1000);
-
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, [endTime]);
+  }, [targetDate]);
 
   return (
     <>
@@ -65,35 +72,37 @@ const MaintenancePage = ({ endTime, message }) => {
               <div className="space-y-4">
                 <h1 className="text-4xl font-bold text-primary tracking-tight">Sistema em Manutenção</h1>
                 <p className="text-lg text-muted-foreground max-w-lg mx-auto leading-relaxed">
-                  {message || "Estamos realizando melhorias importantes na plataforma. O acesso está temporariamente restrito para garantir a integridade dos dados."}
+                  {displayMessage}
                 </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto mt-8">
-                {endTime && (
-                  <div className="bg-muted/20 p-4 rounded-lg border border-border/50">
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1 text-xs uppercase tracking-wider font-semibold">
-                      <Clock className="h-3 w-3" /> Retorno Previsto
-                    </div>
-                    <div className="text-2xl font-mono font-bold text-blue-400">
-                      {format(new Date(endTime), "HH:mm 'do dia' dd/MM", { locale: ptBR })}
-                    </div>
+                <div className="bg-muted/20 p-4 rounded-lg border border-border/50">
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1 text-xs uppercase tracking-wider font-semibold">
+                    <Clock className="h-3 w-3" /> Retorno Previsto
                   </div>
-                )}
+                  <div className="text-lg font-mono font-bold text-blue-400 break-words">
+                    {targetDate}
+                  </div>
+                </div>
                 
-                {endTime && (
-                  <div className="bg-muted/20 p-4 rounded-lg border border-border/50">
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1 text-xs uppercase tracking-wider font-semibold">
-                      <AlertTriangle className="h-3 w-3" /> Tempo Restante
-                    </div>
-                    <div className="text-2xl font-mono font-bold text-emerald-400">
-                      {timeLeft}
-                    </div>
+                <div className="bg-muted/20 p-4 rounded-lg border border-border/50">
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground mb-1 text-xs uppercase tracking-wider font-semibold">
+                    <AlertTriangle className="h-3 w-3" /> Tempo Restante
                   </div>
-                )}
+                  <div className="text-2xl font-mono font-bold text-emerald-400">
+                    {formattedTime}
+                  </div>
+                </div>
               </div>
 
-              <div className="pt-8 border-t border-border/50">
+              <div className="pt-8 border-t border-border/50 flex justify-center gap-4">
+                <Button 
+                  onClick={() => window.location.reload()}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" /> Tentar Novamente
+                </Button>
                 <Button 
                   onClick={signOut}
                   variant="outline" 

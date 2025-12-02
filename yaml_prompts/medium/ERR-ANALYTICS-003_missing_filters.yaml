@@ -1,0 +1,37 @@
+---
+error_id: "ERR-ANALYTICS-003"
+category: "C - Medium"
+page: "/analitico-vendedor"
+component: "AnaliticoVendedor.jsx"
+severity: "medium"
+title: "Incomplete Filter Integration (Exclude Employees)"
+description: |
+  Algumas páginas analíticas não estão respeitando o filtro global "Excluir Funcionários", resultando em dados distorcidos por vendas internas.
+
+root_cause: |
+  O parâmetro `p_exclude_employees` não está sendo passado ou está hardcoded como `false` nas chamadas RPC.
+
+impact: |
+  - Dados incorretos em relatórios de vendas.
+  - Perda de confiança nos dados.
+
+affected_files:
+  - src/pages/AnaliticoVendedor.jsx
+  - src/pages/AnaliseClientes.jsx
+
+fix:
+  type: "code_change"
+  priority: "MEDIUM"
+  files:
+    - path: "src/pages/AnaliticoVendedor.jsx"
+      action: "modify"
+      description: "Integrar 'filters.excludeEmployees' na chamada RPC."
+    - path: "src/pages/AnaliseClientes.jsx"
+      action: "modify"
+      description: "Integrar 'filters.excludeEmployees' na chamada RPC."
+
+validation:
+  manual:
+    - "Ativar filtro 'Excluir Funcionários'"
+    - "Verificar se vendas de funcionários somem dos resultados"
+---

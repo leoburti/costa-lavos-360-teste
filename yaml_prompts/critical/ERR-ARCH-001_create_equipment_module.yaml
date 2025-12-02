@@ -1,0 +1,19 @@
+task: "Scaffold Equipment Module Structure"
+severity: "Critical"
+context: "The current system uses dispersed files for equipment management. We need to consolidate them into a cohesive module at src/pages/equipment/."
+files_to_create:
+  - "src/pages/equipment/EquipamentosLayout.jsx"
+  - "src/pages/equipment/EquipamentosList.jsx"
+  - "src/pages/equipment/EquipamentosDetalhes.jsx"
+  - "src/pages/equipment/EquipamentosManutencao.jsx"
+  - "src/pages/equipment/EquipamentosPerformance.jsx"
+  - "src/pages/equipment/EquipamentosRelatorio.jsx"
+files_to_modify:
+  - "src/App.jsx"
+  - "src/constants/routes.js"
+requirements:
+  - "Create a Layout component for Equipment with its own Sidebar/Navigation if needed, or use the main Layout."
+  - "Implement standard listing page with server-side pagination using `get_paginated_clients` or similar pattern."
+  - "Ensure strict Route constants usage."
+  - "Do NOT delete old files yet; create new structure in parallel."
+  - "Use `useAnalyticalData` hook for data fetching."

@@ -1,457 +1,334 @@
-
-import React, { useState, useMemo, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutGrid, MessageSquare, LineChart, BarChartHorizontal, Settings, X, Truck, Users, BarChart3, LogOut, KeyRound as UsersRound, GanttChartSquare, Bot, Users2, KeyRound, CalendarCheck, FileSignature, Route, ShieldCheck, Box, History, FilePieChart, Wrench, Briefcase, Gift, ListTodo, HeartHandshake as Handshake, Package, FileText, FilePlus, FileMinus, Repeat, Bell, FileQuestion, ClipboardList, CalendarDays, CalendarClock, CalendarX, AlertTriangle, MapPin, Compass, Database, PlugZap, LifeBuoy, RotateCcw, TrendingUp, Calendar, AlertCircle, Clock, CheckCircle, XCircle, Lock, Archive, Navigation, Loader2 } from 'lucide-react';
-import { cn } from "@/lib/utils";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import React from 'react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { Button } from '@/components/ui/button';
+import { useLocation, Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import ChangePasswordDialog from '@/components/ChangePasswordDialog';
-import LoadingSpinner from './LoadingSpinner';
+  LayoutDashboard,
+  BarChart3,
+  TrendingUp,
+  DollarSign,
+  Users,
+  Zap,
+  ChevronDown,
+  Settings,
+  LogOut,
+  Search,
+  Calendar,
+  History,
+  Shield,
+  LineChart,
+  PieChart,
+  Package,
+  Truck,
+  Wrench,
+  Gift
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-// Centralized menu definition
-export const allMenuItems = [
-  { path: '/dashboard', id: 'dashboard_comercial', label: 'Dashboard Comercial', icon: LayoutGrid, moduleId: 'dashboard_comercial' },
-  { path: '/ai-chat', id: 'senhor_lavos', label: 'Senhor Lavos', icon: MessageSquare, moduleId: 'senhor_lavos' },
-  {
-    id: 'analytics', label: 'Analytics', icon: LineChart, moduleId: 'analytics',
-    subItems: [
-      { path: '/analitico-supervisor', id: 'analitico_supervisor', label: 'Supervisor', moduleId: 'analytics' },
-      { path: '/analitico-vendedor', id: 'analitico_vendedor', label: 'Vendedor', moduleId: 'analytics' },
-      { path: '/analitico-regiao', id: 'analitico_regiao', label: 'Região', moduleId: 'analytics' },
-      { path: '/analitico-grupo-clientes', id: 'analitico_grupo_clientes', label: 'Grupos de Clientes', moduleId: 'analytics' },
-      { path: '/analitico-produto', id: 'analitico_produto', label: 'Produto', moduleId: 'analytics' },
-      { path: '/visao-360-cliente', id: 'visao_360_cliente', label: 'Visão 360° Cliente', moduleId: 'analytics' },
-    ]
-  },
-  {
-    id: 'commercial-analysis', label: 'Análise Comercial', icon: BarChartHorizontal, moduleId: 'commercial-analysis',
-    subItems: [
-      { path: '/analitico-vendas-diarias', id: 'analitico_vendas_diarias', label: 'Vendas Diárias', moduleId: 'commercial-analysis' },
-      { path: '/analise-preditiva-vendas', id: 'analise_preditiva_vendas', label: 'Análise Preditiva', moduleId: 'commercial-analysis' },
-      { path: '/curva-abc', id: 'curva_abc', label: 'Curva ABC', moduleId: 'commercial-analysis' },
-      { path: '/analise-valor-unitario', id: 'analise_valor_unitario', label: 'Análise Valor Unitário', moduleId: 'commercial-analysis' },
-      { path: '/analise-desempenho-fidelidade', id: 'analise_desempenho_fidelidade', label: 'Desempenho e Fidelidade', moduleId: 'commercial-analysis' },
-      { path: '/analise-clientes', id: 'analise_clientes', label: 'Análise de Clientes', moduleId: 'commercial-analysis' },
-      { path: '/analise-produtos', id: 'analise_produtos', label: 'Análise de Produtos', moduleId: 'commercial-analysis' },
-      { path: '/analise-sazonalidade', id: 'analise_sazonalidade', label: 'Análise Sazonalidade', moduleId: 'commercial-analysis' },
-      { path: '/analise-margem', id: 'analise_margem', label: 'Análise de Margem', moduleId: 'commercial-analysis' },
-      {
-        id: 'equipamentos', label: 'Equipamentos', moduleId: 'commercial-analysis',
-        subItems: [
-          { path: '/movimentacao-equipamentos', id: 'movimentacao_equipamentos', label: 'Movimentação', moduleId: 'commercial-analysis' },
-          { path: '/analitico-equipamentos-cliente', id: 'analitico_equipamentos_cliente', label: 'Análise por Cliente', moduleId: 'commercial-analysis' },
-          { path: '/analitico-equipamento', id: 'analitico_equipamento', label: 'Análise por Equipamento', moduleId: 'commercial-analysis' },
-          { path: '/equipamentos-em-campo', id: 'equipamentos_em_campo', label: 'Equipamentos em Campo', moduleId: 'commercial-analysis' },
-        ]
-      },
-    ]
-  },
-  {
-    id: 'managerial-analysis', label: 'Análise Gerencial', icon: Briefcase, moduleId: 'managerial-analysis',
-    subItems: [
-        {
-            id: 'raio-x', label: 'Raio-X', moduleId: 'managerial-analysis',
-            subItems: [
-                { path: '/raio-x-supervisor', id: 'raio_x_supervisor', label: 'Supervisor', moduleId: 'managerial-analysis' },
-                { path: '/raio-x-vendedor', id: 'raio_x_vendedor', label: 'Vendedor', moduleId: 'managerial-analysis' },
-            ]
-        }
-    ]
-  },
-  {
-    id: 'apoio', label: 'APoio', icon: LifeBuoy, moduleId: 'apoio',
-    subItems: [
-      {
-        id: 'apoio_comodato', label: 'Comodato', icon: Package, moduleId: 'apoio',
-        subItems: [
-          { path: '/apoio/comodato/clientes', id: 'apoio_comodato_clientes', label: 'Clientes', icon: Users, moduleId: 'apoio' },
-          { path: '/apoio/comodato/modelos', id: 'apoio_comodato_modelos', label: 'Modelos de Equip.', icon: Package, moduleId: 'apoio' },
-          { path: '/apoio/comodato/entrega', id: 'apoio_comodato_entrega', label: 'Solicitar Entrega', icon: Truck, moduleId: 'apoio' },
-          { path: '/apoio/comodato/troca', id: 'apoio_comodato_troca', label: 'Solicitar Troca', icon: RotateCcw, moduleId: 'apoio' },
-          { path: '/apoio/comodato/retirada', id: 'apoio_comodato_retirada', label: 'Solicitar Retirada', icon: LogOut, moduleId: 'apoio' }
-        ]
-      },
-      {
-        id: 'apoio_chamados', label: 'Chamados', icon: MessageSquare, moduleId: 'apoio',
-        subItems: [
-          { path: '/apoio/chamados/todos', id: 'apoio_chamados_todos', label: 'Todos', icon: MessageSquare, moduleId: 'apoio' },
-          { path: '/apoio/chamados/abertos', id: 'apoio_chamados_abertos', label: 'Abertos', icon: AlertCircle, moduleId: 'apoio' },
-          { path: '/apoio/chamados/em-andamento', id: 'apoio_chamados_em_andamento', label: 'Em Andamento', icon: Clock, moduleId: 'apoio' },
-          { path: '/apoio/chamados/resolvidos', id: 'apoio_chamados_resolvidos', label: 'Resolvidos', icon: CheckCircle, moduleId: 'apoio' },
-          { path: '/apoio/chamados/fechados', id: 'apoio_chamados_fechados', label: 'Fechados', icon: XCircle, moduleId: 'apoio' }
-        ]
-      },
-      {
-        id: 'apoio_agenda', label: 'Agenda', icon: Calendar, moduleId: 'apoio',
-        subItems: [
-          { path: '/apoio/agenda/minha-agenda', id: 'apoio_agenda_minha', label: 'Minha Agenda', icon: Calendar, moduleId: 'apoio' },
-          { path: '/apoio/agenda/equipe', id: 'apoio_agenda_equipe', label: 'Agenda da Equipe', icon: Users, moduleId: 'apoio' },
-          { path: '/apoio/agenda/disponibilidade', id: 'apoio_agenda_disponibilidade', label: 'Disponibilidade', icon: CalendarCheck, moduleId: 'apoio' },
-          { path: '/apoio/agenda/bloqueios', id: 'apoio_agenda_bloqueios', label: 'Bloqueios', icon: Lock, moduleId: 'apoio' },
-          { path: '/apoio/agenda/conflitos', id: 'apoio_agenda_conflitos', label: 'Conflitos', icon: AlertCircle, moduleId: 'apoio' }
-        ]
-      },
-      {
-        id: 'apoio_notificacoes_module', label: 'Notificações', icon: Bell, moduleId: 'apoio',
-        subItems: [
-          { path: '/apoio/notificacoes/minhas', id: 'apoio_notificacoes_minhas', label: 'Minhas Notificações', icon: Bell, moduleId: 'apoio' },
-          { path: '/apoio/notificacoes/nao-lidas', id: 'apoio_notificacoes_nao_lidas', label: 'Não Lidas', icon: AlertCircle, moduleId: 'apoio' },
-          { path: '/apoio/notificacoes/arquivadas', id: 'apoio_notificacoes_arquivadas', label: 'Arquivadas', icon: Archive, moduleId: 'apoio' },
-          { path: '/apoio/notificacoes/preferencias', id: 'apoio_notificacoes_preferencias', label: 'Preferências', icon: Settings, moduleId: 'apoio' }
-        ]
-      },
-      {
-        id: 'apoio_geo_checkin', label: 'Geolocalização', icon: MapPin, moduleId: 'apoio',
-        subItems: [
-          { path: '/apoio/geolocalizacao/checkin-checkout', id: 'apoio_geo_checkin_checkout', label: 'Check-in/Check-out', icon: MapPin, moduleId: 'apoio' },
-          { path: '/apoio/geolocalizacao/rastreamento', id: 'apoio_geo_rastreamento', label: 'Rastreamento', icon: Navigation, moduleId: 'apoio' },
-          { path: '/apoio/geolocalizacao/rotas', id: 'apoio_geo_rotas', label: 'Rotas', icon: Route, moduleId: 'apoio' },
-          { path: '/apoio/geolocalizacao/historico', id: 'apoio_geo_historico', label: 'Histórico', icon: History, moduleId: 'apoio' },
-          { path: '/apoio/geolocalizacao/relatorios', id: 'apoio_geo_relatorios', label: 'Relatórios', icon: BarChart3, moduleId: 'apoio' }
-        ]
-      },
-      {
-        id: 'apoio_relatorios', label: 'Relatórios', icon: BarChart3, moduleId: 'apoio',
-        subItems: [
-          { path: '/apoio/relatorios/dashboard', id: 'apoio_rel_dashboard', label: 'Dashboard', icon: BarChart3, moduleId: 'apoio' },
-          { path: '/apoio/relatorios/operacional', id: 'apoio_rel_operacional', label: 'Operacional', icon: TrendingUp, moduleId: 'apoio' },
-          { path: '/apoio/relatorios/alertas', id: 'apoio_rel_alertas', label: 'Alertas', icon: AlertTriangle, moduleId: 'apoio' },
-          { path: '/apoio/relatorios/personalizado', id: 'apoio_rel_personalizado', label: 'Personalizado', icon: Settings, moduleId: 'apoio' }
-        ]
+const MENU_ITEMS = {
+  admin: [
+    {
+      label: 'Dashboards',
+      icon: LayoutDashboard,
+      path: null,
+      submenu: [
+        { label: 'Principal', path: '/dashboard' },
+        { label: 'Visão 360°', path: '/visao-360-cliente' },
+      ]
+    },
+    {
+      label: 'Analítico Geral',
+      icon: BarChart3,
+      path: null,
+      submenu: [
+        { label: 'Supervisor', path: '/analitico-supervisor' },
+        { label: 'Vendedor', path: '/analitico-vendedor' },
+        { label: 'Região', path: '/analitico-regiao' },
+        { label: 'Grupo Clientes', path: '/analitico-grupo-clientes' },
+        { label: 'Mix Produtos', path: '/analitico-produto' },
+      ],
+    },
+    {
+      label: 'Analíticos Diários',
+      icon: Calendar,
+      path: null,
+      submenu: [
+        { label: 'Vendas Diárias', path: '/analitico-vendas-diarias' },
+      ],
+    },
+    {
+      label: 'Análises Estratégicas',
+      icon: LineChart,
+      path: null,
+      submenu: [
+        { label: 'Previsão de Vendas', path: '/analise-preditiva-vendas' },
+        { label: 'Curva ABC', path: '/curva-abc' },
+        { label: 'Valor Unitário', path: '/analise-valor-unitario' },
+        { label: 'Desempenho & Fidelidade', path: '/analise-desempenho-fidelidade' },
+        { label: 'Sazonalidade', path: '/analise-sazonalidade' },
+        { label: 'Margem', path: '/analise-margem' },
+        { label: 'Churn (Perdas)', path: '/analise-churn' },
+      ],
+    },
+    {
+      label: 'Central Relatórios',
+      icon: History,
+      path: null,
+      submenu: [
+        { label: 'Dashboard Relatórios', path: '/relatorio-dashboard' },
+        { label: 'Buscador', path: '/relatorio-buscador' },
+        { label: 'Notificações', path: '/notificacoes' },
+        { label: 'Agendamento', path: '/agendamento' },
+        { label: 'Histórico', path: '/historico' },
+      ]
+    },
+    {
+      label: 'Relatórios Vendas',
+      icon: TrendingUp,
+      path: null,
+      submenu: [
+        { label: 'Diário', path: '/relatorio-vendas-diario' },
+        { label: 'Mensal', path: '/relatorio-vendas-mensal' },
+        { label: 'Anual', path: '/relatorio-vendas-anual' },
+        { label: 'Por Vendedor', path: '/relatorio-vendas-por-vendedor' },
+        { label: 'Por Região', path: '/relatorio-vendas-por-regiao' },
+        { label: 'Por Cliente', path: '/relatorio-vendas-por-cliente' },
+        { label: 'Por Produto', path: '/relatorio-vendas-por-produto' },
+        { label: 'Comparativo', path: '/relatorio-vendas-comparativo' },
+      ],
+    },
+    {
+      label: 'Desempenho',
+      icon: PieChart,
+      path: null,
+      submenu: [
+        { label: 'Vendedor', path: '/relatorio-desempenho-vendedor' },
+        { label: 'Supervisor', path: '/relatorio-desempenho-supervisor' },
+        { label: 'Região', path: '/relatorio-desempenho-regiao' },
+        { label: 'Meta', path: '/relatorio-desempenho-meta' },
+        { label: 'KPI', path: '/relatorio-desempenho-kpi' },
+        { label: 'Ranking', path: '/relatorio-desempenho-ranking' },
+        { label: 'Evolução', path: '/relatorio-desempenho-evolucao' },
+      ],
+    },
+    {
+      label: 'Financeiro',
+      icon: DollarSign,
+      path: null,
+      submenu: [
+        { label: 'Receita', path: '/relatorio-financeiro-receita' },
+        { label: 'Margem', path: '/relatorio-financeiro-margem' },
+        { label: 'Fluxo Caixa', path: '/relatorio-financeiro-fluxo-caixa' },
+        { label: 'Contas Receber', path: '/relatorio-financeiro-contas-receber' },
+        { label: 'Custos', path: '/relatorio-financeiro-custos' },
+        { label: 'Lucratividade', path: '/relatorio-financeiro-lucratividade' },
+      ],
+    },
+    {
+      label: 'Clientes',
+      icon: Users,
+      path: null,
+      submenu: [
+        { label: 'Carteira', path: '/relatorio-cliente-carteira' },
+        { label: 'Segmentação', path: '/relatorio-cliente-segmentacao' },
+        { label: 'Churn', path: '/relatorio-cliente-churn' },
+        { label: 'LTV', path: '/relatorio-cliente-lifetime-value' },
+        { label: 'Satisfação', path: '/relatorio-cliente-satisfacao' },
+        { label: 'Histórico', path: '/relatorio-cliente-historico' },
+      ],
+    },
+    {
+      label: 'Módulos de Apoio',
+      icon: Package,
+      path: null,
+      submenu: [
+        { label: 'Equipamentos', path: '/equipamentos-lista' },
+        { label: 'Bonificações', path: '/bonificacoes-lista' },
+        { label: 'CRM', path: '/crm-clientes' },
+      ]
+    },
+    {
+      label: 'Operacional',
+      icon: Zap,
+      path: null,
+      submenu: [
+        { label: 'Estoque', path: '/relatorio-operacional-estoque' },
+        { label: 'Pedidos', path: '/relatorio-operacional-pedidos' },
+        { label: 'Entrega', path: '/relatorio-operacional-entrega' },
+        { label: 'Devoluções', path: '/relatorio-operacional-devolucoes' },
+        { label: 'Reclamações', path: '/relatorio-operacional-reclamacoes' },
+        { label: 'SLA', path: '/relatorio-operacional-sla' },
+      ],
+    },
+    {
+      label: 'Diagnóstico',
+      icon: Shield,
+      path: null,
+      submenu: [
+        { label: 'Smoke Test', path: '/smoke-test' },
+        { label: 'System Health', path: '/system-health' },
+        { label: 'Acesso', path: '/access-control' },
+      ]
+    },
+    {
+      label: 'Configurações',
+      icon: Settings,
+      path: '/configuracoes',
+      submenu: null,
+    },
+  ],
+  // Outros perfis
+  manager: [
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', submenu: null },
+    { label: 'Visão 360°', icon: Search, path: '/visao-360-cliente', submenu: null },
+    { label: 'Configurações', icon: Settings, path: '/settings', submenu: null },
+  ],
+  supervisor: [
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', submenu: null },
+    { label: 'Visão 360°', icon: Search, path: '/visao-360-cliente', submenu: null },
+    { label: 'Analítico Supervisor', icon: BarChart3, path: '/analitico-supervisor', submenu: null },
+    { label: 'Analítico Vendedor', icon: Users, path: '/analitico-vendedor', submenu: null },
+  ],
+  seller: [
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', submenu: null },
+    { label: 'Visão 360°', icon: Search, path: '/visao-360-cliente', submenu: null },
+    { label: 'Analítico Vendedor', icon: Users, path: '/analitico-vendedor', submenu: null },
+    { label: 'Meus Pedidos', icon: Package, path: '/relatorio-operacional-pedidos', submenu: null },
+  ],
+};
+
+export const allMenuItems = MENU_ITEMS.admin;
+
+export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
+  const { user, signOut } = useAuth();
+  const location = useLocation();
+  const [expandedItems, setExpandedItems] = React.useState({});
+
+  const userRole = user?.role ? user.role.toLowerCase() : 'admin';
+  const menuItems = MENU_ITEMS[userRole] || MENU_ITEMS.admin;
+
+  // Inicializa expansão para itens que têm filhos ativos
+  React.useEffect(() => {
+    const newExpanded = {};
+    menuItems.forEach(item => {
+      if (item.submenu && item.submenu.some(sub => sub.path === location.pathname)) {
+        newExpanded[item.label] = true;
       }
-    ]
-  },
-  { path: '/tarefas', id: 'tarefas', label: 'Tarefas', icon: ListTodo, moduleId: 'tarefas' },
-  {
-    id: 'manutencao_equip', label: 'Manutenção Equip.', icon: Wrench, moduleId: 'manutencao_equip',
-    subItems: [
-        { path: '/manutencao', id: 'manutencao', label: 'Painel de Manutenção', moduleId: 'manutencao_equip' },
-    ]
-  },
-  {
-    id: 'delivery', label: 'Gestão de Entregas', icon: Truck, moduleId: 'delivery',
-    subItems: [
-        { path: '/admin/delivery-management', id: 'delivery_dashboard', label: 'Dashboard', moduleId: 'delivery' },
-        { path: '/admin/delivery-management/deliveries', id: 'delivery_management', label: 'Gestão de Entregas', icon: Box, moduleId: 'delivery' },
-        { path: '/admin/delivery-management/drivers', id: 'delivery_drivers', label: 'Cadastro de Motoristas', icon: Users2, moduleId: 'delivery' },
-        { path: '/admin/delivery-management/route-optimization', id: 'delivery_route_optimization', label: 'Otimização de Rotas', icon: Route, moduleId: 'delivery' },
-        { path: '/admin/delivery-management/customers', id: 'delivery_customers', label: 'Gerenciamento de Clientes', icon: Users, moduleId: 'delivery' },
-        { path: '/admin/delivery-management/disputes', id: 'delivery_disputes', label: 'Gerenciamento de Contestações', icon: ShieldCheck, moduleId: 'delivery' },
-        { path: '/admin/delivery-management/reports', id: 'delivery_reports', label: 'Relatórios', icon: FilePieChart, moduleId: 'delivery' },
-        { path: '/admin/delivery-management/delivery-receipts', id: 'delivery_receipts', label: 'Protocolos de Entrega', icon: History, moduleId: 'delivery' },
-        { path: '/admin/delivery-management/settings', id: 'delivery_settings', label: 'Configurações', icon: Wrench, moduleId: 'delivery' },
-    ]
-  },
-  {
-    id: 'crm', label: 'CRM', icon: UsersRound,
-    crmRequired: true, moduleId: 'crm',
-    subItems: [
-      { path: '/crm/pipeline', id: 'crm_pipeline', label: 'Pipeline', icon: GanttChartSquare, moduleId: 'crm' },
-      { path: '/crm/contacts', id: 'crm_contacts', label: 'Contatos', icon: Users, moduleId: 'crm' },
-      { path: '/crm/comodato-contracts', id: 'crm_comodato_contracts', label: 'Contratos de Comodato', icon: FileSignature, moduleId: 'crm' },
-      { path: '/crm/automations', id: 'crm_automations', label: 'Automações', icon: Bot, moduleId: 'crm' },
-      { path: '/crm/reports', id: 'crm_reports', label: 'Relatórios', icon: BarChart3, moduleId: 'crm' },
-      { path: '/crm/team', id: 'crm_team', label: 'Equipe', icon: Users2, moduleId: 'crm' },
-    ]
-  },
-  { 
-    path: '/settings', 
-    id: 'settings_users', 
-    label: 'Gestão de Usuários', 
-    icon: Users, 
-    moduleId: 'settings_users'
-  },
-  {
-    path: '/configuracoes',
-    id: 'configuracoes',
-    label: 'Configurações',
-    icon: Settings,
-    moduleId: 'configuracoes'
-  }
-];
+    });
+    setExpandedItems(prev => ({ ...prev, ...newExpanded }));
+  }, [location.pathname, menuItems]);
 
-const NavLink = ({ item, isSubItem = false, closeSidebar }) => {
-    const location = useLocation();
-    const isActive = item.path && location.pathname.startsWith(item.path);
+  const toggleExpand = (label) => {
+    setExpandedItems(prev => ({
+      ...prev,
+      [label]: !prev[label],
+    }));
+  };
 
-    const linkClasses = cn(
-        "flex items-center gap-3 rounded-md text-sm font-medium transition-colors duration-200",
-        isSubItem ? "py-2 pl-11 pr-3" : "px-3 py-2",
-        isActive
-            ? "bg-secondary text-secondary-foreground"
-            : "text-primary-foreground/70 hover:bg-white/10 hover:text-primary-foreground"
-    );
+  const isActive = (path) => location.pathname === path;
+  const isSubItemActive = (submenu) => submenu?.some(sub => sub.path === location.pathname);
 
-    return (
-        <Link to={item.path} onClick={closeSidebar} className={linkClasses}>
-            {item.icon && <item.icon size={isSubItem ? 18 : 20} />}
-            <span>{item.label}</span>
-        </Link>
-    );
-};
+  const renderMenuItems = (items) => {
+    return items.map((item) => {
+      const hasSubmenu = item.submenu && item.submenu.length > 0;
+      const active = isActive(item.path);
+      const childActive = hasSubmenu && isSubItemActive(item.submenu);
+      const isExpanded = expandedItems[item.label];
+      const Icon = item.icon;
 
-const filterMenuByPermissions = (menu, userContext) => {
-    if (!userContext) {
-        // If context is missing (e.g. logout in progress), return empty
-        return [];
-    }
-    
-    const { role, modulePermissions } = userContext;
-    const permissions = modulePermissions || {};
-    const isUniversalAdmin = ['admin', 'nivel 1', 'nível 1', 'nivel 5'].includes(role?.toLowerCase());
-
-    const filter = (items) => items.map(item => {
-        if (isUniversalAdmin) {
-            if (item.subItems) {
-                const accessibleSubItems = filter(item.subItems);
-                return { ...item, subItems: accessibleSubItems };
-            }
-            return item;
-        }
-
-        let hasModuleAccess = false;
-        if (!item.moduleId) {
-            hasModuleAccess = true;
-        } else if (permissions[item.moduleId] === true || (Array.isArray(permissions[item.moduleId]) && permissions[item.moduleId].length > 0)) {
-            // Accept true boolean or non-empty array as access granted
-            hasModuleAccess = true;
-        }
-
-        if (!hasModuleAccess) {
-            return null;
-        }
-
-        if (item.subItems) {
-            const accessibleSubItems = filter(item.subItems);
-            if (accessibleSubItems.length > 0) {
-                return { ...item, subItems: accessibleSubItems };
-            }
-            return null;
-        }
-        return item;
-    }).filter(Boolean);
-
-    return filter(menu);
-};
-
-const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
-    const location = useLocation();
-    const { user, userContext, signOut, loading } = useAuth();
-    const navigate = useNavigate();
-    const [isLoggingOut, setIsLoggingOut] = useState(false);
-    const [menuReady, setMenuReady] = useState(false);
-
-    // Ensure we don't get stuck in loading state forever in Sidebar
-    useEffect(() => {
-        let timer;
-        if (loading) {
-            timer = setTimeout(() => {
-                setMenuReady(true); // Force menu to attempt rendering after 5s even if loading says true
-            }, 5000);
-        } else {
-            setMenuReady(true);
-        }
-        return () => clearTimeout(timer);
-    }, [loading]);
-
-    const menuItems = useMemo(() => {
-        if ((loading && !menuReady) && !userContext) {
-            return [];
-        }
-        // If context is still missing after timeout, showing empty menu is better than infinite spinner
-        return filterMenuByPermissions(allMenuItems, userContext || {});
-    }, [userContext, loading, menuReady]);
-
-    const handleLogout = async () => {
-        setIsLoggingOut(true);
-        await signOut();
-        navigate('/login');
-        setIsLoggingOut(false);
-    };
-
-    const getActiveAccordionValues = () => {
-      const activeValues = [];
-      const checkItems = (items, parentId = '') => {
-        items.forEach(item => {
-          const currentId = parentId ? `${parentId}-${item.id}` : item.id;
-          if (item.subItems) {
-            const isActive = item.subItems.some(sub => 
-              (sub.path && location.pathname.startsWith(sub.path)) || 
-              (sub.subItems && sub.subItems.some(nested => nested.path && location.pathname.startsWith(nested.path)))
-            );
-            if (isActive) {
-              activeValues.push(currentId);
-            }
-            checkItems(item.subItems, currentId);
-          }
-        });
-      };
-      checkItems(menuItems);
-      return activeValues;
-    };
-
-    const SidebarContent = ({ closeSidebar }) => (
-        <div className="flex flex-col h-full bg-primary text-primary-foreground">
-            <div className="p-4 border-b border-white/10 flex items-center gap-3 h-16 shrink-0">
-                <img alt="Costa Lavos Logo" className="h-10 w-auto" src="https://horizons-cdn.hostinger.com/af07f265-a066-448a-97b1-ed36097a0659/702b0260ab5ec21070e294c9fe739730.png" />
-                <div>
-                    <p className="font-bold text-lg leading-tight">Costa Lavos</p>
-                    <p className="text-xs text-primary-foreground/60">Dashboard Comercial</p>
-                </div>
-            </div>
-            
-            <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
-                {loading && !menuReady && !userContext ? (
-                    <div className="flex flex-col justify-center items-center h-full opacity-50">
-                        <LoadingSpinner />
-                        <span className="text-xs mt-2">Carregando menu...</span>
-                    </div>
-                ) : menuItems.length > 0 ? (
-                    <Accordion type="multiple" defaultValue={getActiveAccordionValues()} className="w-full space-y-1">
-                        {menuItems.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = item.subItems?.some(sub => location.pathname.startsWith(sub.path));
-
-                            if (item.subItems) {
-                                return (
-                                    <AccordionItem key={item.id} value={item.id} className="border-none">
-                                        <AccordionTrigger className={cn(
-                                            "flex items-center justify-between w-full px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-white/10 text-primary-foreground/80 hover:text-primary-foreground hover:no-underline",
-                                            isActive && "bg-secondary text-secondary-foreground"
-                                        )}>
-                                            <div className="flex items-center gap-3">
-                                                {Icon && <Icon size={20} />}
-                                                <span>{item.label}</span>
-                                            </div>
-                                        </AccordionTrigger>
-                                        <AccordionContent className="pt-1 pl-4">
-                                            <Accordion type="multiple" defaultValue={getActiveAccordionValues()} className="w-full space-y-1">
-                                                {item.subItems.map((subItem) => {
-                                                    const SubIcon = subItem.icon;
-                                                    const isSubActive = subItem.path ? location.pathname.startsWith(subItem.path) : subItem.subItems?.some(nested => location.pathname.startsWith(nested.path));
-
-                                                    if (subItem.subItems) {
-                                                        return (
-                                                            <AccordionItem key={subItem.id} value={`${item.id}-${subItem.id}`} className="border-none">
-                                                                <AccordionTrigger className={cn(
-                                                                    "flex items-center justify-between w-full py-2 pl-4 pr-3 rounded-md text-sm font-medium transition-colors hover:bg-white/10 text-primary-foreground/70 hover:text-primary-foreground hover:no-underline",
-                                                                    isSubActive && "bg-secondary text-secondary-foreground"
-                                                                )}>
-                                                                    <div className="flex items-center gap-2">
-                                                                        {SubIcon && <SubIcon size={18} />}
-                                                                        <span>{subItem.label}</span>
-                                                                    </div>
-                                                                </AccordionTrigger>
-                                                                <AccordionContent className="pt-1 pl-8 space-y-1">
-                                                                    {subItem.subItems.map((nestedItem) => (
-                                                                        <NavLink key={nestedItem.id} item={nestedItem} isSubItem closeSidebar={closeSidebar} />
-                                                                    ))}
-                                                                </AccordionContent>
-                                                            </AccordionItem>
-                                                        );
-                                                    }
-                                                    return <NavLink key={subItem.id} item={subItem} isSubItem closeSidebar={closeSidebar} />;
-                                                })}
-                                            </Accordion>
-                                        </AccordionContent>
-                                    </AccordionItem>
-                                );
-                            }
-                            return <NavLink key={item.id} item={item} closeSidebar={closeSidebar} />;
-                        })}
-                    </Accordion>
-                ) : (
-                    <div className="text-center text-primary-foreground/60 p-4 text-sm">
-                        <AlertCircle className="mx-auto h-8 w-8 mb-4 opacity-50" />
-                        <p>Nenhum menu disponível.</p>
-                        <p className="text-xs mt-1">Verifique suas permissões ou a conexão.</p>
-                    </div>
-                )}
-            </nav>
-
-            <div className="p-4 mt-auto shrink-0 border-t border-white/10 space-y-2">
-                {user ? (
-                    <>
-                        <div className="min-w-0">
-                            <p className="text-sm font-semibold truncate" title={user.email}>{userContext?.fullName || user.email}</p>
-                            <p className="text-xs text-primary-foreground/60">{userContext?.role || 'Carregando...'}</p>
-                        </div>
-                        <div className="flex items-center justify-end gap-1">
-                            <TooltipProvider>
-                                <ChangePasswordDialog />
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={handleLogout}
-                                            disabled={isLoggingOut}
-                                            className="text-primary-foreground/70 hover:bg-white/10 hover:text-primary-foreground shrink-0"
-                                        >
-                                            {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-5 w-5" />}
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Sair</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        </div>
-                    </>
-                ) : (
-                    <button onClick={() => window.location.reload()} className="w-full text-center text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors flex items-center justify-center gap-2">
-                        <RotateCcw className="h-3 w-3" /> Recarregar
-                    </button>
-                )}
-            </div>
-        </div>
-    );
-
-    return (
-        <>
-            <div className="hidden lg:flex lg:w-64 lg:shrink-0">
-              <SidebarContent closeSidebar={() => setSidebarOpen(false)} />
-            </div>
-            <AnimatePresence>
-              {sidebarOpen && (
-                <>
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="fixed inset-0 bg-black/60 z-40 lg:hidden"
-                    onClick={() => setSidebarOpen(false)}
+      return (
+        <div key={item.label} className="mb-1">
+          <button
+            onClick={() => {
+              if (hasSubmenu) {
+                toggleExpand(item.label);
+              }
+            }}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200',
+              'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200',
+              (active || (hasSubmenu && childActive)) && 'bg-primary/10 text-primary dark:text-primary font-medium'
+            )}
+          >
+            {!hasSubmenu && item.path ? (
+              <Link to={item.path} className="flex items-center gap-3 w-full">
+                {Icon && <Icon className="h-5 w-5 flex-shrink-0" />}
+                <span className="flex-1 text-left truncate">{item.label}</span>
+              </Link>
+            ) : (
+              <>
+                {Icon && <Icon className="h-5 w-5 flex-shrink-0" />}
+                <span className="flex-1 text-left truncate">{item.label}</span>
+                {hasSubmenu && (
+                  <ChevronDown
+                    className={cn(
+                      'h-4 w-4 transition-transform duration-200 text-gray-400',
+                      isExpanded && 'rotate-180'
+                    )}
                   />
-                  <motion.div
-                    initial={{ x: "-100%" }}
-                    animate={{ x: 0 }}
-                    exit={{ x: "-100%" }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="fixed top-0 left-0 bottom-0 w-64 bg-primary z-50"
-                  >
-                    <SidebarContent closeSidebar={() => setSidebarOpen(false)} />
-                    <button
-                      onClick={() => setSidebarOpen(false)}
-                      className="absolute top-5 right-[-44px] text-primary-foreground/70 bg-primary p-2 rounded-r-lg"
-                      aria-label="Fechar menu"
-                    >
-                      <X size={24} />
-                    </button>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-        </>
-    );
-}
+                )}
+              </>
+            )}
+          </button>
 
-export default Sidebar;
+          {hasSubmenu && isExpanded && (
+            <div className="ml-4 pl-2 border-l-2 border-gray-100 dark:border-gray-800 mt-1 space-y-1">
+              {item.submenu.map((subitem) => (
+                <Link
+                  key={subitem.label}
+                  to={subitem.path}
+                  className={cn(
+                    'block w-full text-left px-3 py-2 rounded-md transition-colors text-sm',
+                    'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400',
+                    isActive(subitem.path) && 'bg-primary/5 text-primary font-medium'
+                  )}
+                >
+                  {subitem.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
+
+  return (
+    <div 
+      className={cn(
+        "fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col shadow-lg transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
+        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}
+    >
+      <div className="p-5 border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 flex-shrink-0 h-16">
+        <div className="bg-primary/10 p-2 rounded-lg">
+          <BarChart3 className="h-6 w-6 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-lg font-bold leading-none">Horizon 360</h1>
+          <p className="text-xs text-gray-500 mt-1 truncate max-w-[140px]">
+            {user?.email || 'Visitante'}
+          </p>
+        </div>
+      </div>
+
+      <ScrollArea className="flex-1 px-3 py-4">
+        <div className="space-y-1 pb-4">
+          {renderMenuItems(menuItems)}
+        </div>
+      </ScrollArea>
+
+      <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex-shrink-0">
+        <Button
+          onClick={() => signOut()}
+          variant="outline"
+          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Sair do Sistema
+        </Button>
+      </div>
+    </div>
+  );
+}

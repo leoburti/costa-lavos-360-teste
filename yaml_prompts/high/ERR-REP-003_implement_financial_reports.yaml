@@ -1,0 +1,13 @@
+task: "Implement Financial Reports Group"
+severity: "High"
+context: "The Financial Reports group (6 pages) is missing. Critical for revenue and margin analysis."
+files_to_create:
+  - "src/pages/relatorios/financeiro/RelatorioFinanceiroReceita.jsx"
+  - "src/pages/relatorios/financeiro/RelatorioFinanceiroMargem.jsx"
+  - "src/pages/relatorios/financeiro/RelatorioFinanceiroFluxoCaixa.jsx"
+  - "src/pages/relatorios/financeiro/RelatorioFinanceiroContasReceber.jsx"
+  - "src/pages/relatorios/financeiro/RelatorioFinanceiroCustos.jsx"
+  - "src/pages/relatorios/financeiro/RelatorioFinanceiroLucratividade.jsx"
+requirements:
+  - "Ensure strict permission checks (Role: Admin/Level 1 Only)."
+  - "Use table-heavy layout for precise financial data."

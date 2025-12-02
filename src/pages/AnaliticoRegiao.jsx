@@ -1,69 +1,153 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Layers, Map } from 'lucide-react';
-
 import { useFilters } from '@/contexts/FilterContext';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
-import { Skeleton } from '@/components/ui/skeleton';
-import TreeMapChart from '@/components/TreeMapChart';
-import DrilldownExplorer from '@/components/DrilldownExplorer';
-import ChartCard from '@/components/ChartCard';
-import FilterPanel from '@/components/FilterPanel';
+import { formatCurrency, formatDateForAPI } from '@/lib/utils';
 
-const AnaliticoRegiao = () => {
+// Components
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { LoadingState, ErrorState, EmptyState } from '@/components/common';
+import FilterBar from '@/components/FilterBar';
+import { Treemap, ResponsiveContainer, Tooltip } from 'recharts';
+
+export default function AnaliticoRegiaoPage() {
   const { filters } = useFilters();
 
-  const treemapParams = {
-    ...filters,
+  // ===== CONSTRUIR PARÂMETROS =====
+  const params = useMemo(() => ({
+    // CORREÇÃO: Usar formatDateForAPI para evitar problemas de UTC/Timezone
+    p_start_date: formatDateForAPI(filters.dateRange[0]),
+    p_end_date: formatDateForAPI(filters.dateRange[1]),
     p_analysis_mode: 'region',
-    p_show_defined_groups_only: false
-  };
+    p_exclude_employees: filters.excludeEmployees || false,
+    p_supervisors: filters.supervisors?.map(id => String(id)) || null,
+    p_sellers: filters.sellers?.map(id => String(id)) || null,
+    p_customer_groups: filters.customerGroups?.map(id => String(id)) || null,
+    p_regions: filters.regions?.map(id => String(id)) || null,
+    p_clients: filters.clients?.map(id => String(id)) || null,
+    p_search_term: filters.searchTerm || null,
+  }), [filters]);
 
-  const { data: treemapData, loading: treemapLoading } = useAnalyticalData(
-    'get_treemap_data',
-    treemapParams
+  const { data, loading, error, retry } = useAnalyticalData(
+    'get_regional_summary_v2',
+    params,
+    {
+      enabled: !!params.p_start_date && !!params.p_end_date,
+      transformData: (rawData) => (rawData || []).map(item => ({
+        ...item,
+        value: item.sales
+      }))
+    }
   );
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const d = payload[0].payload;
+      return (
+        <div className="bg-white p-3 border border-slate-200 shadow-lg rounded-md text-sm z-50">
+          <p className="font-bold text-slate-800 mb-1">{d.name}</p>
+          <div className="space-y-1 mt-2">
+            <p className="text-slate-600 flex justify-between gap-4">
+              <span>Vendas:</span>
+              <span className="font-mono font-medium">{formatCurrency(d.value)}</span>
+            </p>
+            <p className="text-slate-600 flex justify-between gap-4">
+              <span>Participação:</span>
+              <span className="font-mono font-medium">{Number(d.percentage).toFixed(1)}%</span>
+            </p>
+            <p className="text-slate-600 flex justify-between gap-4">
+              <span>Pedidos:</span>
+              <span className="font-mono font-medium">{d.total_orders}</span>
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+  
+  const CustomizedContent = (props) => {
+    const { x, y, width, height, name, value } = props;
+    if (width < 60 || height < 40) return null;
+    return (
+      <g>
+        <rect x={x} y={y} width={width} height={height} style={{ fill: '#f97316', stroke: '#fff', strokeWidth: 2, opacity: 0.9 }} />
+        <text x={x + width / 2} y={y + height / 2 - 7} textAnchor="middle" fill="#fff" fontSize={14} fontWeight="bold" style={{ pointerEvents: 'none' }}>{name}</text>
+        <text x={x + width / 2} y={y + height / 2 + 12} textAnchor="middle" fill="#fff" fontSize={12} style={{ pointerEvents: 'none' }}>{formatCurrency(value)}</text>
+      </g>
+    );
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <Helmet>
         <title>Analítico por Região | Costa Lavos</title>
       </Helmet>
-      
-      <FilterPanel />
 
-      <div className="flex items-center gap-3">
-        <div className="bg-blue-100 p-3 rounded-full">
-          <Map className="h-6 w-6 text-blue-600" />
-        </div>
+      <FilterBar />
+
+      <div className="flex flex-col gap-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Analítico por Região</h1>
-          <p className="text-muted-foreground">Desempenho de vendas geográfico.</p>
+          <p className="text-muted-foreground">Desempenho de vendas por região geográfica.</p>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-6">
-        <ChartCard title="Hierarquia de Vendas por Região (Treemap)" height={400} childClassName="p-2">
-            {treemapLoading ? (
-                <div className="flex items-center justify-center h-full">
-                    <Skeleton className="h-full w-full" />
+        {loading ? (
+          <LoadingState message="Analisando dados regionais..." />
+        ) : error ? (
+          <ErrorState error={error} onRetry={retry} />
+        ) : !data || data.length === 0 ? (
+          <EmptyState description="Nenhuma venda encontrada para as regiões no período selecionado." />
+        ) : (
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader>
+              <CardTitle>Faturamento por Região</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[500px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <Treemap
+                    data={data}
+                    dataKey="value"
+                    stroke="#fff"
+                    fill="#f97316"
+                    content={<CustomizedContent />}
+                    aspectRatio={4/3}
+                  >
+                    <Tooltip content={<CustomTooltip />} />
+                  </Treemap>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-10">
+                <h3 className="text-lg font-semibold mb-4 text-slate-800">Detalhamento por Região</h3>
+                <div className="overflow-hidden rounded-lg border border-slate-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-700 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-3 text-left font-semibold">Região</th>
+                        <th className="px-6 py-3 text-right font-semibold">Vendas Totais</th>
+                        <th className="px-6 py-3 text-right font-semibold">Representatividade</th>
+                        <th className="px-6 py-3 text-right font-semibold">Pedidos</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {data.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-3 font-medium text-slate-900">{item.name}</td>
+                          <td className="px-6 py-3 text-right font-mono text-slate-700">{formatCurrency(item.value)}</td>
+                          <td className="px-6 py-3 text-right font-mono text-slate-600">{Number(item.percentage).toFixed(1)}%</td>
+                          <td className="px-6 py-3 text-right font-mono text-slate-600">{item.total_orders}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-            ) : (
-                <TreeMapChart data={treemapData} />
-            )}
-        </ChartCard>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
-
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-800 mb-4 flex items-center gap-2">
-            <Layers className="h-5 w-5 text-indigo-500" />
-            Explorador de Vendas
-        </h2>
-        <DrilldownExplorer analysisMode="region" filters={filters} />
-      </div>
-
     </div>
   );
-};
-
-export default AnaliticoRegiao;
+}
