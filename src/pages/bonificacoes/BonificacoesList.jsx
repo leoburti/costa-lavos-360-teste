@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { useFilters } from '@/hooks/useFilters';
 import { useAnalyticalData } from '@/hooks/useAnalyticalData';
@@ -8,6 +9,7 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/common';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { BonificacoesFilters } from './components/BonificacoesFilters';
 import { BonificacoesTable } from './components/BonificacoesTable';
+import { format } from 'date-fns';
 
 export default function BonificacoesList() {
   const { filters } = useFilters();
@@ -17,15 +19,26 @@ export default function BonificacoesList() {
 
   const dateRange = filters.dateRange || [new Date(), new Date()];
 
+  // Helper para formatar data de forma segura para RPC
+  const formatDateParam = (date) => {
+    if (!date) return null;
+    try {
+      return format(date, 'yyyy-MM-dd');
+    } catch (e) {
+      console.error('Erro ao formatar data:', e);
+      return null;
+    }
+  };
+
   const params = useMemo(() => ({
-    p_start_date: dateRange[0],
-    p_end_date: dateRange[1],
+    p_start_date: formatDateParam(dateRange[0]),
+    p_end_date: formatDateParam(dateRange[1]),
     p_page: currentPage,
     p_page_size: pageSize,
     p_supervisors: filters.supervisors,
     p_sellers: filters.sellers,
     p_regions: filters.regions,
-    p_status: filters.status,
+    p_status: filters.status || null, // Garantindo que status seja passado, mesmo que null
     p_search_term: filters.searchTerm,
   }), [filters, currentPage, pageSize, dateRange]);
 

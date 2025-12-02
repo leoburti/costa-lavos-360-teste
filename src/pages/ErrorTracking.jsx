@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle, Trash2 } from 'lucide-react';
-import { RelatoriLayout } from '@/components/RelatoriLayout';
+import { RelatoriLayout } from '@/pages/relatorios/components/RelatoriLayout'; // Corrected import path
 
 const ERROS_INICIAIS = [
   {

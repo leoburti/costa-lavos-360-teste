@@ -28,6 +28,12 @@ const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const UnauthorizedPage = lazy(() => import('@/pages/UnauthorizedPage'));
 
+// New Profile Page
+const PerfilPage = lazy(() => import('@/pages/Perfil'));
+
+// Admin Support Pages
+const AdminChamadosPage = lazy(() => import('@/pages/admin/apoio/Chamados'));
+
 // Debug Page (Dev Only)
 const DebugPage = lazy(() => import('@/pages/Debug'));
 
@@ -78,6 +84,26 @@ export default function App() {
                           }>
                             <Route index element={<Navigate to="/analytics/dashboard-gerencial" replace />} />
                             
+                            {/* Rota explícita para Perfil */}
+                            <Route 
+                              path="/configuracoes/perfil" 
+                              element={
+                                <Suspense fallback={<div className="p-8"><PageSkeleton /></div>}>
+                                  <PerfilPage />
+                                </Suspense>
+                              } 
+                            />
+
+                            {/* Rota explícita para Admin Chamados */}
+                            <Route 
+                              path="/admin/apoio/chamados/todos" 
+                              element={
+                                <Suspense fallback={<div className="p-8"><PageSkeleton /></div>}>
+                                  <AdminChamadosPage />
+                                </Suspense>
+                              } 
+                            />
+
                             {/* NEW MODULAR ARCHITECTURE ROUTING */}
                             <Route 
                               path="/:module/:page" 
