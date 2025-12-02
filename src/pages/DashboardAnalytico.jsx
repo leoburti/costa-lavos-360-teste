@@ -1,5 +1,6 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
-import { useFilters } from '@/contexts/FilterContext'; // Import Context
+import { useFilters } from '@/contexts/FilterContext'; 
 import { supabase } from '@/lib/customSupabaseClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -13,12 +14,11 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 const DashboardAnalytico = () => {
-  const { filters } = useFilters(); // Use global filters
+  const { filters } = useFilters(); 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Correct date access and formatting
   const dateRange = filters.dateRange || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) };
   const startDateStr = dateRange.from ? format(dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
   const endDateStr = dateRange.to ? format(dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
@@ -33,22 +33,27 @@ const DashboardAnalytico = () => {
     setLoading(true);
     setError(null);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased timeout for analytics
+    // Timeout aumentado para permitir queries maiores sem filtro
+    const timeoutId = setTimeout(() => controller.abort(), 25000); 
 
     try {
       let query = supabase
         .from('bd-cl')
-        .select('Total, "Cond. Pagto", "Desc.Regiao", Cfo, "Nome Supervisor"')
+        .select('Total, "Cond. Pagto", "Desc.Regiao", Cfo, "Nome Supervisor", "Nome Vendedor"')
         .gte('DT Emissao', startDateStr)
         .lte('DT Emissao', endDateStr)
-        .gt('Total', 0);
+        .gt('Total', 0); // Garante que apenas vendas positivas (válidas) sejam consideradas
 
-      // Apply additional filters
+      // Aplica filtros apenas se explicitamente selecionados
       if (filters.supervisors?.length > 0) query = query.in('Nome Supervisor', filters.supervisors);
       if (filters.sellers?.length > 0) query = query.in('Nome Vendedor', filters.sellers);
       if (filters.regions?.length > 0) query = query.in('Desc.Regiao', filters.regions);
       
-      const { data: rawData, error: supabaseError } = await query.limit(5000).abortSignal(controller.signal);
+      // NOTA: Não aplicamos filtro de "excludeEmployees" aqui para garantir a visão completa se desejado,
+      // a menos que explicitamente adicionemos essa lógica. No momento, mostra tudo que corresponde aos filtros acima.
+
+      // Aumentado limite para 20000 para garantir que todos os dados sejam carregados
+      const { data: rawData, error: supabaseError } = await query.limit(20000).abortSignal(controller.signal);
 
       if (supabaseError) throw supabaseError;
       setData(rawData || []);
@@ -56,7 +61,7 @@ const DashboardAnalytico = () => {
     } catch (err) {
       console.error("Analytico Load Error:", err);
       if (err.name === 'AbortError') {
-        setError("Timeout na consulta.");
+        setError("Timeout na consulta. Tente reduzir o período ou adicionar filtros.");
       } else {
         setError("Falha ao carregar dados analíticos.");
       }
@@ -102,7 +107,7 @@ const DashboardAnalytico = () => {
 
     return {
       payment: toChartData(paymentMap).slice(0, 6), // Top 6
-      supervisor: toChartData(supervisorMap).slice(0, 10), // Top 10
+      supervisor: toChartData(supervisorMap).slice(0, 15), // Top 15 para ver mais vendedores/supervisores
       cfo: toChartData(cfoMap)
     };
   }, [data]);
@@ -194,7 +199,7 @@ const DashboardAnalytico = () => {
         {/* Supervisor Distribution */}
         <Card className="col-span-1 md:col-span-2">
           <CardHeader>
-            <CardTitle>Top 10 Supervisores por Volume</CardTitle>
+            <CardTitle>Ranking de Supervisores (Volume)</CardTitle>
           </CardHeader>
           <CardContent className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from "@/components/ui/sheet.jsx";
@@ -19,6 +20,7 @@ const FilterPanel = () => {
     const [selectedRegions, setSelectedRegions] = useState(filters.regions || []);
     const [selectedProducts, setSelectedProducts] = useState(filters.products || []);
     const [excludeEmployees, setExcludeEmployees] = useState(filters.excludeEmployees);
+    const [showDefinedGroupsOnly, setShowDefinedGroupsOnly] = useState(filters.showDefinedGroupsOnly);
     const [isSheetOpen, setIsSheetOpen] = useState(false);
 
     useEffect(() => {
@@ -30,6 +32,7 @@ const FilterPanel = () => {
             setSelectedRegions(filters.regions || []);
             setSelectedProducts(filters.products || []);
             setExcludeEmployees(filters.excludeEmployees);
+            setShowDefinedGroupsOnly(filters.showDefinedGroupsOnly);
         }
     }, [isSheetOpen, filters]);
 
@@ -42,21 +45,21 @@ const FilterPanel = () => {
             regions: selectedRegions.length > 0 ? selectedRegions : null,
             products: selectedProducts.length > 0 ? selectedProducts : null,
             excludeEmployees,
+            showDefinedGroupsOnly,
         });
         setIsSheetOpen(false);
     };
 
     const handleClearFilters = () => {
         resetFilters();
-        // Since resetFilters updates the context, local state will be updated by the useEffect.
-        // We can also clear it manually for immediate UI feedback before context propagation.
         setSelectedSupervisors([]);
         setSelectedSellers([]);
         setSelectedCustomerGroups([]);
         setSelectedClients([]);
         setSelectedRegions([]);
         setSelectedProducts([]);
-        setExcludeEmployees(true);
+        setExcludeEmployees(true); // Default to excluding employees
+        setShowDefinedGroupsOnly(false);
     };
 
     const hasActiveFilters = [
@@ -66,7 +69,7 @@ const FilterPanel = () => {
         filters.clients,
         filters.regions,
         filters.products
-    ].some(f => f && f.length > 0) || !filters.excludeEmployees;
+    ].some(f => f && f.length > 0) || !filters.excludeEmployees || filters.showDefinedGroupsOnly;
 
     const selectOptions = (key) => (filterOptions?.[key] || []).map(item => ({ value: item, label: item }));
 
@@ -128,13 +131,23 @@ const FilterPanel = () => {
                     placeholder="Todos"
                 />
                 <Separator />
-                <div className="flex items-center space-x-2 pt-2">
-                    <Switch
-                        id="include-employees-filter"
-                        checked={!excludeEmployees}
-                        onCheckedChange={(checked) => setExcludeEmployees(!checked)}
-                    />
-                    <Label htmlFor="include-employees-filter" className="cursor-pointer">Incluir grupo "Funcionários"</Label>
+                <div className="flex flex-col space-y-4">
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="include-employees-filter" className="cursor-pointer">Incluir grupo "Funcionários"</Label>
+                        <Switch
+                            id="include-employees-filter"
+                            checked={!excludeEmployees}
+                            onCheckedChange={(checked) => setExcludeEmployees(!checked)}
+                        />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="show-defined-groups-only" className="cursor-pointer">Apenas Grupos Definidos</Label>
+                        <Switch
+                            id="show-defined-groups-only"
+                            checked={showDefinedGroupsOnly}
+                            onCheckedChange={setShowDefinedGroupsOnly}
+                        />
+                    </div>
                 </div>
             </div>
         )
@@ -154,16 +167,16 @@ const FilterPanel = () => {
                     )}
                 </Button>
             </SheetTrigger>
-            <SheetContent className="flex flex-col">
+            <SheetContent className="flex flex-col w-[400px] sm:w-[540px]">
                 <SheetHeader>
-                    <SheetTitle>Filtros Avançados</SheetTitle>
+                    <SheetTitle>Filtros</SheetTitle>
                 </SheetHeader>
-                <div className="py-4 flex-1 overflow-y-auto">
+                <div className="py-4 flex-1 overflow-y-auto pr-2">
                     {renderFilters()}
                 </div>
-                <SheetFooter className="mt-auto">
-                    <Button variant="outline" onClick={handleClearFilters}>Limpar</Button>
-                    <Button onClick={handleApplyFilters}>Aplicar</Button>
+                <SheetFooter className="mt-auto pt-4 border-t">
+                    <Button variant="outline" onClick={handleClearFilters} className="w-full sm:w-auto">Limpar</Button>
+                    <Button onClick={handleApplyFilters} className="w-full sm:w-auto">Aplicar Filtros</Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet>

@@ -18,7 +18,7 @@ const getInitialFilters = () => ({
   clients: null,
   customerGroups: null,
   products: null,
-  excludeEmployees: true, // Mantém a exclusão por padrão para dados mais limpos
+  excludeEmployees: false, // ATUALIZADO: Padrão false para garantir que todos os dados (incluindo funcionários) sejam exibidos por padrão
   searchTerm: '',
   showDefinedGroupsOnly: false,
 });

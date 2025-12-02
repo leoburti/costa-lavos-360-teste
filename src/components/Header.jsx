@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Menu, Search, User, LogOut, Settings, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { useFilters } from '@/contexts/FilterContext';
 import { useDebounce } from '@/hooks/useDebounce';
 import NotificacoesBell from '@/components/NotificacoesBell';
 import PeriodSelector from '@/components/PeriodSelector';
-import FilterPanel from '@/components/FilterPanel';
+import FilterPanel from '@/components/FilterPanel'; // Keep FilterPanel import
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,14 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogDescription,
-} from '@/components/ui/dialog';
+// Removed Dialog imports
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -34,7 +28,6 @@ const Header = ({ setSidebarOpen }) => {
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const navigate = useNavigate();
   const location = useLocation();
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   useEffect(() => {
     if (filters.searchTerm !== debouncedSearchTerm) {
@@ -108,64 +101,9 @@ const Header = ({ setSidebarOpen }) => {
           <PeriodSelector />
         </div>
         
-        <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="hidden md:flex h-9 md:h-10 border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
-              <SlidersHorizontal className="h-4 w-4 mr-2 text-slate-500" />
-              Filtros
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Filtros Globais</DialogTitle>
-              <DialogDescription>
-                Estes filtros afetarão todas as análises e relatórios do sistema.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <div className="lg:hidden mb-4">
-                <label className="text-sm font-medium mb-2 block">Período</label>
-                <PeriodSelector />
-              </div>
-              <FilterPanel />
-              
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-                <div className="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => updateFilters({ excludeEmployees: !filters.excludeEmployees })}>
-                  <input
-                    type="checkbox"
-                    checked={filters.excludeEmployees || false}
-                    onChange={() => {}} // Handled by parent div click
-                    className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                  <label className="text-sm font-medium cursor-pointer select-none flex-1">
-                    Excluir Vendas para Funcionários
-                  </label>
-                </div>
-                <div className="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => updateFilters({ showDefinedGroupsOnly: !filters.showDefinedGroupsOnly })}>
-                  <input
-                    type="checkbox"
-                    checked={filters.showDefinedGroupsOnly || false}
-                    onChange={() => {}} // Handled by parent div click
-                    className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                  <label className="text-sm font-medium cursor-pointer select-none flex-1">
-                    Apenas Grupos Definidos
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsFilterOpen(false)}>Fechar</Button>
-              <Button onClick={() => setIsFilterOpen(false)}>Aplicar Filtros</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Mobile Filter Icon Only */}
-        <Button variant="ghost" size="icon" className="md:hidden h-9 w-9" onClick={() => setIsFilterOpen(true)}>
-          <SlidersHorizontal className="h-5 w-5 text-slate-600" />
-        </Button>
-
+        {/* Directly render FilterPanel which now handles its own Sheet (sidebar) */}
+        <FilterPanel />
+        
         <NotificacoesBell />
 
         <DropdownMenu>
